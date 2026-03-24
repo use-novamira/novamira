@@ -230,6 +230,8 @@ if ($is_enabled) {
         });
     }
 
+    $hasBundledMcpAdapter = class_exists('WP\\MCP\\Core\\McpAdapter');
+
     // Register ability categories.
     add_action('wp_abilities_api_categories_init', static function () {
         wp_register_ability_category('code-execution', [
@@ -241,15 +243,10 @@ if ($is_enabled) {
             'label' => __('Filesystem', domain: 'novamira'),
             'description' => __('Server filesystem operations.', domain: 'novamira'),
         ]);
-
-        wp_register_ability_category('mcp-adapter', [
-            'label' => __('MCP Adapter', domain: 'novamira'),
-            'description' => __('Meta-abilities for MCP protocol bridging.', domain: 'novamira'),
-        ]);
     });
 
     // Register abilities.
-    add_action('wp_abilities_api_init', static function () {
+    add_action('wp_abilities_api_init', static function () use ($hasBundledMcpAdapter) {
         $dir = __DIR__ . '/includes/abilities/';
         require_once $dir . 'execute-php.php';
         require_once $dir . 'read-file.php';
@@ -260,7 +257,11 @@ if ($is_enabled) {
         require_once $dir . 'enable-file.php';
         require_once $dir . 'list-directory.php';
 
-        // MCP meta-abilities (skipped if already registered by standalone MCP Adapter plugin).
+        // The bundled MCP Adapter already registers the MCP category and meta-abilities.
+        if ($hasBundledMcpAdapter) {
+            return;
+        }
+
         require_once $dir . 'mcp-discover-abilities.php';
         require_once $dir . 'mcp-get-ability-info.php';
         require_once $dir . 'mcp-execute-ability.php';
