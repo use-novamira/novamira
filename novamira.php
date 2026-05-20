@@ -625,6 +625,7 @@ if ($is_enabled) {
         require_once $dir . 'enable-file.php';
         require_once $dir . 'list-directory.php';
         require_once $dir . 'discover-abilities.php';
+        require_once $dir . 'run-wp-cli.php';
     });
 }
 
