@@ -85,11 +85,16 @@ wp_register_ability('mcp-adapter/discover-abilities', [
             ];
         }
 
-        return [
-            'novamira_instructions' => apply_filters(
+        $instructions = '';
+        if (current_user_can('manage_options')) {
+            $instructions = (string) apply_filters(
                 'novamira_discover_abilities_instructions',
                 novamira_build_server_instructions(),
-            ),
+            );
+        }
+
+        return [
+            'novamira_instructions' => $instructions,
             'abilities' => $ability_list,
         ];
     },
