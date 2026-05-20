@@ -1,3 +1,6 @@
+v1.2.1 - 2026/05/20
+* New: AI agents can now run WP-CLI commands through Novamira, with support for background jobs.
+
 v1.2.0 - 2026/05/13
 * New: AI agents can now upload plugin, theme, media, and other large files more easily.
 * New: A "paste to your AI agent" block on the Configuration page lets you copy a short description and have your AI client set up the MCP server connection for you, instead of editing JSON config files by hand.
