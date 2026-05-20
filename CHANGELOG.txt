@@ -1,5 +1,6 @@
 v1.2.1 - 2026/05/20
 * New: AI agents can now run WP-CLI commands through Novamira, with support for background jobs.
+* Minor Fixes
 
 v1.2.0 - 2026/05/13
 * New: AI agents can now upload plugin, theme, media, and other large files more easily.
