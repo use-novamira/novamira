@@ -6,8 +6,8 @@
 .idea
 .vscode
 
-# Claude Code / Superpowers artifacts (specs, plans, etc.)
-/docs/superpowers
+# Internal docs
+/docs/
 
 # Claude Code sandbox artifacts
 .bash_profile
