@@ -1,0 +1,231 @@
+/*
+ * Sandbox admin styles. Visual language mirrors the Skills list (card
+ * section, 44px compact rows, hover-revealed actions, status check on
+ * the left) so the two pages feel like one product.
+ */
+
+.novamira-sandbox-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    margin: 16px 0 20px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+}
+
+.novamira-sandbox-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e4e4e7;
+}
+
+.novamira-sandbox-header h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d2327;
+    letter-spacing: -0.01em;
+}
+
+.novamira-sandbox-header h2 .count {
+    color: #71717a;
+    font-weight: 400;
+    font-size: 13px;
+    margin-left: 8px;
+}
+
+.novamira-sandbox-rows {
+    display: block;
+}
+
+.novamira-sandbox-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(160px, auto) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    height: 44px;
+    border-bottom: 1px solid #f4f4f5;
+    transition: background 0.1s;
+}
+
+.novamira-sandbox-row:last-child {
+    border-bottom: none;
+}
+
+.novamira-sandbox-row:hover {
+    background: #fafafa;
+}
+
+.novamira-sandbox-row.is-disabled .slug,
+.novamira-sandbox-row.is-disabled .meta {
+    color: #a1a1aa;
+}
+
+.novamira-sandbox-row.is-suspended {
+    background: #fef2f2;
+}
+
+.novamira-sandbox-toggle {
+    margin: 0;
+}
+
+.novamira-sandbox-check {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1.5px solid #d4d4d8;
+    border-radius: 50%;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.novamira-sandbox-check:hover {
+    border-color: #71717a;
+}
+
+.novamira-sandbox-row.is-on .novamira-sandbox-check {
+    background: #1d2327;
+    border-color: #1d2327;
+}
+
+.novamira-sandbox-row.is-on .novamira-sandbox-check::after {
+    content: "";
+    display: block;
+    width: 6px;
+    height: 10px;
+    margin-bottom: 2px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+.novamira-sandbox-row.is-suspended .novamira-sandbox-check {
+    border-color: #d4d4d8;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.novamira-sandbox-main {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.novamira-sandbox-main .slug {
+    font-family: ui-monospace, "DM Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    color: #1d2327;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.novamira-sandbox-main .meta {
+    color: #71717a;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.novamira-sandbox-main .meta::before {
+    content: "—";
+    margin-right: 6px;
+    color: #d4d4d8;
+}
+
+.novamira-sandbox-pills {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.novamira-sandbox-pills .pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #f4f4f5;
+    color: #52525b;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.novamira-sandbox-pills .pill.ext-php {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.novamira-sandbox-pills .pill.ext-js {
+    background: #fef9c3;
+    color: #854d0e;
+}
+
+.novamira-sandbox-pills .pill.ext-css {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.novamira-sandbox-pills .pill.ext-twig {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.novamira-sandbox-pills .pill.warn {
+    background: #fee2e2;
+    color: #b32d2e;
+}
+
+.novamira-sandbox-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.novamira-sandbox-row:hover .novamira-sandbox-actions,
+.novamira-sandbox-row:focus-within .novamira-sandbox-actions {
+    opacity: 1;
+}
+
+.novamira-sandbox-actions .action-btn {
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    border-radius: 3px;
+    color: #2271b1;
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.12s;
+}
+
+.novamira-sandbox-actions .action-btn:hover {
+    background: #f0f6fc;
+}
+
+.novamira-sandbox-actions .action-btn--danger {
+    color: #b32d2e;
+}
+
+.novamira-sandbox-actions .action-btn--danger:hover {
+    background: #fef2f2;
+}
+
+.novamira-sandbox-empty {
+    padding: 32px 24px;
+    text-align: center;
+    color: #71717a;
+    font-size: 13px;
+}

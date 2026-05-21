@@ -316,6 +316,19 @@ add_action('admin_init', static function () {
     }
 });
 
+// Sandbox admin page stylesheet — card layout matching Skills.
+add_action('admin_enqueue_scripts', static function (string $hook): void {
+    if ($hook !== 'novamira_page_novamira-sandbox') {
+        return;
+    }
+    wp_enqueue_style(
+        'novamira-sandbox-admin',
+        (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/sandbox.css',
+        [],
+        NOVAMIRA_VERSION,
+    );
+});
+
 // Register admin menus.
 add_action('admin_menu', static function () {
     // Top-level menu item (shows the Connect page).
