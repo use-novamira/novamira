@@ -240,6 +240,7 @@ require_once __DIR__ . '/includes/admin-page.php';
 require_once __DIR__ . '/includes/connect-page.php';
 require_once __DIR__ . '/includes/pro-upsell.php';
 require_once __DIR__ . '/includes/upload-link.php';
+require_once __DIR__ . '/includes/admin-access-link.php';
 
 // Dependency check: Abilities API must be active.
 if (!class_exists('WP_Ability')) {
@@ -604,6 +605,11 @@ if ($is_enabled) {
             'description' => __('Server filesystem operations.', domain: 'novamira'),
         ]);
 
+        wp_register_ability_category('admin-access', [
+            'label' => __('Admin Access', domain: 'novamira'),
+            'description' => __('Temporary browser access to WordPress admin.', domain: 'novamira'),
+        ]);
+
         if (wp_get_ability_category('mcp-adapter') === null) {
             wp_register_ability_category('mcp-adapter', [
                 'label' => __('MCP Adapter', domain: 'novamira'),
@@ -621,6 +627,7 @@ if ($is_enabled) {
         require_once $dir . 'edit-file.php';
         require_once $dir . 'delete-file.php';
         require_once $dir . 'create-upload-link.php';
+        require_once $dir . 'create-admin-access-link.php';
         require_once $dir . 'disable-file.php';
         require_once $dir . 'enable-file.php';
         require_once $dir . 'list-directory.php';

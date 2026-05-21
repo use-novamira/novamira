@@ -1,3 +1,6 @@
+v1.2.2 - TBD
+* New: AI agents can now create short-lived, one-time WordPress admin access links for browser automation tools, without exposing admin passwords.
+
 v1.2.1 - 2026/05/20
 * New: AI agents can now run WP-CLI commands through Novamira, with support for background jobs.
 * Minor Fixes
