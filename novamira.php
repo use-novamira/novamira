@@ -254,20 +254,6 @@ if (
     require_once __DIR__ . '/includes/skills/dev-mock.php';
 }
 
-// Dependency check: Abilities API must be active.
-if (!class_exists('WP_Ability')) {
-    add_action('admin_notices', static function () {
-        wp_admin_notice(
-            esc_html__('Novamira requires the Abilities API plugin to be installed and activated.', domain: 'novamira'),
-            [
-                'type' => 'error',
-                'dismissible' => false,
-            ],
-        );
-    });
-    return;
-}
-
 // Add "Community" link to the plugin row meta on the Plugins page.
 add_filter(
     'plugin_row_meta',
@@ -377,6 +363,9 @@ $is_enabled = novamira_is_enabled();
 
 if (!$is_enabled && novamira_is_domain_mismatch()) {
     add_action('admin_notices', static function () {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
         /** @var string $locked */
         $locked = get_option('novamira_ai_abilities_domain', default_value: '');
         wp_admin_notice(
@@ -605,6 +594,9 @@ if ($is_enabled) {
     // Info notice if the standalone MCP Adapter plugin is still active.
     if (function_exists('is_plugin_active') && is_plugin_active('mcp-adapter/mcp-adapter.php')) {
         add_action('admin_notices', static function () {
+            if (!current_user_can('manage_options')) {
+                return;
+            }
             wp_admin_notice(
                 esc_html__(
                     'Novamira bundles the MCP Adapter. You can safely deactivate the standalone MCP Adapter plugin.',

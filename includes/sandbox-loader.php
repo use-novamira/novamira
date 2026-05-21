@@ -78,6 +78,9 @@ function novamira_sandbox_crash_handler(string $crashed_file, ?string $current_s
 
     // Dashboard warnings.
     add_action('admin_notices', static function () use ($crashed_file) {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
         if (file_exists($crashed_file)) {
             wp_admin_notice(
                 sprintf(

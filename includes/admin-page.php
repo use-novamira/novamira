@@ -5,6 +5,10 @@
 
 declare(strict_types=1);
 
+if (!defined('ABSPATH')) {
+    exit();
+}
+
 /**
  * Collects every public MCP tool ability registered on the site, grouped by source.
  *
