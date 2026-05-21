@@ -1,0 +1,75 @@
+<?php
+
+// SPDX-FileCopyrightText: 2026 Ovation S.r.l. <dev@novamira.ai>
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+declare(strict_types=1);
+
+namespace Novamira\Skills\Cpt;
+
+if (!defined('ABSPATH')) {
+    exit();
+}
+
+const POST_TYPE = 'novamira_skill';
+
+const META_ENABLE_PROMPT = '_enable_prompt';
+
+const META_ENABLE_AGENTIC = '_enable_agentic';
+
+function register(): void
+{
+    register_post_type(POST_TYPE, [
+        'label' => __('Skills', domain: 'novamira'),
+        'public' => false,
+        'show_ui' => false,
+        'show_in_rest' => false,
+        'has_archive' => false,
+        'rewrite' => false,
+        'capability_type' => ['novamira_skill', 'novamira_skills'],
+        'map_meta_cap' => true,
+        'capabilities' => [
+            'read' => 'manage_options',
+            'edit_posts' => 'manage_options',
+            'edit_others_posts' => 'manage_options',
+            'edit_private_posts' => 'manage_options',
+            'edit_published_posts' => 'manage_options',
+            'publish_posts' => 'manage_options',
+            'read_private_posts' => 'manage_options',
+            'delete_posts' => 'manage_options',
+            'delete_others_posts' => 'manage_options',
+            'delete_private_posts' => 'manage_options',
+            'delete_published_posts' => 'manage_options',
+            'create_posts' => 'manage_options',
+        ],
+        // `revisions` enables WP's native history for post_title /
+        // post_content / post_excerpt on every save. Post meta is not
+        // tracked (acceptable in v1 — flags are settings, not content).
+        // Browsing / restoring is deferred to a future version; today
+        // we just start collecting so future-UI has data to show.
+        'supports' => ['title', 'editor', 'excerpt', 'revisions'],
+    ]);
+
+    add_filter(
+        'wp_revisions_to_keep',
+        static fn(int $num, \WP_Post $post): int => $post->post_type === POST_TYPE ? 10 : $num,
+        accepted_args: 2,
+    );
+
+    $auth = static fn(): bool => current_user_can('manage_options');
+
+    register_post_meta(POST_TYPE, META_ENABLE_PROMPT, [
+        'type' => 'boolean',
+        'single' => true,
+        'default' => true,
+        'show_in_rest' => false,
+        'auth_callback' => $auth,
+    ]);
+    register_post_meta(POST_TYPE, META_ENABLE_AGENTIC, [
+        'type' => 'boolean',
+        'single' => true,
+        'default' => true,
+        'show_in_rest' => false,
+        'auth_callback' => $auth,
+    ]);
+}

@@ -24,3 +24,5 @@ hooks
 objects
 refs
 .claude
+.playwright-mcp/
+includes/skills/dev-mock.php

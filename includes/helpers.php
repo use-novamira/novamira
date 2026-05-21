@@ -236,7 +236,7 @@ function novamira_looks_like_production(): bool
     }
 
     $segments = explode('.', $host);
-    $tld = (string) end($segments);
+    $tld = end($segments);
 
     /** @var array<int, string> $non_prod_tlds */
     $non_prod_tlds = apply_filters('novamira_non_production_tlds', [

@@ -1,0 +1,1099 @@
+/*
+ * Skills admin styles. Visual vocabulary mirrors the Configuration page
+ * (card-based sections, white background, 1px #c3c4c7 border, 6px radius,
+ * subtle drop shadow) so the Novamira admin feels cohesive across pages.
+ */
+
+.novamira-skills .wrap-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 0 24px;
+}
+
+.novamira-skills .wrap-title h1 {
+    margin: 0;
+    font-size: 23px;
+    font-weight: 400;
+    color: #1d2327;
+}
+
+.novamira-skills .wrap-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.novamira-skills-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 0 0 20px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+}
+
+.novamira-skills-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 16px;
+}
+
+.novamira-skills-card-heading h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.novamira-skills-card-heading .description {
+    font-size: 13px;
+    color: #646970;
+    margin: 4px 0 0;
+}
+
+.novamira-skills-empty {
+    text-align: center;
+    padding: 48px 24px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+}
+
+.novamira-skills-empty .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: #c3c4c7;
+    margin-bottom: 12px;
+}
+
+.novamira-skills-empty p {
+    color: #50575e;
+    font-size: 14px;
+    margin: 0 0 16px;
+}
+
+.novamira-skills-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent;
+}
+
+.novamira-skills-table thead th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #646970;
+    border-bottom: 1px solid #e0e3e7;
+}
+
+.novamira-skills-table tbody td {
+    padding: 14px 12px;
+    border-bottom: 1px solid #f0f0f1;
+    vertical-align: middle;
+}
+
+.novamira-skills-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.novamira-skills-table tbody tr:hover td {
+    background: #f6f7f7;
+}
+
+.novamira-skills-table code {
+    background: none;
+    padding: 0;
+    font-size: 13px;
+    color: #1d2327;
+}
+
+.novamira-skills-table .slug-link {
+    color: #2271b1;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.novamira-skills-table .slug-link:hover {
+    text-decoration: underline;
+}
+
+/* ====================================================================
+ * Variant D — Compact Power-User list (Your Skills)
+ *
+ * Tight 44px rows, hover-reveal actions, status indicated by a check
+ * circle on the left that doubles as a click-target to toggle enabled.
+ * Designed to scale to many entries without losing scanability.
+ * ==================================================================== */
+
+.novamira-skills-d-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.novamira-skills-d-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e4e4e7;
+}
+
+.novamira-skills-d-header h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d2327;
+    letter-spacing: -0.01em;
+}
+
+.novamira-skills-d-header h2 .count {
+    color: #71717a;
+    font-weight: 400;
+    font-size: 13px;
+    margin-left: 8px;
+}
+
+.novamira-skills-trust-warning {
+    margin: 12px 0 16px;
+    border: 1px solid #fde68a;
+    border-left: 3px solid #f59e0b;
+    background: #fffbeb;
+    color: #78350f;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.novamira-skills-trust-warning > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.novamira-skills-trust-warning > summary::-webkit-details-marker {
+    display: none;
+}
+
+.novamira-skills-trust-warning .dashicons {
+    flex: 0 0 auto;
+    color: #d97706;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.novamira-skills-trust-warning .summary-text {
+    flex: 1 1 auto;
+}
+
+.novamira-skills-trust-warning .summary-toggle {
+    flex: 0 0 auto;
+    color: #b45309;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.novamira-skills-trust-warning[open] .summary-toggle::after {
+    content: " ↑";
+}
+
+.novamira-skills-trust-warning:not([open]) .summary-toggle::after {
+    content: " ↓";
+}
+
+.novamira-skills-trust-body {
+    padding: 0 14px 12px 40px;
+    border-top: 1px solid #fde68a;
+    margin-top: 4px;
+    padding-top: 10px;
+}
+
+.novamira-skills-trust-body p {
+    margin: 0 0 6px;
+}
+
+.novamira-skills-trust-body ul {
+    margin: 6px 0 8px;
+    padding-left: 18px;
+    list-style: disc;
+}
+
+.novamira-skills-trust-body li {
+    margin-bottom: 4px;
+}
+
+.novamira-skills-search {
+    width: 240px;
+    height: 30px;
+    /* Right-align with the end of the pills column. The row's actions
+       column is ~102px wide + 12px gap, but it's invisible until hover, so
+       the bare header would float ~114px past the pills. */
+    margin-right: 114px;
+    padding: 0 10px;
+    border: 1px solid #d4d4d8;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 13px;
+    color: #1d2327;
+}
+
+.novamira-skills-search:focus {
+    outline: none;
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+}
+
+.novamira-skills-pagination {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 12px 24px;
+    border-top: 1px solid #e4e4e7;
+}
+
+.novamira-skills-pagination .page-numbers {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid #d4d4d8;
+    border-radius: 4px;
+    background: #fff;
+    color: #1d2327;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.novamira-skills-pagination .page-numbers:hover {
+    background: #f4f4f5;
+}
+
+.novamira-skills-pagination .page-numbers.current {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+.novamira-skills-pagination .page-numbers.dots {
+    border-color: transparent;
+    background: transparent;
+}
+
+.novamira-skills-d-list {
+    display: block;
+}
+
+.novamira-skills-d-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(160px, auto) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    height: 44px;
+    border-bottom: 1px solid #f4f4f5;
+    transition: background 0.1s;
+}
+
+.novamira-skills-d-row:last-child {
+    border-bottom: none;
+}
+
+.novamira-skills-d-row.is-just-imported {
+    animation: novamira-skills-import-flash 3s ease-out;
+}
+
+/* External-source sections (e.g. Novamira Pro): read-only, no toggle,
+   no hover actions, subtle grey wash to differentiate from the user's
+   own skills above. */
+.novamira-skills-d-section--external .novamira-skills-d-list {
+    background: #fafafa;
+}
+
+.novamira-skills-d-row.is-external {
+    cursor: default;
+}
+
+.novamira-skills-d-row.is-external:hover {
+    background: #f4f4f5;
+}
+
+.novamira-skills-d-source-icon {
+    color: #a1a1aa;
+    font-size: 14px;
+    text-align: center;
+}
+
+.novamira-skills-d-main--external {
+    pointer-events: none;
+    text-decoration: none;
+}
+
+.novamira-skills-d-main--external .slug {
+    color: #52525b;
+}
+
+.novamira-skills-d-main--external .desc {
+    color: #a1a1aa;
+}
+
+.novamira-skills-d-readonly-note {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #f4f4f5;
+    color: #71717a;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.novamira-skills-d-source-blurb {
+    margin: 0;
+    padding: 10px 24px;
+    border-bottom: 1px solid #e4e4e7;
+    background: #fafafa;
+    color: #71717a;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.novamira-skills-d-source-blurb a {
+    color: #2271b1;
+    text-decoration: none;
+}
+
+.novamira-skills-d-source-blurb a:hover {
+    text-decoration: underline;
+}
+
+@keyframes novamira-skills-import-flash {
+    0% { background: #d1fae5; }
+    70% { background: #d1fae5; }
+    100% { background: transparent; }
+}
+
+.novamira-skills-d-row:hover {
+    background: #fafafa;
+}
+
+.novamira-skills-d-toggle {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+.novamira-skills-d-check {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid #d4d4d8;
+    background: #fff;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.12s, border-color 0.12s;
+    outline: none;
+    box-shadow: none;
+}
+
+.novamira-skills-d-check:focus { outline: none; box-shadow: none; }
+.novamira-skills-d-check:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.novamira-skills-d-check:hover {
+    border-color: #71717a;
+}
+
+.novamira-skills-d-row.is-on .novamira-skills-d-check {
+    background: #1d2327;
+    border-color: #1d2327;
+}
+
+.novamira-skills-d-row.is-on .novamira-skills-d-check::after {
+    content: "";
+    width: 6px;
+    height: 3px;
+    border-left: 1.5px solid #fff;
+    border-bottom: 1.5px solid #fff;
+    position: absolute;
+    transform: rotate(-45deg);
+    top: 4px;
+    left: 3px;
+}
+
+.novamira-skills-d-main {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    min-width: 0;
+}
+
+.novamira-skills-d-main:hover .slug {
+    color: #2271b1;
+}
+
+/* Suppress the browser's default focus ring on click; keep it only for
+   keyboard users via :focus-visible. */
+.novamira-skills-d-main:focus {
+    outline: none;
+}
+
+.novamira-skills-d-main:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: -2px;
+    border-radius: 4px;
+}
+
+.novamira-skills-d-main .slug {
+    font-family: ui-monospace, "DM Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    color: #1d2327;
+    font-weight: 500;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    transition: color 0.12s;
+}
+
+.novamira-skills-d-main .desc {
+    color: #71717a;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.novamira-skills-d-main .desc::before {
+    content: "—";
+    margin-right: 6px;
+    color: #d4d4d8;
+}
+
+.novamira-skills-d-main .desc-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    margin-left: 4px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.novamira-skills-d-main .desc-badge.is-missing {
+    background: #fee2e2;
+    color: #b32d2e;
+}
+
+.novamira-skills-d-pills {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.novamira-skills-d-pills .pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #f4f4f5;
+    color: #52525b;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.novamira-skills-d-pills .pill.auto {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.novamira-skills-d-pills .pill.cmd {
+    background: #faf5ff;
+    color: #7e22ce;
+}
+
+.novamira-skills-d-pills .pill.warn {
+    background: #fef3c7;
+    color: #92400e;
+    cursor: help;
+}
+
+.novamira-skills-d-pills .pill.warn.is-critical {
+    background: #fee2e2;
+    color: #b32d2e;
+}
+
+.novamira-skills-d-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+
+.novamira-skills-d-row:hover .novamira-skills-d-actions,
+.novamira-skills-d-row:focus-within .novamira-skills-d-actions {
+    opacity: 1;
+}
+
+.novamira-skills-d-actions form {
+    margin: 0;
+    display: inline;
+}
+
+.novamira-skills-d-actions .action-btn {
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #52525b;
+    font-size: 12px;
+    text-decoration: none;
+    line-height: 1.4;
+    transition: background 0.12s, color 0.12s;
+    outline: none;
+    box-shadow: none;
+}
+
+.novamira-skills-d-actions .action-btn:focus { outline: none; box-shadow: none; }
+.novamira-skills-d-actions .action-btn:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 1px;
+}
+
+.novamira-skills-d-actions .action-btn:hover,
+.novamira-skills-d-actions .action-btn:focus {
+    background: #f4f4f5;
+    color: #1d2327;
+}
+
+.novamira-skills-d-actions .action-btn--danger:hover,
+.novamira-skills-d-actions .action-btn--danger:focus {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* Trash subsection — visually subdued. Actions stay visible (no
+   hover-reveal) so users can act on trashed items quickly. */
+.novamira-skills-d-section--trash {
+    background: #fafafa;
+    border-color: #e4e4e7;
+}
+
+.novamira-skills-d-section--trash .novamira-skills-d-header {
+    background: #f4f4f5;
+}
+
+.novamira-skills-d-section--trash .novamira-skills-d-header h2 {
+    color: #71717a;
+}
+
+.novamira-skills-d-trash-hint {
+    font-size: 12px;
+    color: #a1a1aa;
+}
+
+.novamira-skills-d-row.is-trashed {
+    color: #71717a;
+}
+
+.novamira-skills-d-row.is-trashed .novamira-skills-d-main .slug {
+    color: #71717a;
+    text-decoration: line-through;
+    text-decoration-color: #d4d4d8;
+}
+
+.novamira-skills-d-trash-icon {
+    color: #a1a1aa;
+    font-size: 16px;
+    text-align: center;
+}
+
+.novamira-skills-d-main--trash {
+    pointer-events: none;
+}
+
+.novamira-skills-d-actions--trash {
+    opacity: 1;
+}
+
+.novamira-skills-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
+.novamira-skills-badge--agentic {
+    background: #e7f3ff;
+    color: #1e5b94;
+}
+
+.novamira-skills-badge--prompt {
+    background: #f3e8ff;
+    color: #6b1f9c;
+}
+
+.novamira-skills-badge--status-enabled {
+    background: #e7f5e9;
+    color: #1f6f30;
+}
+
+.novamira-skills-badge--status-disabled {
+    background: #f0f0f1;
+    color: #646970;
+}
+
+.novamira-skills-badges {
+    display: inline-flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.novamira-skills-warning {
+    display: inline-block;
+    color: #8a6d00;
+    background: #fef7e0;
+    border-radius: 4px;
+    font-size: 11px;
+    padding: 2px 8px;
+    margin-left: 6px;
+}
+
+.novamira-skills-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.novamira-skills-actions form {
+    display: inline;
+    margin: 0;
+}
+
+.novamira-skills-action-btn--danger {
+    color: #b32d2e;
+    border-color: #b32d2e;
+}
+
+.novamira-skills-action-btn--danger:hover,
+.novamira-skills-action-btn--danger:focus {
+    background: #fdecea;
+    color: #b32d2e;
+    border-color: #b32d2e;
+}
+
+.novamira-skills-upload-form {
+    margin: 0;
+}
+
+/* The "Upload .md" trigger is a <label> so the file input opens
+   natively without JS. WP core gives <a>.page-title-action
+   `vertical-align: baseline`, but <label> inherits `middle`, which makes
+   the button drift up next to "Add new". Pin it to the same baseline. */
+label.page-title-action {
+    vertical-align: baseline;
+}
+
+.novamira-skills-upload-form input[type="file"] {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+}
+
+.novamira-skills-edit-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 20px;
+    margin: 0;
+}
+
+.novamira-skills-edit-main,
+.novamira-skills-edit-sidebar {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    padding: 20px 24px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+}
+
+.novamira-skills-edit-sidebar h2 {
+    margin: 0 0 16px;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #646970;
+}
+
+.novamira-skills-edit-main label strong,
+.novamira-skills-edit-sidebar label strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: #1d2327;
+}
+
+.novamira-skills-checkbox-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.novamira-skills-checkbox-row label strong {
+    display: inline;
+    margin: 0;
+}
+
+.novamira-skills-checkbox-row .description {
+    display: block;
+    margin: 4px 0 0 22px;
+    color: #646970;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.novamira-skills-inline-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+}
+
+.novamira-skills-inline-row label {
+    flex: 0 0 auto;
+}
+
+.novamira-skills-inline-row label strong {
+    display: inline;
+    margin: 0;
+}
+
+.novamira-skills-inline-row select,
+.novamira-skills-inline-row input[type="number"] {
+    flex: 0 0 auto;
+    width: 80px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #c3c4c7;
+    font-size: 13px;
+    margin: 0;
+}
+
+.novamira-skills-help {
+    margin: -8px 0 16px;
+    color: #646970;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.novamira-skills-save-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 24px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid #e0e3e7;
+}
+
+.novamira-skills-save-row select {
+    flex: 1;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #c3c4c7;
+    font-size: 13px;
+}
+
+.novamira-skills-save-row .button-link {
+    margin-left: auto;
+    color: #646970;
+    text-decoration: none;
+}
+
+.novamira-skills-save-row .button-link:hover {
+    color: #2271b1;
+}
+
+.novamira-skills-edit-main .description {
+    color: #646970;
+    font-weight: normal;
+    margin-left: 6px;
+    font-size: 12px;
+}
+
+.novamira-skills-edit-main input[type="text"],
+.novamira-skills-edit-main textarea,
+.novamira-skills-edit-sidebar input[type="number"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid #c3c4c7;
+    font-size: 13px;
+}
+
+/* Title field — hero treatment: large, borderless, just an underline
+   on focus so the page feels like a document being authored, not a
+   form being filled. */
+.novamira-skills-title-field {
+    margin: 0 0 24px;
+}
+
+.novamira-skills-edit-main input[type="text"].novamira-skills-title-input {
+    width: 100%;
+    border: 0;
+    border-bottom: 1px solid #ececee;
+    border-radius: 4px 4px 0 0;
+    background: transparent;
+    padding: 8px 10px;
+    margin-left: -10px;
+    font-family: ui-monospace, "DM Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: #1d2327;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.novamira-skills-edit-main input[type="text"].novamira-skills-title-input::placeholder {
+    color: #d4d4d8;
+    font-weight: 500;
+}
+
+.novamira-skills-edit-main input[type="text"].novamira-skills-title-input:hover {
+    background: #fafafa;
+    border-bottom-color: #d4d4d8;
+}
+
+.novamira-skills-edit-main input[type="text"].novamira-skills-title-input:focus {
+    background: #fafafa;
+    border-bottom-color: #2271b1;
+    outline: 0;
+    box-shadow: none;
+}
+
+.novamira-skills-edit-main input[type="text"].novamira-skills-title-input:invalid:not(:placeholder-shown) {
+    border-bottom-color: #b32d2e;
+}
+
+.novamira-skills-title-hint {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #71717a;
+}
+
+/* Field group — small uppercase label sitting above the input. Tightens
+   the visual relationship between label and input compared to the WP
+   default block layout. */
+.novamira-skills-field {
+    margin: 0 0 20px;
+}
+
+.novamira-skills-field-label {
+    display: block;
+    margin: 0 0 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #71717a;
+}
+
+.novamira-skills-body-wrap {
+    position: relative;
+}
+
+.novamira-skills-body-hint {
+    position: absolute;
+    top: 8px;
+    left: 44px;
+    right: 12px;
+    z-index: 4;
+    pointer-events: none;
+    color: #94a3b8;
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.novamira-skills-body-hint p {
+    margin: 0;
+}
+
+.novamira-skills-body-hint p + p {
+    margin-top: 2px;
+}
+
+.novamira-skills-body-hint-emoji {
+    margin-right: 4px;
+}
+
+.novamira-skills-body-hint strong {
+    color: #64748b;
+    font-weight: 600;
+}
+
+.novamira-skills-body-hint em {
+    color: #475569;
+    font-style: italic;
+}
+
+.novamira-skills-body-hint.is-hidden {
+    display: none;
+}
+
+.novamira-skills-field-help {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #71717a;
+}
+
+.novamira-skills-field-help p {
+    margin: 0 0 6px;
+}
+
+.novamira-skills-field-examples {
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.novamira-skills-field-examples li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 4px;
+}
+
+.novamira-skills-field-examples li:last-child {
+    margin-bottom: 0;
+}
+
+.novamira-skills-example-label {
+    flex: 0 0 auto;
+    min-width: 64px;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: #f4f4f5;
+    color: #52525b;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: center;
+    line-height: 1.6;
+}
+
+.novamira-skills-example-label.is-better {
+    background: #ecfdf5;
+    color: #15803d;
+}
+
+.novamira-skills-field-examples .novamira-skills-example-text {
+    color: #3f3f46;
+    font-style: italic;
+}
+
+
+/* Markdown toolbar — a thin strip of inline-format buttons that sits
+   directly on top of the CodeMirror editor. Buttons act on the current
+   selection (or insert a placeholder when nothing is selected). */
+.novamira-skills-md-toolbar {
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+}
+
+.novamira-skills-md-toolbar button {
+    background: transparent;
+    border: 0;
+    padding: 4px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: #52525b;
+    font-size: 13px;
+    font-family: inherit;
+    line-height: 1.2;
+    min-width: 32px;
+    transition: background 0.12s, color 0.12s;
+}
+
+.novamira-skills-md-toolbar button:hover,
+.novamira-skills-md-toolbar button:focus-visible {
+    background: #fff;
+    color: #1d2327;
+    outline: 0;
+}
+
+.novamira-skills-md-toolbar button code {
+    background: transparent;
+    padding: 0;
+    font-size: 12px;
+    color: inherit;
+}
+
+.novamira-skills-field .CodeMirror {
+    border-radius: 0 0 4px 4px;
+    border-top: 0;
+}
+
+.novamira-skills-edit-main textarea {
+    line-height: 1.5;
+}
+
+.novamira-skills-edit-main p,
+.novamira-skills-edit-sidebar p {
+    margin: 0 0 16px;
+}
+
+.novamira-skills-edit-sidebar p:last-child {
+    margin-bottom: 0;
+}
+
+.novamira-skills-edit-grid em {
+    display: inline-block;
+    margin-top: 4px;
+    color: #646970;
+    font-size: 12px;
+}
+
+@media (max-width: 960px) {
+    .novamira-skills-edit-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

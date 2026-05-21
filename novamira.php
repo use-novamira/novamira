@@ -9,7 +9,7 @@ declare(strict_types=1);
  * Plugin Name: Novamira
  * Plugin URI: https://www.novamira.ai
  * Description: MCP server that gives AI agents full access to WordPress through PHP execution and filesystem operations. For development and staging environments only.
- * Version: 1.2.1
+ * Version: 1.3.0
  * Requires at least: 6.9
  * Requires PHP: 8.0
  * Author: Dynamic.ooo
@@ -37,7 +37,7 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
-define(constant_name: 'NOVAMIRA_VERSION', value: '1.2.1');
+define(constant_name: 'NOVAMIRA_VERSION', value: '1.3.0');
 define(constant_name: 'NOVAMIRA_MAX_EXECUTION_TIME', value: 30);
 define('NOVAMIRA_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('NOVAMIRA_SANDBOX_DIR', WP_CONTENT_DIR . '/novamira-sandbox/');
@@ -241,6 +241,18 @@ require_once __DIR__ . '/includes/connect-page.php';
 require_once __DIR__ . '/includes/pro-upsell.php';
 require_once __DIR__ . '/includes/upload-link.php';
 require_once __DIR__ . '/includes/admin-access-link.php';
+require_once __DIR__ . '/includes/skills/bootstrap.php';
+
+// Optional dev mock for the external-skills source. Gitignored. Loaded
+// only when the constant is set (e.g. in wp-config.php) so it never ships
+// to production builds.
+if (
+    defined('NOVAMIRA_DEV_MOCK_PRO')
+    && constant('NOVAMIRA_DEV_MOCK_PRO') === true
+    && file_exists(__DIR__ . '/includes/skills/dev-mock.php')
+) {
+    require_once __DIR__ . '/includes/skills/dev-mock.php';
+}
 
 // Dependency check: Abilities API must be active.
 if (!class_exists('WP_Ability')) {
