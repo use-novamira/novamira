@@ -332,9 +332,10 @@ function handle_upload(): void
         $result = process_one_upload($file, $on_conflict);
         if (is_wp_error($result)) {
             $failed[] = sprintf('“%s” (%s)', $file['name'], $result->get_error_message());
-        } else {
-            $imported[] = $result;
+            continue;
         }
+
+        $imported[] = $result;
     }
 
     if ($imported !== []) {
@@ -359,7 +360,9 @@ function handle_upload(): void
         $failed === [] => 'success',
         default => 'info',
     };
-    redirect_with_notice($type, build_upload_notice($imported, $failed), 0, ['imported' => (string) count($imported)]);
+    redirect_with_notice($type, build_upload_notice($imported, $failed), skill_id: 0, extra_args: [
+        'imported' => (string) count($imported),
+    ]);
 }
 
 /**
@@ -454,17 +457,16 @@ function build_upload_notice(array $imported, array $failed): string
     }
     $head = sprintf(
         /* translators: %d: count */
-        _n('%d skill imported.', '%d skills imported.', count($imported), domain: 'novamira'),
+        _n('%d skill imported.', plural: '%d skills imported.', number: count($imported), domain: 'novamira'),
         count($imported),
     );
     if ($failed === []) {
         return $head;
     }
-    return $head
-    . ' '
-    . sprintf(
-        /* translators: %s: list of failed files */
-        __('Failed: %s', domain: 'novamira'),
+    return sprintf(
+        /* translators: 1: import count message, 2: list of failed files */
+        __('%1$s Failed: %2$s', domain: 'novamira'),
+        $head,
         implode(', ', $failed),
     );
 }

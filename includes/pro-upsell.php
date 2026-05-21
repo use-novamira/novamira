@@ -122,7 +122,7 @@ add_action('admin_init', static function (): void {
 /**
  * Render the one-time welcome notice until dismissed.
  */
-add_action('admin_notices', 'novamira_render_pro_welcome_notice');
+add_action('admin_notices', callback: 'novamira_render_pro_welcome_notice');
 
 function novamira_render_pro_welcome_notice(): void
 {

@@ -342,6 +342,7 @@ function novamira_render_password_row(array $pw, string $dt_format): void
  * Just the generate button (with a collapsible name input) and a success notice after generation.
  * The list of existing passwords lives in the separate manage section at the bottom of the page.
  */
+// @mago-expect lint:cyclomatic-complexity
 function novamira_render_password_step(
     ?string $new_password,
     ?string $existing_password = null,
@@ -392,7 +393,8 @@ function novamira_render_password_step(
                 </button>
             </div>
         </div>
-    <?php elseif ($existing_password !== null): ?>
+    <?php endif; ?>
+    <?php if ($new_password === null && $existing_password !== null): ?>
         <div class="notice notice-success inline" style="margin:8px 0 16px;">
             <p style="margin:0;"><?php esc_html_e(
                 'Password accepted. It is now embedded in the connection text in step 3.',
@@ -507,7 +509,7 @@ function novamira_render_password_step(
  * buttons. Used both when AI Abilities are enabled (revoke + create lives elsewhere) and when
  * disabled (revoke only).
  */
-function novamira_render_manage_passwords_section(bool $allow_create_hint = true): void
+function novamira_render_manage_passwords_section(string $context = 'enabled'): void
 {
     $mcp_passwords = novamira_get_mcp_passwords();
     if ($mcp_passwords === []) {
@@ -533,7 +535,7 @@ function novamira_render_manage_passwords_section(bool $allow_create_hint = true
             <?php echo esc_html($summary); ?>
         </summary>
         <div class="novamira-manage-passwords-body">
-            <?php if (!$allow_create_hint): ?>
+            <?php if ($context === 'disabled'): ?>
                 <p class="description" style="margin:0 0 12px;">
                     <?php esc_html_e(
                         'AI Abilities are disabled. These credentials remain valid for WordPress authentication, but the Novamira MCP endpoint will reject requests until AI Abilities are turned back on.',
@@ -1547,7 +1549,7 @@ function novamira_render_connect_page(): void
 
             <div class="novamira-connect-section">
                 <?php novamira_render_password_step($new_password, $existing_password, $existing_error); ?>
-                <?php novamira_render_manage_passwords_section(allow_create_hint: true); ?>
+                <?php novamira_render_manage_passwords_section(); ?>
             </div>
 
             <?php if ($new_password !== null || $existing_password !== null): ?>
@@ -1555,13 +1557,14 @@ function novamira_render_connect_page(): void
                     <?php novamira_render_config_section($rest_url, $username, $display_password); ?>
                 </div>
             <?php endif; ?>
-        <?php elseif (novamira_get_mcp_passwords() !== []): ?>
+        <?php endif; ?>
+        <?php if (!$mcp_ready && novamira_get_mcp_passwords() !== []): ?>
             <div class="novamira-connect-section">
                 <h2 class="novamira-step-heading">
                     <span class="novamira-step-badge">2</span>
                     <?php esc_html_e('Application Password', domain: 'novamira'); ?>
                 </h2>
-                <?php novamira_render_manage_passwords_section(allow_create_hint: false); ?>
+                <?php novamira_render_manage_passwords_section(context: 'disabled'); ?>
             </div>
         <?php endif; ?>
 

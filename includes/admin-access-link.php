@@ -75,6 +75,7 @@ function novamira_handle_admin_access_link(WP_REST_Request $request)
         return new WP_Error('missing_admin_access_token', 'Missing admin access token.', ['status' => 401]);
     }
 
+    // @mago-expect analysis:mixed-assignment
     $payload = get_transient(novamira_admin_access_transient_key($token));
     delete_transient(novamira_admin_access_transient_key($token));
 
@@ -93,8 +94,12 @@ function novamira_handle_admin_access_link(WP_REST_Request $request)
         return new WP_Error('invalid_admin_access_token', 'Invalid or expired admin access token.', ['status' => 401]);
     }
 
-    $redirect_url = $payload['redirect_url'] ?? '';
-    if (!is_string($redirect_url) || !str_starts_with($redirect_url, admin_url())) {
+    if (!array_key_exists('redirect_url', $payload) || !is_string($payload['redirect_url'])) {
+        return new WP_Error('invalid_admin_access_token', 'Invalid or expired admin access token.', ['status' => 401]);
+    }
+
+    $redirect_url = $payload['redirect_url'];
+    if (!str_starts_with($redirect_url, admin_url())) {
         return new WP_Error('invalid_admin_access_token', 'Invalid or expired admin access token.', ['status' => 401]);
     }
 

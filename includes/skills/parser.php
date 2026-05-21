@@ -39,6 +39,7 @@ function unescape_content(string $raw): string
  *
  * @return array{name: string, description: string, enable_prompt: bool, enable_agentic: bool, body: string, parse_error: ?string}
  */
+// @mago-expect lint:cyclomatic-complexity
 // @mago-expect lint:halstead
 function parse(string $raw): array
 {
@@ -75,7 +76,8 @@ function parse(string $raw): array
                 $value = trim(substr($line, offset: $colon + 1));
                 if (str_starts_with($value, '"') && str_ends_with($value, '"')) {
                     $value = substr($value, offset: 1, length: -1);
-                } elseif (str_starts_with($value, "'") && str_ends_with($value, "'")) {
+                }
+                if (str_starts_with($value, "'") && str_ends_with($value, "'")) {
                     $value = substr($value, offset: 1, length: -1);
                 }
                 switch ($key) {
@@ -95,7 +97,8 @@ function parse(string $raw): array
                     // Unknown keys silently ignored (lenient).
                 }
             }
-        } else {
+        }
+        if ($closing === false) {
             $parse_error = __('Frontmatter started with --- but had no closing ---', domain: 'novamira');
         }
     }

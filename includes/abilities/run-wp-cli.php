@@ -164,22 +164,31 @@ wp_register_ability('novamira/get-wp-cli-job', [
  */
 function novamira_run_wp_cli(array $input)
 {
-    $args = is_array($input['args'] ?? null) ? $input['args'] : [];
+    $raw_args = is_array($input['args'] ?? null) ? $input['args'] : [];
+    $args = [];
+    // @mago-expect analysis:mixed-assignment
+    foreach ($raw_args as $arg) {
+        if (!is_string($arg)) {
+            return new WP_Error('invalid_wp_cli_arg', __('WP-CLI arguments must be strings.', domain: 'novamira'));
+        }
+        $args[] = $arg;
+    }
+
     $async = ($input['async'] ?? null) === true;
 
     if (!function_exists('proc_open') || !function_exists('exec')) {
-        return new WP_Error(
-            'process_execution_disabled',
-            __('Process execution (proc_open or exec) is disabled in PHP configuration.', domain: 'novamira'),
-        );
+        return new WP_Error('process_execution_disabled', __(
+            'Process execution (proc_open or exec) is disabled in PHP configuration.',
+            domain: 'novamira',
+        ));
     }
 
     $wp_path = novamira_find_wp_cli_path();
     if ($wp_path === null) {
-        return new WP_Error(
-            'wp_cli_not_found',
-            __('WP-CLI is not installed or not executable on this server.', domain: 'novamira'),
-        );
+        return new WP_Error('wp_cli_not_found', __(
+            'WP-CLI is not installed or not executable on this server.',
+            domain: 'novamira',
+        ));
     }
 
     // Automatically append --allow-root if executing as root.
@@ -204,10 +213,7 @@ function novamira_get_wp_cli_job(array $input)
 {
     $job_id = (string) ($input['job_id'] ?? '');
     if (!preg_match('/^[a-f0-9]{16}$/i', $job_id)) {
-        return new WP_Error(
-            'invalid_job_id',
-            __('Invalid job ID format.', domain: 'novamira'),
-        );
+        return new WP_Error('invalid_job_id', __('Invalid job ID format.', domain: 'novamira'));
     }
 
     $job_dir = novamira_get_sandbox_dir(ensure_exists: false) . 'wp-cli-jobs/';
@@ -306,10 +312,7 @@ function novamira_read_log_slice(string $log_file, int $offset, int $limit): arr
 
     $handle = fopen(filename: $log_file, mode: 'rb');
     if ($handle === false) {
-        return new WP_Error(
-            'read_failed',
-            sprintf(__('Could not open log file: %s', domain: 'novamira'), $log_file),
-        );
+        return new WP_Error('read_failed', sprintf(__('Could not open log file: %s', domain: 'novamira'), $log_file));
     }
 
     if ($offset > 0) {
@@ -321,10 +324,7 @@ function novamira_read_log_slice(string $log_file, int $offset, int $limit): arr
     fclose($handle);
 
     if ($content === false) {
-        return new WP_Error(
-            'read_failed',
-            sprintf(__('Could not read log file: %s', domain: 'novamira'), $log_file),
-        );
+        return new WP_Error('read_failed', sprintf(__('Could not read log file: %s', domain: 'novamira'), $log_file));
     }
 
     $bytes_read = strlen($content);
@@ -409,8 +409,8 @@ function novamira_is_current_user_root(): bool
 /**
  * Execute WP-CLI synchronously.
  *
- * @param string $wp_path Path to the wp command.
- * @param array  $args    Arguments array.
+ * @param string       $wp_path Path to the wp command.
+ * @param list<string> $args    Arguments array.
  * @return array
  */
 function novamira_run_wp_cli_sync(string $wp_path, array $args): array
@@ -423,6 +423,7 @@ function novamira_run_wp_cli_sync(string $wp_path, array $args): array
         2 => ['pipe', 'w'],
     ];
 
+    /** @var array<int, resource> $pipes */
     $pipes = [];
     $process = proc_open($cmd, $descriptorspec, $pipes, ABSPATH);
 
@@ -450,10 +451,10 @@ function novamira_run_wp_cli_sync(string $wp_path, array $args): array
     $exit_code = proc_close($process);
 
     return [
-        'success' => ($exit_code === 0),
+        'success' => $exit_code === 0,
         'exit_code' => $exit_code,
-        'stdout' => (string) $stdout,
-        'stderr' => (string) $stderr,
+        'stdout' => $stdout,
+        'stderr' => $stderr,
     ];
 }
 
@@ -477,7 +478,27 @@ function novamira_collect_process_output(mixed $stdout_pipe, mixed $stderr_pipe)
     $stderr = '';
 
     while (is_resource($stdout_pipe) || is_resource($stderr_pipe)) {
-        $read = novamira_get_selectable_process_pipes($stdout_pipe, $stderr_pipe);
+        /** @var list<resource> $read */
+        $read = [];
+        if (is_resource($stdout_pipe)) {
+            if (feof($stdout_pipe)) {
+                fclose($stdout_pipe);
+                $stdout_pipe = null;
+            }
+            if (is_resource($stdout_pipe)) {
+                $read[] = $stdout_pipe;
+            }
+        }
+        if (is_resource($stderr_pipe)) {
+            if (feof($stderr_pipe)) {
+                fclose($stderr_pipe);
+                $stderr_pipe = null;
+            }
+            if (is_resource($stderr_pipe)) {
+                $read[] = $stderr_pipe;
+            }
+        }
+
         if ($read === []) {
             break;
         }
@@ -501,45 +522,6 @@ function novamira_collect_process_output(mixed $stdout_pipe, mixed $stderr_pipe)
 }
 
 /**
- * Return pipes that can be selected, closing any that reached EOF.
- *
- * @param mixed $stdout_pipe Stdout pipe resource.
- * @param mixed $stderr_pipe Stderr pipe resource.
- * @return array
- */
-function novamira_get_selectable_process_pipes(mixed &$stdout_pipe, mixed &$stderr_pipe): array
-{
-    $read = [];
-    if (novamira_process_pipe_is_open($stdout_pipe)) {
-        $read[] = $stdout_pipe;
-    }
-    if (novamira_process_pipe_is_open($stderr_pipe)) {
-        $read[] = $stderr_pipe;
-    }
-    return $read;
-}
-
-/**
- * Check whether a process pipe is still open, closing it if it reached EOF.
- *
- * @param mixed $pipe Process pipe resource.
- * @return bool
- */
-function novamira_process_pipe_is_open(mixed &$pipe): bool
-{
-    if (!is_resource($pipe)) {
-        return false;
-    }
-    if (!feof($pipe)) {
-        return true;
-    }
-
-    fclose($pipe);
-    $pipe = null;
-    return false;
-}
-
-/**
  * Append one readable process pipe chunk to the correct output buffer.
  *
  * @param mixed  $pipe        Readable pipe resource.
@@ -555,6 +537,10 @@ function novamira_append_process_pipe_output(
     string &$stdout,
     string &$stderr,
 ): void {
+    if (!is_resource($pipe)) {
+        return;
+    }
+
     $chunk = stream_get_contents($pipe);
     if ($chunk === false || $chunk === '') {
         return;
@@ -573,8 +559,8 @@ function novamira_append_process_pipe_output(
 /**
  * Execute WP-CLI asynchronously.
  *
- * @param string $wp_path Path to the wp command.
- * @param array  $args    Arguments array.
+ * @param string       $wp_path Path to the wp command.
+ * @param list<string> $args    Arguments array.
  * @return array
  */
 function novamira_run_wp_cli_async(string $wp_path, array $args): array
@@ -629,12 +615,9 @@ function novamira_run_wp_cli_async(string $wp_path, array $args): array
         ];
     }
 
-    $res = [
+    return [
         'success' => true,
         'job_id' => $job_id,
+        'pid' => $pid,
     ];
-    if ($pid !== null) {
-        $res['pid'] = $pid;
-    }
-    return $res;
 }

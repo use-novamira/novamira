@@ -67,6 +67,8 @@ function register(): void
  * @param array<string,mixed> $input
  * @return array<string,mixed>|WP_Error
  */
+// @mago-expect lint:cyclomatic-complexity
+// @mago-expect lint:halstead
 function execute(array $input): array|WP_Error
 {
     $title = sanitize_title((string) ($input['title'] ?? ''));
@@ -123,7 +125,8 @@ function execute(array $input): array|WP_Error
             $slug = find_free_suffix($slug);
             $action = 'renamed';
             $existing = null;
-        } else {
+        }
+        if ($existing !== null) {
             $action = 'updated';
         }
     }
@@ -142,9 +145,14 @@ function execute(array $input): array|WP_Error
 
     if ($existing !== null) {
         $postarr['ID'] = $existing->ID;
+    }
+
+    $post_id = 0;
+    if ($existing !== null) {
         // @mago-expect analysis:possibly-invalid-argument
         $post_id = wp_update_post(wp_slash($postarr), wp_error: true);
-    } else {
+    }
+    if ($existing === null) {
         // @mago-expect analysis:possibly-invalid-argument
         $post_id = wp_insert_post(wp_slash($postarr), wp_error: true);
     }

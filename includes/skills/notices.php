@@ -24,7 +24,7 @@ const RELOAD_NOTICE_TTL = 60;
  */
 function set_pending_reload_notice(): void
 {
-    set_transient(RELOAD_NOTICE_TRANSIENT, '1', expiration: RELOAD_NOTICE_TTL);
+    set_transient(RELOAD_NOTICE_TRANSIENT, value: '1', expiration: RELOAD_NOTICE_TTL);
 }
 
 /**

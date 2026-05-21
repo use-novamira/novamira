@@ -96,7 +96,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
             href="<?php echo
                 esc_url(wp_nonce_url(add_query_arg([
                     'action' => 'novamira_skill_download_all',
-                ], admin_url('admin-post.php')), 'novamira_skill_download_all'))
+                ], admin_url('admin-post.php')), action: 'novamira_skill_download_all'))
             ; ?>"
             class="page-title-action"
         ><?php esc_html_e('Download all', domain: 'novamira'); ?></a>
@@ -229,7 +229,8 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                             'Missing description',
                             domain: 'novamira',
                         ); ?></span>
-                    <?php elseif ($description !== ''): ?>
+                    <?php endif; ?>
+                    <?php if (!$missing_description && $description !== ''): ?>
                         <span class="desc"><?php echo esc_html($description); ?></span>
                     <?php endif; ?>
                     <?php if ($missing_body): ?>
@@ -313,7 +314,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
 
                 // @mago-expect analysis:mixed-assignment
                 $links = paginate_links([
-                    'base' => add_query_arg('paged', '%#%', admin_url('admin.php?page=' . Admin\PAGE_SLUG)),
+                    'base' => add_query_arg(['paged' => '%#%'], admin_url('admin.php?page=' . Admin\PAGE_SLUG)),
                     'format' => '',
                     'current' => $paged,
                     'total' => $user_total_pages,
@@ -343,7 +344,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
             <?php foreach ($trashed_posts as $post):
                 $slug = $post->post_name !== '' ? $post->post_name : $post->post_title;
                 // WP appends `__trashed` to post_name when trashing; strip for display.
-                $slug = (string) preg_replace('/__trashed$/', '', $slug);
+                $slug = (string) preg_replace('/__trashed$/', replacement: '', subject: $slug);
                 $description = trim($post->post_excerpt);
                 ?>
             <div class="novamira-skills-d-row is-trashed">
@@ -444,7 +445,8 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                             'Missing description',
                             domain: 'novamira',
                         ); ?></span>
-                    <?php else: ?>
+                    <?php endif; ?>
+                    <?php if (!$missing_description): ?>
                         <span class="desc"><?php echo esc_html($description); ?></span>
                     <?php endif; ?>
                 </div>
