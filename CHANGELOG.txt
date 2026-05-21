@@ -1,5 +1,8 @@
-v1.2.2 - TBD
+v1.3.0 - 2026/05/21
+* New: Skills. Create or upload Markdown playbooks your AI follows automatically on this site, including a built-in skill that teaches your AI to write new ones.
 * New: AI agents can now create short-lived, one-time WordPress admin access links for browser automation tools, without exposing admin passwords.
+* Tweak: The Sandbox files page now uses the same compact card layout as the Skills page, with an Enable/Disable toggle and file-type badges.
+* Minor Fixes
 
 v1.2.1 - 2026/05/20
 * New: AI agents can now run WP-CLI commands through Novamira, with support for background jobs.
