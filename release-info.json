@@ -2,9 +2,13 @@
   "requirements": {
     "requires": "6.9",
     "requires_php": "8.0",
-    "tested": "6.9.4"
+    "tested": "7.0"
   },
   "versions": [
+    {
+      "version": "1.3.0",
+      "release_date": "2026-05-21 14:29:11"
+    },
     {
       "version": "1.2.1",
       "release_date": "2026-05-20 14:02:56"
