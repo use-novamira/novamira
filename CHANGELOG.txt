@@ -1,5 +1,5 @@
 v1.4.0 - 2026/05/26
-* New: Gutenberg (Block Editor) support, AI agents can now author and edit posts, pages, templates, template parts, and navigation menus, with native blocks valid from the first
+* New: Gutenberg (Block Editor) support, AI agents can now author and edit posts, pages, templates, template parts, and navigation menus, with native blocks valid from the first save
 
 v1.3.0 - 2026/05/21
 * New: Skills. Create or upload Markdown playbooks your AI follows automatically on this site, including a built-in skill that teaches your AI to write new ones.
