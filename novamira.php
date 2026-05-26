@@ -230,6 +230,7 @@ if ($novamira_dependency_error !== null) {
 }
 
 register_activation_hook(__FILE__, callback: 'novamira_activation_check');
+register_deactivation_hook(__FILE__, callback: 'novamira_unschedule_gutenberg_cron');
 add_action('admin_notices', callback: 'novamira_render_mcp_dependency_notice');
 add_action('network_admin_notices', callback: 'novamira_render_mcp_dependency_notice');
 add_action('rest_api_init', callback: 'novamira_register_missing_mcp_endpoint', priority: 999);
@@ -242,6 +243,39 @@ require_once __DIR__ . '/includes/pro-upsell.php';
 require_once __DIR__ . '/includes/upload-link.php';
 require_once __DIR__ . '/includes/admin-access-link.php';
 require_once __DIR__ . '/includes/skills/bootstrap.php';
+
+function novamira_unschedule_gutenberg_cron(): void
+{
+    require_once __DIR__ . '/includes/abilities/gutenberg/bootstrap.php';
+    \Novamira\Abilities\Gutenberg\unschedule_cleanup();
+}
+
+function novamira_load_gutenberg_runtime(): void
+{
+    require_once __DIR__ . '/includes/abilities/gutenberg/bootstrap.php';
+    require_once __DIR__ . '/includes/abilities/gutenberg/runtime.php';
+    require_once __DIR__ . '/includes/abilities/gutenberg/rest.php';
+    require_once __DIR__ . '/includes/gutenberg-finalizer-admin.php';
+    \Novamira\GutenbergFinalizer\boot_gutenberg_finalizer_admin();
+}
+
+function novamira_load_gutenberg_abilities(): void
+{
+    $gutenberg_dir = __DIR__ . '/includes/abilities/gutenberg/';
+    require_once $gutenberg_dir . 'bootstrap.php';
+    require_once $gutenberg_dir . 'runtime.php';
+    require_once $gutenberg_dir . 'get-finalizer-runtime.php';
+    require_once $gutenberg_dir . 'get-content.php';
+    require_once $gutenberg_dir . 'write-content.php';
+    require_once $gutenberg_dir . 'create-pending-batch.php';
+    require_once $gutenberg_dir . 'add-pending-change.php';
+    require_once $gutenberg_dir . 'enable-batch-finalization.php';
+    require_once $gutenberg_dir . 'get-pending-batch.php';
+    require_once $gutenberg_dir . 'list-pending-batches.php';
+    require_once $gutenberg_dir . 'delete-pending-batch.php';
+    require_once $gutenberg_dir . 'delete-pending-change.php';
+    require_once $gutenberg_dir . 'get-finalization-url.php';
+}
 
 // Optional dev mock for the external-skills source. Gitignored. Loaded
 // only when the constant is set (e.g. in wp-config.php) so it never ships
@@ -382,6 +416,8 @@ if (!$is_enabled && novamira_is_domain_mismatch()) {
 }
 
 if ($is_enabled) {
+    novamira_load_gutenberg_runtime();
+
     // Brand the default MCP server. Usage instructions are returned from the
     // discover-abilities tool instead of the initialize handshake.
     add_filter('mcp_adapter_default_server_config', static function (mixed $config): mixed {
@@ -633,6 +669,14 @@ if ($is_enabled) {
                 'description' => __('Meta-abilities for MCP protocol bridging.', domain: 'novamira'),
             ]);
         }
+
+        wp_register_ability_category('gutenberg', [
+            'label' => __('Gutenberg', domain: 'novamira'),
+            'description' => __(
+                'Gutenberg content abilities, including the Block Editor Queue for native/static blocks that need browser JS finalization. At the start of Gutenberg work, check the queue runtime and ask the user to keep the Block Editor Queue page open when static/native blocks may be queued.',
+                domain: 'novamira',
+            ),
+        ]);
     });
 
     // Register abilities.
@@ -650,6 +694,7 @@ if ($is_enabled) {
         require_once $dir . 'list-directory.php';
         require_once $dir . 'discover-abilities.php';
         require_once $dir . 'run-wp-cli.php';
+        novamira_load_gutenberg_abilities();
     });
 }
 
