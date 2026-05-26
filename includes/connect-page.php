@@ -1060,7 +1060,9 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         <?php foreach ($clients as $key => $label): ?>
             <button
                 type="button"
-                class="novamira-client-tab novamira-manual-client-tab<?php echo $key === 'claude-code' ? ' active' : ''; ?>"
+                class="novamira-client-tab novamira-manual-client-tab<?php echo
+                    $key === 'claude-code' ? ' active' : ''
+                ; ?>"
                 onclick="novamiraSetClient('<?php echo esc_js($key); ?>', this)"
             ><?php echo esc_html($label); ?></button>
         <?php endforeach; ?>
@@ -1352,10 +1354,16 @@ function novamira_render_config_section(string $rest_url, string $username, stri
                 code = '[mcp_servers.' + serverName + ']\n' +
                     'url = ' + tomlQuote(url) + '\n' +
                     'http_headers = { Authorization = ' + tomlQuote(authHeaderValue.replace(/<[^>]+>/g, '')) + ' }';
-                hintEl.textContent = <?php echo wp_json_encode(__('Add to your project’s .codex/config.toml file.', domain: 'novamira')); ?>;
+                hintEl.textContent = <?php echo
+                    wp_json_encode(__('Add to your project’s .codex/config.toml file.', domain: 'novamira'))
+                ; ?>;
                 pathsEl.innerHTML = '<ul style="margin:4px 0 0; padding-left:20px;">' +
-                    '<li><strong><?php echo esc_js(__('Project', domain: 'novamira')); ?></strong>: <code>.codex/config.toml</code></li>' +
-                    '<li><strong><?php echo esc_js(__('Global', domain: 'novamira')); ?></strong>: <code>~/.codex/config.toml</code></li>' +
+                    '<li><strong><?php echo
+                        esc_js(__('Project', domain: 'novamira'))
+                    ; ?></strong>: <code>.codex/config.toml</code></li>' +
+                    '<li><strong><?php echo
+                        esc_js(__('Global', domain: 'novamira'))
+                    ; ?></strong>: <code>~/.codex/config.toml</code></li>' +
                     '</ul>';
             } else {
                 code = '{\n' +
@@ -1369,9 +1377,13 @@ function novamira_render_config_section(string $rest_url, string $username, stri
                     indent + indent + '}\n' +
                     indent + '}\n' +
                     '}';
-                hintEl.textContent = <?php echo wp_json_encode(__('Add to your project’s .mcp.json file.', domain: 'novamira')); ?>;
+                hintEl.textContent = <?php echo
+                    wp_json_encode(__('Add to your project’s .mcp.json file.', domain: 'novamira'))
+                ; ?>;
                 pathsEl.innerHTML = '<ul style="margin:4px 0 0; padding-left:20px;">' +
-                    '<li><strong><?php echo esc_js(__('Project', domain: 'novamira')); ?></strong>: <code>.mcp.json</code></li>' +
+                    '<li><strong><?php echo
+                        esc_js(__('Project', domain: 'novamira'))
+                    ; ?></strong>: <code>.mcp.json</code></li>' +
                     '</ul>';
             }
 
