@@ -14,8 +14,9 @@ Every pull request must be linked to an open issue. If one doesn't exist yet, pl
 4. Make your changes
 5. Ensure code passes all checks before submitting:
    ```sh
-   mago format
-   mago lint
-   mago analyze
+   make mago-format
+   make mago-lint
+   make mago-analyze
    ```
+   These make targets verify that the installed Mago version matches the version locked in `composer.lock` before running Mago.
 6. Open a pull request referencing the issue (e.g. `Closes #123`)
