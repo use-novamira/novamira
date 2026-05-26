@@ -1060,25 +1060,25 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         <?php foreach ($clients as $key => $label): ?>
             <button
                 type="button"
-                class="novamira-client-tab<?php echo $key === 'claude-code' ? ' active' : ''; ?>"
+                class="novamira-client-tab novamira-manual-client-tab<?php echo $key === 'claude-code' ? ' active' : ''; ?>"
                 onclick="novamiraSetClient('<?php echo esc_js($key); ?>', this)"
             ><?php echo esc_html($label); ?></button>
         <?php endforeach; ?>
-    </div>
+        </div>
 
-    <div class="novamira-tab-content" style="border-radius:4px;">
-        <div class="novamira-config-block">
-            <pre id="novamira-config-code"></pre>
-            <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyConfig(this)"><?php esc_html_e(
-                'Copy',
-                domain: 'novamira',
-            ); ?></button>
+        <div class="novamira-tab-content" style="border-radius:4px;">
+            <div class="novamira-config-block">
+                <pre id="novamira-config-code"></pre>
+                <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyConfig(this)"><?php esc_html_e(
+                    'Copy',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+            <div id="novamira-config-footer" style="font-size:13px; color:#666; border-top: 1px solid #c3c4c7;">
+                <div id="novamira-config-hint" style="padding: 10px 16px;"></div>
+                <div id="novamira-config-paths" style="padding: 0 16px 10px;"></div>
+            </div>
         </div>
-        <div id="novamira-config-footer" style="font-size:13px; color:#666; border-top: 1px solid #c3c4c7;">
-            <div id="novamira-config-hint" style="padding: 10px 16px;"></div>
-            <div id="novamira-config-paths" style="padding: 0 16px 10px;"></div>
-        </div>
-    </div>
     </div>
 
     <p style="margin:6px 0 4px;">
@@ -1095,7 +1095,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
     <div id="novamira-npxless-config" hidden style="display:none;">
         <p class="description" style="margin:0 0 12px;">
             <?php esc_html_e(
-                'Copy this JSON snippet to connect using direct HTTP (no Node/npx required).',
+                'Copy this configuration snippet to connect using direct HTTP (no Node/npx required).',
                 domain: 'novamira',
             ); ?>
         </p>
@@ -1103,8 +1103,14 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         <div class="novamira-client-tabs">
             <button
                 type="button"
-                class="novamira-client-tab active"
+                class="novamira-client-tab novamira-npxless-client-tab active"
+                onclick="novamiraSetNpxlessClient('claude', this)"
             ><?php esc_html_e('Claude', domain: 'novamira'); ?></button>
+            <button
+                type="button"
+                class="novamira-client-tab novamira-npxless-client-tab"
+                onclick="novamiraSetNpxlessClient('codex', this)"
+            ><?php esc_html_e('Codex', domain: 'novamira'); ?></button>
         </div>
 
         <div class="novamira-tab-content" style="border-radius:4px;">
@@ -1119,14 +1125,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
                 <div id="novamira-npxless-hint" style="padding: 10px 16px;">
                     <?php esc_html_e('Add to your project’s .mcp.json file.', domain: 'novamira'); ?>
                 </div>
-                <div id="novamira-npxless-paths" style="padding: 0 16px 10px;">
-                    <ul style="margin:4px 0 0; padding-left:20px;">
-                        <li><strong><?php esc_html_e(
-                            'Project',
-                            domain: 'novamira',
-                        ); ?></strong>: <code>.mcp.json</code></li>
-                    </ul>
-                </div>
+                <div id="novamira-npxless-paths" style="padding: 0 16px 10px;"></div>
             </div>
         </div>
     </div>
@@ -1138,6 +1137,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         var defaultName = <?php echo wp_json_encode($default_name); ?>;
         var pasteTemplate = <?php echo wp_json_encode($paste_paragraph_template); ?>;
         var mcpName = <?php echo wp_json_encode($default_name); ?>;
+        var npxlessClient = 'claude';
         var namePlaceholder = <?php echo wp_json_encode($name_placeholder); ?>;
         var passwordSentinel = <?php echo wp_json_encode($pw_slot); ?>;
         var passwordValue = <?php echo wp_json_encode($display_password); ?>;
@@ -1204,9 +1204,16 @@ function novamira_render_config_section(string $rest_url, string $username, stri
 
         window.novamiraSetClient = function (key, btn) {
             client = key;
-            document.querySelectorAll('.novamira-client-tab').forEach(function (t) { t.classList.remove('active'); });
+            document.querySelectorAll('.novamira-manual-client-tab').forEach(function (t) { t.classList.remove('active'); });
             btn.classList.add('active');
             renderConfig();
+        };
+
+        window.novamiraSetNpxlessClient = function (key, btn) {
+            npxlessClient = key;
+            document.querySelectorAll('.novamira-npxless-client-tab').forEach(function (t) { t.classList.remove('active'); });
+            btn.classList.add('active');
+            renderNpxlessConfig();
         };
 
         function updateNameWarning(value) {
@@ -1330,34 +1337,50 @@ function novamira_render_config_section(string $rest_url, string $username, stri
             }
 
             var indent = '  ';
-            if (passwordIsPlaceholder) {
-                var safeUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                var safeServerName = serverName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                var htmlContent = '{\n' +
-                    indent + '"mcpServers": {\n' +
-                    indent + indent + '"' + safeServerName + '": {\n' +
-                    indent + indent + indent + '"type": "http",\n' +
-                    indent + indent + indent + '"url": "' + safeUrl + '",\n' +
-                    indent + indent + indent + '"headers": {\n' +
-                    indent + indent + indent + indent + '"Authorization": "Basic <span class=\"novamira-placeholder\">BASE64_ENCODED_CREDENTIALS</span>"\n' +
-                    indent + indent + indent + '}\n' +
-                    indent + indent + '}\n' +
-                    indent + '}\n' +
-                    '}';
-                npxlessCodeEl.innerHTML = htmlContent;
+            var hintEl = document.getElementById('novamira-npxless-hint');
+            var pathsEl = document.getElementById('novamira-npxless-paths');
+            var placeholder = 'BASE64_ENCODED_CREDENTIALS';
+            var jsonQuote = function (value) {
+                return JSON.stringify(value);
+            };
+            var tomlQuote = function (value) {
+                return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+            };
+            var code;
+
+            if (npxlessClient === 'codex') {
+                code = '[mcp_servers.' + serverName + ']\n' +
+                    'url = ' + tomlQuote(url) + '\n' +
+                    'http_headers = { Authorization = ' + tomlQuote(authHeaderValue.replace(/<[^>]+>/g, '')) + ' }';
+                hintEl.textContent = <?php echo wp_json_encode(__('Add to your project’s .codex/config.toml file.', domain: 'novamira')); ?>;
+                pathsEl.innerHTML = '<ul style="margin:4px 0 0; padding-left:20px;">' +
+                    '<li><strong><?php echo esc_js(__('Project', domain: 'novamira')); ?></strong>: <code>.codex/config.toml</code></li>' +
+                    '<li><strong><?php echo esc_js(__('Global', domain: 'novamira')); ?></strong>: <code>~/.codex/config.toml</code></li>' +
+                    '</ul>';
             } else {
-                var textContent = '{\n' +
+                code = '{\n' +
                     indent + '"mcpServers": {\n' +
-                    indent + indent + '"' + serverName + '": {\n' +
+                    indent + indent + jsonQuote(serverName) + ': {\n' +
                     indent + indent + indent + '"type": "http",\n' +
-                    indent + indent + indent + '"url": "' + url + '",\n' +
+                    indent + indent + indent + '"url": ' + jsonQuote(url) + ',\n' +
                     indent + indent + indent + '"headers": {\n' +
-                    indent + indent + indent + indent + '"Authorization": "Basic ' + window.btoa(username + ':' + pwClean) + '"\n' +
+                    indent + indent + indent + indent + '"Authorization": ' + jsonQuote(authHeaderValue.replace(/<[^>]+>/g, '')) + '\n' +
                     indent + indent + indent + '}\n' +
                     indent + indent + '}\n' +
                     indent + '}\n' +
                     '}';
-                npxlessCodeEl.textContent = textContent;
+                hintEl.textContent = <?php echo wp_json_encode(__('Add to your project’s .mcp.json file.', domain: 'novamira')); ?>;
+                pathsEl.innerHTML = '<ul style="margin:4px 0 0; padding-left:20px;">' +
+                    '<li><strong><?php echo esc_js(__('Project', domain: 'novamira')); ?></strong>: <code>.mcp.json</code></li>' +
+                    '</ul>';
+            }
+
+            npxlessCodeEl.textContent = code;
+            if (passwordIsPlaceholder) {
+                npxlessCodeEl.innerHTML = npxlessCodeEl.innerHTML.replace(
+                    placeholder,
+                    '<span class="novamira-placeholder">' + placeholder + '</span>'
+                );
             }
         }
 
