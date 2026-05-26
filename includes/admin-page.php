@@ -143,7 +143,7 @@ function novamira_render_sandbox_page(): void
 
                     $exit_url = wp_nonce_url(
                         admin_url('admin.php?page=novamira-sandbox&action=exit_safe_mode&file=.crashed'),
-                        'novamira_manage_file_.crashed',
+                        action: 'novamira_manage_file_.crashed',
                     );
                     ?>
                     <a href="<?php echo esc_url($exit_url); ?>" class="button button-primary"><?php esc_html_e(
@@ -154,7 +154,7 @@ function novamira_render_sandbox_page(): void
             </div>
         <?php endif; ?>
 
-        <?php novamira_render_sandbox_list($sandbox_dir, $is_crashed); ?>
+        <?php novamira_render_sandbox_list($sandbox_dir); ?>
     </div>
     <?php
 }
@@ -163,13 +163,10 @@ function novamira_render_sandbox_page(): void
  * Render the file list as a card section.
  * Layout mirrors the Skills admin page so the two pages feel consistent.
  */
-function novamira_render_sandbox_list(string $sandbox_dir, bool $is_crashed): void
+function novamira_render_sandbox_list(string $sandbox_dir): void
 {
-    $scanned_files = is_dir($sandbox_dir) ? scandir($sandbox_dir) : false;
-    $files = $scanned_files !== false ? array_diff($scanned_files, ['.', '..', '.loading', '.crashed']) : [];
-    $files = array_values(array_filter($files, static fn(string $f): bool => !is_dir($sandbox_dir . $f)));
-    $format = novamira_get_datetime_format();
-    $base_url = admin_url('admin.php?page=novamira-sandbox');
+    $files = novamira_get_sandbox_files($sandbox_dir);
+    $sandbox_status = file_exists($sandbox_dir . '.crashed') ? 'suspended' : 'active';
     ?>
     <section class="novamira-sandbox-section">
         <div class="novamira-sandbox-header">
@@ -182,91 +179,148 @@ function novamira_render_sandbox_list(string $sandbox_dir, bool $is_crashed): vo
                 'No sandbox files yet. AI agents will place generated files here.',
                 domain: 'novamira',
             ); ?></div>
-        <?php else: ?>
-            <div class="novamira-sandbox-rows">
-                <?php foreach ($files as $file):
-                    $path = $sandbox_dir . $file;
-                    $is_disabled = str_ends_with($file, '.disabled');
-                    $display_name = $is_disabled ? substr($file, 0, -9) : $file;
-                    $ext = strtolower(pathinfo($display_name, PATHINFO_EXTENSION));
-                    $mtime = filemtime($path);
-                    $wp_date = $mtime !== false ? wp_date($format, $mtime) : false;
-                    $modified = $wp_date !== false ? $wp_date : __('Unknown', domain: 'novamira');
-
-                    $row_classes = ['novamira-sandbox-row'];
-                    if ($is_crashed) {
-                        $row_classes[] = 'is-suspended';
-                    } elseif ($is_disabled) {
-                        $row_classes[] = 'is-disabled';
-                    } else {
-                        $row_classes[] = 'is-on';
-                    }
-
-                    $delete_url = wp_nonce_url(
-                        $base_url . '&action=delete&file=' . urlencode($file),
-                        'novamira_manage_file_' . $file,
-                    );
-                    $toggle_action = $is_disabled ? 'enable' : 'disable';
-                    $toggle_url = wp_nonce_url(
-                        $base_url . '&action=' . $toggle_action . '&file=' . urlencode($file),
-                        'novamira_manage_file_' . $file,
-                    );
-                    $can_toggle = !$is_crashed && ($is_disabled || $ext === 'php');
-                    ?>
-                    <div class="<?php echo esc_attr(implode(' ', $row_classes)); ?>">
-                        <?php if ($can_toggle): ?>
-                            <a
-                                href="<?php echo esc_url($toggle_url); ?>"
-                                class="novamira-sandbox-toggle"
-                                title="<?php echo
-                                    $is_disabled
-                                        ? esc_attr__('Enable', domain: 'novamira')
-                                        : esc_attr__('Disable', domain: 'novamira')
-                                ; ?>"
-                                aria-label="<?php echo
-                                    $is_disabled
-                                        ? esc_attr__('Enable file', domain: 'novamira')
-                                        : esc_attr__('Disable file', domain: 'novamira')
-                                ; ?>"
-                            ><span class="novamira-sandbox-check"></span></a>
-                        <?php else: ?>
-                            <span class="novamira-sandbox-check" aria-hidden="true"></span>
-                        <?php endif; ?>
-
-                        <div class="novamira-sandbox-main">
-                            <span class="slug"><?php echo esc_html($display_name); ?></span>
-                            <span class="meta"><?php echo esc_html($modified); ?></span>
-                        </div>
-
-                        <div class="novamira-sandbox-pills">
-                            <?php if ($ext !== ''): ?>
-                                <span class="pill ext-<?php echo esc_attr($ext); ?>"><?php
-
-                                echo esc_html($ext);
-                                ?></span>
-                            <?php endif; ?>
-                            <?php if ($is_crashed): ?>
-                                <span class="pill warn"><?php esc_html_e('Suspended', domain: 'novamira'); ?></span>
-                            <?php elseif ($is_disabled): ?>
-                                <span class="pill"><?php esc_html_e('Disabled', domain: 'novamira'); ?></span>
-                            <?php endif; ?>
-                        </div>
-
-                        <div class="novamira-sandbox-actions">
-                            <a
-                                href="<?php echo esc_url($delete_url); ?>"
-                                class="action-btn action-btn--danger"
-                                onclick="return confirm('<?php echo
-                                    esc_js(__('Are you sure you want to delete this file?', domain: 'novamira'))
-                                ; ?>');"
-                            ><?php esc_html_e('Delete', domain: 'novamira'); ?></a>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
+        <?php endif; ?>
+        <?php if ($files !== []): ?>
+            <?php novamira_render_sandbox_rows($sandbox_dir, $files, $sandbox_status); ?>
         <?php endif; ?>
     </section>
     <?php
+}
+
+/**
+ * @return list<string>
+ */
+function novamira_get_sandbox_files(string $sandbox_dir): array
+{
+    $scanned_files = is_dir($sandbox_dir) ? scandir($sandbox_dir) : false;
+    $files = $scanned_files !== false ? array_diff($scanned_files, ['.', '..', '.loading', '.crashed']) : [];
+
+    return array_values(array_filter($files, static fn(string $file): bool => !is_dir($sandbox_dir . $file)));
+}
+
+/**
+ * @param list<string> $files
+ */
+function novamira_render_sandbox_rows(string $sandbox_dir, array $files, string $sandbox_status): void
+{
+    $format = novamira_get_datetime_format();
+    $base_url = admin_url('admin.php?page=novamira-sandbox');
+    ?>
+    <div class="novamira-sandbox-rows">
+        <?php foreach ($files as $file): ?>
+            <?php novamira_render_sandbox_row($sandbox_dir, $file, $sandbox_status, $format, $base_url); ?>
+        <?php endforeach; ?>
+    </div>
+    <?php
+}
+
+function novamira_render_sandbox_row(
+    string $sandbox_dir,
+    string $file,
+    string $sandbox_status,
+    string $format,
+    string $base_url,
+): void {
+    $path = $sandbox_dir . $file;
+    $file_status = novamira_get_sandbox_file_status($file, $sandbox_status);
+    $display_name = $file_status === 'disabled' ? substr($file, offset: 0, length: -9) : $file;
+    $ext = strtolower(pathinfo($display_name, PATHINFO_EXTENSION));
+    $mtime = filemtime($path);
+    $wp_date = $mtime !== false ? wp_date($format, $mtime) : false;
+    $modified = $wp_date !== false ? $wp_date : __('Unknown', domain: 'novamira');
+
+    $delete_url = wp_nonce_url(
+        $base_url . '&action=delete&file=' . urlencode($file),
+        action: 'novamira_manage_file_' . $file,
+    );
+    ?>
+    <div class="<?php echo esc_attr('novamira-sandbox-row is-' . $file_status); ?>">
+        <?php novamira_render_sandbox_toggle($file, $file_status, $ext, $base_url); ?>
+
+        <div class="novamira-sandbox-main">
+            <span class="slug"><?php echo esc_html($display_name); ?></span>
+            <span class="meta"><?php echo esc_html($modified); ?></span>
+        </div>
+
+        <div class="novamira-sandbox-pills">
+            <?php novamira_render_sandbox_pills($ext, $file_status); ?>
+        </div>
+
+        <div class="novamira-sandbox-actions">
+            <a
+                href="<?php echo esc_url($delete_url); ?>"
+                class="action-btn action-btn--danger"
+                onclick="return confirm('<?php echo
+                    esc_js(__('Are you sure you want to delete this file?', domain: 'novamira'))
+                ; ?>');"
+            ><?php esc_html_e('Delete', domain: 'novamira'); ?></a>
+        </div>
+    </div>
+    <?php
+}
+
+function novamira_get_sandbox_file_status(string $file, string $sandbox_status): string
+{
+    if ($sandbox_status === 'suspended') {
+        return 'suspended';
+    }
+
+    if (str_ends_with($file, '.disabled')) {
+        return 'disabled';
+    }
+
+    return 'on';
+}
+
+function novamira_render_sandbox_toggle(string $file, string $file_status, string $ext, string $base_url): void
+{
+    if ($file_status === 'suspended' || $file_status !== 'disabled' && $ext !== 'php') {
+        ?>
+        <span class="novamira-sandbox-check" aria-hidden="true"></span>
+        <?php
+
+        return;
+    }
+
+    $is_disabled = $file_status === 'disabled';
+    $toggle_action = $is_disabled ? 'enable' : 'disable';
+    $toggle_url = wp_nonce_url(
+        $base_url . '&action=' . $toggle_action . '&file=' . urlencode($file),
+        action: 'novamira_manage_file_' . $file,
+    );
+    ?>
+    <a
+        href="<?php echo esc_url($toggle_url); ?>"
+        class="novamira-sandbox-toggle"
+        title="<?php echo
+            $is_disabled ? esc_attr__('Enable', domain: 'novamira') : esc_attr__('Disable', domain: 'novamira')
+        ; ?>"
+        aria-label="<?php echo
+            $is_disabled
+                ? esc_attr__('Enable file', domain: 'novamira')
+                : esc_attr__('Disable file', domain: 'novamira')
+        ; ?>"
+    ><span class="novamira-sandbox-check"></span></a>
+    <?php
+}
+
+function novamira_render_sandbox_pills(string $ext, string $file_status): void
+{
+    if ($ext !== '') { ?>
+        <span class="pill ext-<?php echo esc_attr($ext); ?>"><?php echo esc_html($ext); ?></span>
+        <?php }
+
+    if ($file_status === 'suspended') {
+        ?>
+        <span class="pill warn"><?php esc_html_e('Suspended', domain: 'novamira'); ?></span>
+        <?php
+
+        return;
+    }
+
+    if ($file_status === 'disabled') { ?>
+        <span class="pill"><?php esc_html_e('Disabled', domain: 'novamira'); ?></span>
+        <?php }
 }
 
 function novamira_render_settings_page()
