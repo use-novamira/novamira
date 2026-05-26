@@ -1081,6 +1081,56 @@ function novamira_render_config_section(string $rest_url, string $username, stri
     </div>
     </div>
 
+    <p style="margin:6px 0 4px;">
+        <button
+            type="button"
+            class="button-link"
+            id="novamira-npxless-toggle"
+            aria-expanded="false"
+            aria-controls="novamira-npxless-config"
+            onclick="novamiraToggleNpxlessConfig(this)"
+        ><?php esc_html_e('Need a configuration not requiring npx?', domain: 'novamira'); ?></button>
+    </p>
+
+    <div id="novamira-npxless-config" hidden style="display:none;">
+        <p class="description" style="margin:0 0 12px;">
+            <?php esc_html_e(
+                'Copy this JSON snippet to connect using direct HTTP (no Node/npx required).',
+                domain: 'novamira',
+            ); ?>
+        </p>
+
+        <div class="novamira-client-tabs">
+            <button
+                type="button"
+                class="novamira-client-tab active"
+            ><?php esc_html_e('Claude', domain: 'novamira'); ?></button>
+        </div>
+
+        <div class="novamira-tab-content" style="border-radius:4px;">
+            <div class="novamira-config-block">
+                <pre id="novamira-npxless-code"></pre>
+                <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyNpxlessConfig(this)"><?php esc_html_e(
+                    'Copy',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+            <div id="novamira-npxless-footer" style="font-size:13px; color:#666; border-top: 1px solid #c3c4c7;">
+                <div id="novamira-npxless-hint" style="padding: 10px 16px;">
+                    <?php esc_html_e('Add to your project’s .mcp.json file.', domain: 'novamira'); ?>
+                </div>
+                <div id="novamira-npxless-paths" style="padding: 0 16px 10px;">
+                    <ul style="margin:4px 0 0; padding-left:20px;">
+                        <li><strong><?php esc_html_e(
+                            'Project',
+                            domain: 'novamira',
+                        ); ?></strong>: <code>.mcp.json</code></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
     (function () {
         var configs = <?php echo $configs_json; ?>;
@@ -1092,6 +1142,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         var passwordSentinel = <?php echo wp_json_encode($pw_slot); ?>;
         var passwordValue = <?php echo wp_json_encode($display_password); ?>;
         var passwordIsPlaceholder = <?php echo wp_json_encode($password_is_placeholder); ?>;
+        var usernameValue = <?php echo wp_json_encode($username); ?>;
 
         function renderPaste() {
             var text = pasteTemplate.split(namePlaceholder).join(mcpName);
@@ -1117,6 +1168,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         function render() {
             renderConfig();
             renderPaste();
+            renderNpxlessConfig();
         }
 
         function renderConfig() {
@@ -1237,6 +1289,77 @@ function novamira_render_config_section(string $rest_url, string $username, stri
                 setTimeout(function () { btn.textContent = orig; }, 1500);
             });
         };
+
+        window.novamiraToggleNpxlessConfig = function (btn) {
+            var panel = document.getElementById('novamira-npxless-config');
+            var expanded = btn.getAttribute('aria-expanded') === 'true';
+            if (expanded) {
+                panel.style.display = 'none';
+                panel.hidden = true;
+                btn.setAttribute('aria-expanded', 'false');
+            } else {
+                panel.style.display = '';
+                panel.hidden = false;
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        };
+
+        window.novamiraCopyNpxlessConfig = function (btn) {
+            navigator.clipboard.writeText(document.getElementById('novamira-npxless-code').textContent).then(function () {
+                var orig = btn.textContent;
+                btn.textContent = '<?php echo $copied_label; ?>';
+                setTimeout(function () { btn.textContent = orig; }, 1500);
+            });
+        };
+
+        function renderNpxlessConfig() {
+            var npxlessCodeEl = document.getElementById('novamira-npxless-code');
+            if (!npxlessCodeEl) { return; }
+
+            var serverName = mcpName;
+            var url = <?php echo wp_json_encode($rest_url); ?>;
+            var username = usernameValue;
+
+            var authHeaderValue;
+            if (passwordIsPlaceholder) {
+                authHeaderValue = 'Basic <span class="novamira-placeholder">BASE64_ENCODED_CREDENTIALS</span>';
+            } else {
+                var pwClean = passwordValue.replace(/\s+/g, '');
+                var encoded = window.btoa(username + ':' + pwClean);
+                authHeaderValue = 'Basic ' + encoded;
+            }
+
+            var indent = '  ';
+            if (passwordIsPlaceholder) {
+                var safeUrl = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                var safeServerName = serverName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                var htmlContent = '{\n' +
+                    indent + '"mcpServers": {\n' +
+                    indent + indent + '"' + safeServerName + '": {\n' +
+                    indent + indent + indent + '"type": "http",\n' +
+                    indent + indent + indent + '"url": "' + safeUrl + '",\n' +
+                    indent + indent + indent + '"headers": {\n' +
+                    indent + indent + indent + indent + '"Authorization": "Basic <span class=\"novamira-placeholder\">BASE64_ENCODED_CREDENTIALS</span>"\n' +
+                    indent + indent + indent + '}\n' +
+                    indent + indent + '}\n' +
+                    indent + '}\n' +
+                    '}';
+                npxlessCodeEl.innerHTML = htmlContent;
+            } else {
+                var textContent = '{\n' +
+                    indent + '"mcpServers": {\n' +
+                    indent + indent + '"' + serverName + '": {\n' +
+                    indent + indent + indent + '"type": "http",\n' +
+                    indent + indent + indent + '"url": "' + url + '",\n' +
+                    indent + indent + indent + '"headers": {\n' +
+                    indent + indent + indent + indent + '"Authorization": "Basic ' + window.btoa(username + ':' + pwClean) + '"\n' +
+                    indent + indent + indent + '}\n' +
+                    indent + indent + '}\n' +
+                    indent + '}\n' +
+                    '}';
+                npxlessCodeEl.textContent = textContent;
+            }
+        }
 
         render();
     }());
