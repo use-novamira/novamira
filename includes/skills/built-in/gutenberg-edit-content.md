@@ -39,7 +39,7 @@ live, so the Novamira Block Editor Queue admin page is part of the workflow.
 
 - Use `novamira/gutenberg-write-content` only when every block is a registered
   `novamira/*` dynamic-only block. This writes live content directly.
-- For core/static/native blocks, use the pending queue:
+- For static/native blocks, use the pending queue:
   1. Call `novamira/gutenberg-add-pending-change`. Omit `batch_id` for the
      first target, then reuse the returned `batch_id` for the rest of the
      same user-visible change.

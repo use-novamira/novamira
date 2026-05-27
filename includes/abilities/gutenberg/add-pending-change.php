@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/gutenberg-add-pending-change', [
     'label' => __('Add Gutenberg Pending Change', domain: 'novamira'),
     'description' => __(
-        'Adds one replace-content target change to a draft Gutenberg pending batch, or auto-creates a draft batch when batch_id is omitted. V1 accepts core block specs only for browser JS finalization; third-party static blocks are refused. Queued changes are not live until gutenberg-enable-batch-finalization marks the batch ready and an open Block Editor Queue page completes it.',
+        'Adds one replace-content target change to a draft Gutenberg pending batch, or auto-creates a draft batch when batch_id is omitted. Static/native blocks are finalized in a hidden editor iframe so registered third-party blocks can be serialized by their editor JavaScript. Queued changes are not live until gutenberg-enable-batch-finalization marks the batch ready and an open Block Editor Queue page completes it.',
         domain: 'novamira',
     ),
     'category' => 'gutenberg',
@@ -56,7 +56,7 @@ wp_register_ability('novamira/gutenberg-add-pending-change', [
             ],
             'block_spec' => [
                 'type' => 'array',
-                'description' => 'Top-level Gutenberg block specs: [{name, attributes, innerBlocks}]. V1 supports core/* blocks only from the Block Editor Queue admin page.',
+                'description' => 'Top-level Gutenberg block specs: [{name, attributes, innerBlocks}]. Static/native blocks are serialized by the Block Editor Queue inside the target editor context.',
                 'items' => ['type' => 'object', 'additionalProperties' => true],
             ],
         ],
@@ -167,11 +167,6 @@ function gutenberg_add_pending_blocks(array $input): array|WP_Error
     $blocks = normalize_blocks($input['block_spec'] ?? null);
     if (is_wp_error($blocks)) {
         return $blocks;
-    }
-
-    $core_error = validate_core_blocks_only($blocks);
-    if ($core_error instanceof WP_Error) {
-        return $core_error;
     }
 
     return $blocks;

@@ -402,10 +402,38 @@ function rest_get_item_spec(WP_REST_Request $request): WP_REST_Response|WP_Error
         return $blocks;
     }
 
+    $editor_url = rest_item_editor_url($item);
+    if (is_wp_error($editor_url)) {
+        return $editor_url;
+    }
+
     return new WP_REST_Response([
         'item' => shape_item($item),
         'blocks' => $blocks,
+        'editor_url' => $editor_url,
     ]);
+}
+
+/** @return string|WP_Error */
+function rest_item_editor_url(WP_Post $item): string|WP_Error
+{
+    $target_id = meta_int($item->ID, META_TARGET_ID);
+    $target = get_target($target_id);
+    if (!$target instanceof WP_Post) {
+        return new WP_Error('gutenberg_target_not_found', sprintf('Target post %d was not found.', $target_id), [
+            'status' => 404,
+        ]);
+    }
+
+    $editor_url = get_edit_post_link($target_id, context: 'raw');
+    if (!is_string($editor_url) || $editor_url === '') {
+        $editor_url = admin_url(sprintf('post.php?post=%d&action=edit', $target_id));
+    }
+
+    return add_query_arg([
+        'novamira_gb_finalizer' => '1',
+        'novamira_gb_item' => $item->ID,
+    ], $editor_url);
 }
 
 /** @return WP_REST_Response|WP_Error */

@@ -60,7 +60,7 @@ wp_register_ability('novamira/gutenberg-write-content', [
         'show_in_rest' => true,
         'mcp' => ['public' => true],
         'annotations' => [
-            'instructions' => 'Use this only for Novamira-owned dynamic-only Gutenberg blocks where save:null means no static saved HTML is needed. For core/static/native blocks, this ability refuses the write and tells you to use the pending queue and Block Editor Queue browser runtime.',
+            'instructions' => 'Use this only for Novamira-owned dynamic-only Gutenberg blocks where save:null means no static saved HTML is needed. For static/native blocks, this ability refuses the write and tells you to use the pending queue and Block Editor Queue browser runtime.',
             'readonly' => false,
             'destructive' => true,
             'idempotent' => true,

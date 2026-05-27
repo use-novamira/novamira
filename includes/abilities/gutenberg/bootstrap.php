@@ -706,33 +706,6 @@ function block_inner_specs(array $block): array
 /**
  * @param list<array<string, mixed>> $blocks
  */
-function validate_core_blocks_only(array $blocks): ?WP_Error
-{
-    foreach ($blocks as $block) {
-        $name = is_string($block['name'] ?? null) ? $block['name'] : '';
-        if (!str_starts_with($name, 'core/')) {
-            return new WP_Error(
-                'gutenberg_unsupported_static_block',
-                sprintf(
-                    'V1 Gutenberg JS finalization supports core blocks only from the Novamira Block Editor Queue. Block "%s" is not supported; third-party static blocks need the later editor-context runtime.',
-                    $name !== '' ? $name : '(missing name)',
-                ),
-                ['status' => 400],
-            );
-        }
-
-        $inner_error = validate_core_blocks_only(block_inner_specs($block));
-        if ($inner_error !== null) {
-            return $inner_error;
-        }
-    }
-
-    return null;
-}
-
-/**
- * @param list<array<string, mixed>> $blocks
- */
 function validate_dynamic_only_blocks(array $blocks): ?WP_Error
 {
     foreach ($blocks as $block) {
