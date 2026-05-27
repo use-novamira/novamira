@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 /**
- * Temporary signed upload URL support.
+ * Temporary signed upload endpoint support.
  */
 
 if (!defined('ABSPATH')) {
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 add_action('rest_api_init', callback: 'novamira_register_upload_route');
 
 /**
- * Register the REST endpoint used by signed upload URLs.
+ * Register the REST endpoint used by signed uploads.
  */
 function novamira_register_upload_route(): void
 {
@@ -205,21 +205,11 @@ function novamira_prepare_upload_destination(array $payload): array|WP_Error
 }
 
 /**
- * Return the upload token from query args or headers.
+ * Return the upload token from request headers.
  */
 function novamira_get_upload_token_from_request(WP_REST_Request $request): string
 {
-    $query_params = $request->get_query_params();
-    if (array_key_exists('token', $query_params) && is_string($query_params['token'])) {
-        return rawurldecode($query_params['token']);
-    }
-
-    $header_token = $request->get_header('x-novamira-upload-token');
-    if (is_string($header_token)) {
-        return $header_token;
-    }
-
-    return '';
+    return novamira_rest_header_token($request, header_name: 'x-novamira-upload-token');
 }
 
 /**

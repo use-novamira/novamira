@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 /**
- * Ability: Create a temporary self-authenticated upload link.
+ * Ability: Create a temporary header-authenticated upload endpoint.
  */
 
 if (!defined('ABSPATH')) {
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/create-upload-link', [
     'label' => __('Create Upload Link', domain: 'novamira'),
     'description' => __(
-        'Creates a temporary, self-authenticated URL that external tools can use to upload one file into the WordPress filesystem. Useful when the agent has a local ZIP, plugin, theme, or media file and wants to upload it with curl or another external tool. The URL accepts raw PUT/POST bodies and multipart/form-data with a field named "file".',
+        'Creates a temporary upload endpoint and header-only bearer token that external tools can use to upload one file into the WordPress filesystem. Useful when the agent has a local ZIP, plugin, theme, or media file and wants to upload it with curl or another external tool. The endpoint accepts raw PUT/POST bodies and multipart/form-data with a field named "file".',
         domain: 'novamira',
     ),
     'category' => 'filesystem',
@@ -30,14 +30,14 @@ wp_register_ability('novamira/create-upload-link', [
             ],
             'expires_in' => [
                 'type' => 'integer',
-                'description' => 'Seconds before the upload URL expires. Minimum 30, maximum 3600.',
+                'description' => 'Seconds before the upload token expires. Minimum 30, maximum 3600.',
                 'default' => 900,
                 'minimum' => 30,
                 'maximum' => 3600,
             ],
             'max_bytes' => [
                 'type' => 'integer',
-                'description' => 'Maximum number of bytes accepted by this URL. Default is 536870912 (512 MiB).',
+                'description' => 'Maximum number of bytes accepted by this upload endpoint. Default is 536870912 (512 MiB).',
                 'default' => 536_870_912,
                 'minimum' => 1,
             ],
@@ -58,11 +58,19 @@ wp_register_ability('novamira/create-upload-link', [
     'output_schema' => [
         'type' => 'object',
         'properties' => [
-            'upload_url' => ['type' => 'string', 'description' => 'Temporary self-authenticated upload URL.'],
+            'upload_url' => [
+                'type' => 'string',
+                'description' => 'Temporary upload endpoint URL. Send upload_token in token_header; the token is not included in the URL.',
+            ],
+            'upload_token' => [
+                'type' => 'string',
+                'description' => 'Temporary bearer token. Send as the token_header value.',
+            ],
+            'token_header' => ['type' => 'string', 'description' => 'HTTP header that must carry upload_token.'],
             'method' => ['type' => 'string', 'description' => 'Recommended HTTP method.'],
             'path' => ['type' => 'string', 'description' => 'Absolute destination path.'],
-            'expires_at' => ['type' => 'integer', 'description' => 'Unix timestamp when the URL expires.'],
-            'max_bytes' => ['type' => 'integer', 'description' => 'Maximum upload size accepted by the URL.'],
+            'expires_at' => ['type' => 'integer', 'description' => 'Unix timestamp when the upload token expires.'],
+            'max_bytes' => ['type' => 'integer', 'description' => 'Maximum upload size accepted by the endpoint.'],
             'overwrite' => ['type' => 'boolean', 'description' => 'Whether existing files may be replaced.'],
             'curl_examples' => [
                 'type' => 'array',
@@ -79,8 +87,8 @@ wp_register_ability('novamira/create-upload-link', [
         'annotations' => [
             'instructions' => implode("\n", [
                 'Use this when a file is too large or inconvenient to send through the MCP JSON transport.',
-                'Recommended curl form: curl -X PUT --data-binary @/path/to/local-file "$upload_url"',
-                'Multipart form is also accepted: curl -F file=@/path/to/local-file "$upload_url"',
+                'Recommended curl form: curl -X PUT -H "$token_header: $upload_token" --data-binary @/path/to/local-file "$upload_url"',
+                'Multipart form is also accepted: curl -H "$token_header: $upload_token" -F file=@/path/to/local-file "$upload_url"',
                 'PHP files (*.php) can ONLY be uploaded to wp-content/novamira-sandbox/.',
             ]),
             'readonly' => false,
@@ -91,7 +99,7 @@ wp_register_ability('novamira/create-upload-link', [
 ]);
 
 /**
- * Create a temporary upload URL.
+ * Create a temporary upload endpoint.
  *
  * @param array $input Input with destination path and optional limits.
  * @return array|WP_Error
@@ -128,18 +136,29 @@ function novamira_create_upload_link($input)
         return $token;
     }
 
-    $upload_url = add_query_arg('token', rawurlencode($token), rest_url('novamira/v1/upload'));
+    $upload_url = rest_url('novamira/v1/upload');
+    $token_header = 'X-Novamira-Upload-Token';
 
     return [
         'upload_url' => $upload_url,
+        'upload_token' => $token,
+        'token_header' => $token_header,
         'method' => 'PUT',
         'path' => $resolved,
         'expires_at' => $expires_at,
         'max_bytes' => $max_bytes,
         'overwrite' => $overwrite,
         'curl_examples' => [
-            'curl -X PUT --data-binary @/path/to/local-file ' . escapeshellarg($upload_url),
-            'curl -F file=@/path/to/local-file ' . escapeshellarg($upload_url),
+            sprintf(
+                'curl -X PUT -H "%s: $upload_token" --data-binary @/path/to/local-file %s',
+                $token_header,
+                escapeshellarg($upload_url),
+            ),
+            sprintf(
+                'curl -H "%s: $upload_token" -F file=@/path/to/local-file %s',
+                $token_header,
+                escapeshellarg($upload_url),
+            ),
         ],
     ];
 }

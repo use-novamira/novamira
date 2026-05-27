@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 /**
- * Ability: Create a temporary one-time admin access link.
+ * Ability: Create a temporary one-time admin access exchange.
  */
 
 if (!defined('ABSPATH')) {
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/create-admin-access-link', [
     'label' => __('Create Admin Access Link', domain: 'novamira'),
     'description' => __(
-        'Creates a temporary, one-time WordPress admin login URL for browser automation tools. Use this when an agent needs to inspect or operate wp-admin through a browser MCP without asking the user for a password.',
+        'Creates a temporary, one-time WordPress admin access exchange for browser automation tools. Use this when an agent needs to inspect or operate wp-admin through a browser MCP without asking the user for a password. POST the returned token and nonce in headers to receive a short-lived one-time login URL.',
         domain: 'novamira',
     ),
     'category' => 'admin-access',
@@ -25,7 +25,7 @@ wp_register_ability('novamira/create-admin-access-link', [
         'properties' => [
             'expires_in' => [
                 'type' => 'integer',
-                'description' => 'Seconds before the admin access URL expires. Minimum 30, maximum 600.',
+                'description' => 'Seconds before the admin access exchange expires. Minimum 30, maximum 600.',
                 'default' => 300,
                 'minimum' => 30,
                 'maximum' => 600,
@@ -48,16 +48,45 @@ wp_register_ability('novamira/create-admin-access-link', [
     'output_schema' => [
         'type' => 'object',
         'properties' => [
-            'login_url' => ['type' => 'string', 'description' => 'Temporary one-time admin login URL.'],
-            'expires_at' => ['type' => 'integer', 'description' => 'Unix timestamp when the URL expires.'],
+            'exchange_url' => [
+                'type' => 'string',
+                'description' => 'Admin access exchange endpoint. Send access_token and access_nonce with POST headers.',
+            ],
+            'exchange_method' => ['type' => 'string', 'description' => 'HTTP method for the exchange request.'],
+            'access_token' => [
+                'type' => 'string',
+                'description' => 'One-time admin access token. Send as the token_header value.',
+            ],
+            'token_header' => ['type' => 'string', 'description' => 'HTTP header that must carry access_token.'],
+            'access_nonce' => [
+                'type' => 'string',
+                'description' => 'One-time binding nonce. Send as the nonce_header value.',
+            ],
+            'nonce_header' => ['type' => 'string', 'description' => 'HTTP header that must carry access_nonce.'],
+            'expires_at' => ['type' => 'integer', 'description' => 'Unix timestamp when the exchange expires.'],
             'session_expires_in' => [
                 'type' => 'integer',
                 'description' => 'Browser admin session duration in seconds after the URL is opened.',
             ],
             'redirect_url' => ['type' => 'string', 'description' => 'Admin URL opened after the token is consumed.'],
             'one_time' => ['type' => 'boolean', 'description' => 'Whether the URL can only be used once.'],
+            'curl_example' => [
+                'type' => 'string',
+                'description' => 'Example exchange request. It returns JSON containing a one-time login_url.',
+            ],
         ],
-        'required' => ['login_url', 'expires_at', 'session_expires_in', 'redirect_url', 'one_time'],
+        'required' => [
+            'exchange_url',
+            'exchange_method',
+            'access_token',
+            'token_header',
+            'access_nonce',
+            'nonce_header',
+            'expires_at',
+            'session_expires_in',
+            'redirect_url',
+            'one_time',
+        ],
     ],
     'execute_callback' => 'novamira_create_admin_access_link',
     'permission_callback' => 'novamira_permission_callback',
@@ -67,9 +96,9 @@ wp_register_ability('novamira/create-admin-access-link', [
         'annotations' => [
             'instructions' => implode("\n", [
                 'Use only when browser automation needs a WordPress admin session.',
-                'Open the returned login_url directly in the browser tool.',
-                'The URL is one-time use and expires quickly. Create a new link if the browser fails to open it in time.',
-                'Do not paste this URL into public logs, issue trackers, or user-visible pages.',
+                'POST to exchange_url with token_header/access_token and nonce_header/access_nonce to receive a one-time login_url.',
+                'Open the exchanged login_url immediately in the browser tool. The login_url nonce expires after at most 60 seconds.',
+                'Tokens are not accepted in query strings. Do not paste token values into public logs, issue trackers, or user-visible pages.',
             ]),
             'readonly' => false,
             'destructive' => false,
@@ -79,7 +108,7 @@ wp_register_ability('novamira/create-admin-access-link', [
 ]);
 
 /**
- * Create a temporary one-time admin access URL.
+ * Create a temporary one-time admin access exchange.
  *
  * @param array $input Input with optional expiry and admin path.
  * @return array|WP_Error
@@ -99,16 +128,31 @@ function novamira_create_admin_access_link(array $input = [])
         return $redirect_url;
     }
 
-    $token = novamira_create_admin_access_token($user_id, $expires_in, $session_expires_in, $admin_path);
-    if (is_wp_error($token)) {
-        return $token;
+    $access = novamira_create_admin_access_token($user_id, $expires_in, $session_expires_in, $admin_path);
+    if (is_wp_error($access)) {
+        return $access;
     }
 
+    $exchange_url = rest_url('novamira/v1/admin-access');
+    $token_header = 'X-Novamira-Admin-Access-Token';
+    $nonce_header = 'X-Novamira-Admin-Access-Nonce';
+
     return [
-        'login_url' => add_query_arg('token', rawurlencode($token), rest_url('novamira/v1/admin-access')),
-        'expires_at' => time() + $expires_in,
+        'exchange_url' => $exchange_url,
+        'exchange_method' => 'POST',
+        'access_token' => $access['token'],
+        'token_header' => $token_header,
+        'access_nonce' => $access['nonce'],
+        'nonce_header' => $nonce_header,
+        'expires_at' => $access['expires_at'],
         'session_expires_in' => $session_expires_in,
         'redirect_url' => $redirect_url,
         'one_time' => true,
+        'curl_example' => sprintf(
+            'curl -s -X POST -H "%s: $access_token" -H "%s: $access_nonce" %s',
+            $token_header,
+            $nonce_header,
+            escapeshellarg($exchange_url),
+        ),
     ];
 }

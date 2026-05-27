@@ -539,6 +539,29 @@ function novamira_permission_callback()
 }
 
 /**
+ * Return a bearer token from a REST request header.
+ */
+function novamira_rest_header_token(WP_REST_Request $request, string $header_name): string
+{
+    $header_token = $request->get_header($header_name);
+    if (is_string($header_token) && trim($header_token) !== '') {
+        return trim($header_token);
+    }
+
+    $authorization = $request->get_header('authorization');
+    if (!is_string($authorization)) {
+        return '';
+    }
+
+    $matches = [];
+    if (preg_match('/^\s*Bearer\s+(.+?)\s*$/i', $authorization, $matches) !== 1) {
+        return '';
+    }
+
+    return trim($matches[1]);
+}
+
+/**
  * Detect active languages from multilingual plugins (WPML, Polylang, TranslatePress).
  *
  * @return array{plugin: string, languages: string[]}|null Plugin name and language codes, or null if no multilingual plugin is active.
