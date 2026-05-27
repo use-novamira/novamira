@@ -1,6 +1,9 @@
+v1.5.0 - 2026/05/27
+* New: In the Gutenberg Block Editor AI agents can now create and edit third party blocks valid from the first save
+* Tweak: Large-file uploads and browser admin access now use header-based handoff flows, so generated endpoint URLs stay short and easier to reuse in tool commands.
+
 v1.4.0 - 2026/05/26
 * New: Gutenberg (Block Editor) support, AI agents can now author and edit posts, pages, templates, template parts, and navigation menus, with native blocks valid from the first save
-* Tweak: Large-file uploads and browser admin access now use header-based handoff flows, so generated endpoint URLs stay short and easier to reuse in tool commands.
 * Minor Fixes
 
 v1.3.0 - 2026/05/21
