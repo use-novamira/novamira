@@ -37,8 +37,7 @@ function novamira_resolve_path($path, $must_exist = false)
     $base_dir = apply_filters('novamira_filesystem_base_dir', ABSPATH);
 
     // Resolve path that may not exist yet via parent directory.
-    $resolved_parent = realpath(dirname($path));
-    $resolved = $resolved_parent !== false ? $resolved_parent . DIRECTORY_SEPARATOR . basename($path) : $path;
+    $resolved = novamira_resolve_candidate_path($path);
 
     // For paths that must exist, override with realpath.
     if ($must_exist) {
@@ -65,6 +64,85 @@ function novamira_resolve_path($path, $must_exist = false)
     }
 
     return $resolved;
+}
+
+/**
+ * Resolve an absolute candidate path while preserving a non-existing final path.
+ */
+function novamira_resolve_candidate_path(string $path): string
+{
+    $resolved_parent = realpath(dirname($path));
+    if ($resolved_parent !== false) {
+        return novamira_normalize_absolute_path($resolved_parent . DIRECTORY_SEPARATOR . basename($path));
+    }
+
+    return novamira_normalize_missing_path($path);
+}
+
+/**
+ * Normalize a path with missing parents from the nearest existing ancestor.
+ */
+function novamira_normalize_missing_path(string $path): string
+{
+    /** @var list<string> $tail */
+    $tail = [basename($path)];
+    $cursor = dirname($path);
+    $found_existing_ancestor = false;
+
+    while ($cursor !== '' && $cursor !== '.' && $cursor !== dirname($cursor)) {
+        $real_cursor = realpath($cursor);
+        if ($real_cursor !== false) {
+            $tail[] = $real_cursor;
+            $found_existing_ancestor = true;
+            break;
+        }
+
+        $tail[] = basename($cursor);
+        $cursor = dirname($cursor);
+    }
+
+    if (!$found_existing_ancestor) {
+        $real_cursor = realpath($cursor);
+        if ($real_cursor !== false) {
+            $tail[] = $real_cursor;
+        }
+        if ($real_cursor === false && str_starts_with($path, DIRECTORY_SEPARATOR)) {
+            $tail[] = DIRECTORY_SEPARATOR;
+        }
+    }
+
+    return novamira_normalize_absolute_path(implode(DIRECTORY_SEPARATOR, array_reverse($tail)));
+}
+
+/**
+ * Collapse "." and ".." path segments without requiring the path to exist.
+ */
+function novamira_normalize_absolute_path(string $path): string
+{
+    $path = str_replace(search: '\\', replace: DIRECTORY_SEPARATOR, subject: $path);
+    $is_absolute = str_starts_with($path, DIRECTORY_SEPARATOR);
+    /** @var list<string> $parts */
+    $parts = [];
+
+    foreach (explode(DIRECTORY_SEPARATOR, $path) as $segment) {
+        if ($segment === '' || $segment === '.') {
+            continue;
+        }
+
+        if ($segment === '..') {
+            array_pop($parts);
+            continue;
+        }
+
+        $parts[] = $segment;
+    }
+
+    $normalized = implode(DIRECTORY_SEPARATOR, $parts);
+    if ($is_absolute) {
+        return DIRECTORY_SEPARATOR . $normalized;
+    }
+
+    return $normalized === '' ? '.' : $normalized;
 }
 
 /**
@@ -154,13 +232,17 @@ function novamira_path_requires_php_sandbox(string $resolved): bool
         return true;
     }
 
-    return in_array($filename, [
-        '.htaccess',
-        '.php.ini',
-        '.user.ini',
-        'php.ini',
-        'web.config',
-    ], strict: true);
+    return in_array(
+        $filename,
+        [
+            '.htaccess',
+            '.php.ini',
+            '.user.ini',
+            'php.ini',
+            'web.config',
+        ],
+        strict: true,
+    );
 }
 
 /**
@@ -184,10 +266,7 @@ function novamira_reject_final_path_symlink(string $resolved): bool|WP_Error
         return true;
     }
 
-    return new WP_Error('symlink_write_rejected', sprintf(
-        'Refusing to write through symlink path: %s',
-        $resolved,
-    ));
+    return new WP_Error('symlink_write_rejected', sprintf('Refusing to write through symlink path: %s', $resolved));
 }
 
 /**
