@@ -148,6 +148,13 @@ function novamira_normalize_absolute_path(string $path): string
 /**
  * Get the sandbox directory path for AI-written PHP plugins.
  *
+ * The sandbox is an operational boundary for generated PHP: it gives Novamira
+ * one place to load AI-written PHP files from, disable them, and recover from
+ * crashes. It is not a security isolation boundary for all filesystem writes.
+ * Authenticated Novamira administrators may intentionally read, write, edit,
+ * upload, and delete non-PHP files elsewhere under the configured filesystem
+ * base directory.
+ *
  * @param bool $ensure_exists Whether to create the directory if it doesn't exist.
  * @return string Absolute path to the sandbox directory (with trailing slash).
  */
@@ -191,7 +198,11 @@ function novamira_validate_sandbox_path($resolved)
 }
 
 /**
- * Check that a resolved PHP file path is inside the sandbox directory.
+ * Check that a resolved PHP-execution path is inside the sandbox directory.
+ *
+ * This is deliberately scoped to files that Novamira may execute as PHP or
+ * files that can alter PHP execution. Non-PHP filesystem access outside the
+ * sandbox is expected behavior, not a sandbox bypass.
  *
  * @param string $resolved Absolute resolved path to the PHP file.
  * @return bool|WP_Error True if valid, WP_Error if outside sandbox.
@@ -222,6 +233,9 @@ function novamira_check_php_sandbox(string $resolved): bool|WP_Error
 
 /**
  * Check whether a path can directly affect PHP execution and must stay in the sandbox.
+ *
+ * Do not broaden this to every writable file path unless the product model
+ * changes. The sandbox is not intended to isolate all filesystem operations.
  */
 function novamira_path_requires_php_sandbox(string $resolved): bool
 {
@@ -247,6 +261,8 @@ function novamira_path_requires_php_sandbox(string $resolved): bool
 
 /**
  * Enforce the sandbox boundary for files that can affect PHP execution.
+ *
+ * Returning true for ordinary non-PHP files is intentional.
  */
 function novamira_check_php_execution_sandbox(string $resolved): bool|WP_Error
 {

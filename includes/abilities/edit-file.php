@@ -71,7 +71,7 @@ wp_register_ability('novamira/edit-file', [
                 '- old_string and new_string must be different.',
                 '- To delete text, set new_string to an empty string.',
                 '',
-                'PHP SANDBOX: Same rules as write-file — PHP files and PHP execution control files can only be written to the sandbox directory.',
+                'PHP SANDBOX: Same rules as write-file — PHP files and PHP execution control files can only be written to the sandbox directory. Other non-PHP edits outside the sandbox are intentional; the sandbox is not security isolation for all filesystem writes.',
             ]),
             'readonly' => false,
             'destructive' => false,

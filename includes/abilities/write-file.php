@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/write-file', [
     'label' => __('Write File', domain: 'novamira'),
     'description' => __(
-        'Writes content to a file on the server filesystem. PHP files (*.php) and PHP execution control files can ONLY be written to the sandbox directory (wp-content/novamira-sandbox/). Other non-PHP files can go anywhere under ABSPATH. Supports both UTF-8 text and base64-encoded binary content. Automatically creates parent directories when needed.',
+        'Writes content to a file on the server filesystem. PHP files (*.php) and PHP execution control files can ONLY be written to the sandbox directory (wp-content/novamira-sandbox/). Other non-PHP files can intentionally go anywhere under ABSPATH. The sandbox is for loading and crash recovery of generated PHP, not security isolation for all filesystem writes. Supports both UTF-8 text and base64-encoded binary content. Automatically creates parent directories when needed.',
         domain: 'novamira',
     ),
     'category' => 'filesystem',
@@ -80,7 +80,8 @@ wp_register_ability('novamira/write-file', [
                 'PHP FILE SANDBOX:',
                 '- PHP files (*.php) and PHP execution control files can ONLY be written to: wp-content/novamira-sandbox/',
                 '- Use a path like "wp-content/novamira-sandbox/my-feature.php"',
-                '- Other non-PHP files can be written anywhere under ABSPATH.',
+                '- Other non-PHP files can intentionally be written anywhere under ABSPATH.',
+                '- The sandbox is not security isolation for all filesystem writes; it is for generated PHP loading and crash recovery.',
                 '- Sandbox plugins are loaded by a mu-plugin loader on every request.',
                 '',
                 'CRASH RECOVERY:',

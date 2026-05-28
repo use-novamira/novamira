@@ -90,6 +90,7 @@ wp_register_ability('novamira/create-upload-link', [
                 'Recommended curl form: curl -X PUT -H "$token_header: $upload_token" --data-binary @/path/to/local-file "$upload_url"',
                 'Multipart form is also accepted: curl -H "$token_header: $upload_token" -F file=@/path/to/local-file "$upload_url"',
                 'PHP files (*.php) and PHP execution control files can ONLY be uploaded to wp-content/novamira-sandbox/.',
+                'Other non-PHP uploads outside the sandbox are intentional; the sandbox is not security isolation for all filesystem writes.',
             ]),
             'readonly' => false,
             'destructive' => false,

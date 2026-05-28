@@ -178,6 +178,8 @@ function novamira_prepare_upload_destination(array $payload): array|WP_Error
         return $symlink_error;
     }
 
+    // Sandbox enforcement is intentionally limited to PHP execution paths.
+    // Non-PHP uploads outside the sandbox are part of the filesystem ability model.
     $sandbox_error = novamira_check_php_execution_sandbox($resolved);
     if (is_wp_error($sandbox_error)) {
         return $sandbox_error;
