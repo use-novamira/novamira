@@ -71,7 +71,7 @@ wp_register_ability('novamira/edit-file', [
                 '- old_string and new_string must be different.',
                 '- To delete text, set new_string to an empty string.',
                 '',
-                'PHP SANDBOX: Same rules as write-file — PHP files can only be written to the sandbox directory.',
+                'PHP SANDBOX: Same rules as write-file — PHP files and PHP execution control files can only be written to the sandbox directory.',
             ]),
             'readonly' => false,
             'destructive' => false,
@@ -115,6 +115,11 @@ function novamira_edit_file($input)
 
     if (!is_file($resolved)) {
         return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved));
+    }
+
+    $sandbox_error = novamira_check_php_execution_sandbox($resolved);
+    if (is_wp_error($sandbox_error)) {
+        return $sandbox_error;
     }
 
     if (!is_readable($resolved) || !is_writable($resolved)) {

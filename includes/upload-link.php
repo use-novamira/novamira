@@ -173,11 +173,9 @@ function novamira_prepare_upload_destination(array $payload): array|WP_Error
         return $resolved;
     }
 
-    if (strtolower(pathinfo($resolved, PATHINFO_EXTENSION)) === 'php') {
-        $sandbox_error = novamira_check_php_sandbox($resolved);
-        if (is_wp_error($sandbox_error)) {
-            return $sandbox_error;
-        }
+    $sandbox_error = novamira_check_php_execution_sandbox($resolved);
+    if (is_wp_error($sandbox_error)) {
+        return $sandbox_error;
     }
 
     $parent_dir = dirname($resolved);

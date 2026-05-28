@@ -89,7 +89,7 @@ wp_register_ability('novamira/create-upload-link', [
                 'Use this when a file is too large or inconvenient to send through the MCP JSON transport.',
                 'Recommended curl form: curl -X PUT -H "$token_header: $upload_token" --data-binary @/path/to/local-file "$upload_url"',
                 'Multipart form is also accepted: curl -H "$token_header: $upload_token" -F file=@/path/to/local-file "$upload_url"',
-                'PHP files (*.php) can ONLY be uploaded to wp-content/novamira-sandbox/.',
+                'PHP files (*.php) and PHP execution control files can ONLY be uploaded to wp-content/novamira-sandbox/.',
             ]),
             'readonly' => false,
             'destructive' => false,
@@ -111,11 +111,9 @@ function novamira_create_upload_link($input)
         return $resolved;
     }
 
-    if (strtolower(pathinfo($resolved, PATHINFO_EXTENSION)) === 'php') {
-        $sandbox_error = novamira_check_php_sandbox($resolved);
-        if (is_wp_error($sandbox_error)) {
-            return $sandbox_error;
-        }
+    $sandbox_error = novamira_check_php_execution_sandbox($resolved);
+    if (is_wp_error($sandbox_error)) {
+        return $sandbox_error;
     }
 
     $expires_in = max(30, min(3_600, (int) ($input['expires_in'] ?? 900)));

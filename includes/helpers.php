@@ -134,12 +134,45 @@ function novamira_check_php_sandbox(string $resolved): bool|WP_Error
 
     if (!novamira_path_is_within_directory($parent_dir, $real_sandbox)) {
         return new WP_Error('php_sandbox_required', sprintf(
-            'PHP files can only be written to the sandbox directory: %s. Use a path like "wp-content/novamira-sandbox/my-feature.php".',
+            'PHP files and PHP execution control files can only be written to the sandbox directory: %s. Use a path like "wp-content/novamira-sandbox/my-feature.php".',
             $sandbox_dir,
         ));
     }
 
     return true;
+}
+
+/**
+ * Check whether a path can directly affect PHP execution and must stay in the sandbox.
+ */
+function novamira_path_requires_php_sandbox(string $resolved): bool
+{
+    $filename = strtolower(basename($resolved));
+    $extension = strtolower(pathinfo($resolved, PATHINFO_EXTENSION));
+
+    if ($extension === 'php') {
+        return true;
+    }
+
+    return in_array($filename, [
+        '.htaccess',
+        '.php.ini',
+        '.user.ini',
+        'php.ini',
+        'web.config',
+    ], strict: true);
+}
+
+/**
+ * Enforce the sandbox boundary for files that can affect PHP execution.
+ */
+function novamira_check_php_execution_sandbox(string $resolved): bool|WP_Error
+{
+    if (!novamira_path_requires_php_sandbox($resolved)) {
+        return true;
+    }
+
+    return novamira_check_php_sandbox($resolved);
 }
 
 /**

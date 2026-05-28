@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/write-file', [
     'label' => __('Write File', domain: 'novamira'),
     'description' => __(
-        'Writes content to a file on the server filesystem. PHP files (*.php) can ONLY be written to the sandbox directory (wp-content/novamira-sandbox/). Non-PHP files can go anywhere under ABSPATH. Supports both UTF-8 text and base64-encoded binary content. Automatically creates parent directories when needed.',
+        'Writes content to a file on the server filesystem. PHP files (*.php) and PHP execution control files can ONLY be written to the sandbox directory (wp-content/novamira-sandbox/). Other non-PHP files can go anywhere under ABSPATH. Supports both UTF-8 text and base64-encoded binary content. Automatically creates parent directories when needed.',
         domain: 'novamira',
     ),
     'category' => 'filesystem',
@@ -78,9 +78,9 @@ wp_register_ability('novamira/write-file', [
         'annotations' => [
             'instructions' => implode("\n", [
                 'PHP FILE SANDBOX:',
-                '- PHP files (*.php) can ONLY be written to: wp-content/novamira-sandbox/',
+                '- PHP files (*.php) and PHP execution control files can ONLY be written to: wp-content/novamira-sandbox/',
                 '- Use a path like "wp-content/novamira-sandbox/my-feature.php"',
-                '- Non-PHP files can be written anywhere under ABSPATH.',
+                '- Other non-PHP files can be written anywhere under ABSPATH.',
                 '- Sandbox plugins are loaded by a mu-plugin loader on every request.',
                 '',
                 'CRASH RECOVERY:',
@@ -136,13 +136,10 @@ function novamira_write_file($input)
     $encoding = (string) ($input['encoding'] ?? 'utf-8');
     $mode = (string) ($input['mode'] ?? 'overwrite');
     $create_directories = ($input['create_directories'] ?? true) !== false;
-    $is_php = strtolower(pathinfo($resolved, PATHINFO_EXTENSION)) === 'php';
 
-    if ($is_php) {
-        $sandbox_error = novamira_check_php_sandbox($resolved);
-        if (is_wp_error($sandbox_error)) {
-            return $sandbox_error;
-        }
+    $sandbox_error = novamira_check_php_execution_sandbox($resolved);
+    if (is_wp_error($sandbox_error)) {
+        return $sandbox_error;
     }
 
     $content = novamira_decode_write_content((string) $input['content'], $encoding);
