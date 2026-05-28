@@ -176,6 +176,21 @@ function novamira_check_php_execution_sandbox(string $resolved): bool|WP_Error
 }
 
 /**
+ * Reject writes through a final path symlink.
+ */
+function novamira_reject_final_path_symlink(string $resolved): bool|WP_Error
+{
+    if (!is_link($resolved)) {
+        return true;
+    }
+
+    return new WP_Error('symlink_write_rejected', sprintf(
+        'Refusing to write through symlink path: %s',
+        $resolved,
+    ));
+}
+
+/**
  * Check whether a path is equal to or contained by a directory boundary.
  */
 function novamira_path_is_within_directory(string $path, string $directory): bool

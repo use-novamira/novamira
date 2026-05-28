@@ -137,6 +137,11 @@ function novamira_write_file($input)
     $mode = (string) ($input['mode'] ?? 'overwrite');
     $create_directories = ($input['create_directories'] ?? true) !== false;
 
+    $symlink_error = novamira_reject_final_path_symlink($resolved);
+    if (is_wp_error($symlink_error)) {
+        return $symlink_error;
+    }
+
     $sandbox_error = novamira_check_php_execution_sandbox($resolved);
     if (is_wp_error($sandbox_error)) {
         return $sandbox_error;

@@ -173,6 +173,11 @@ function novamira_prepare_upload_destination(array $payload): array|WP_Error
         return $resolved;
     }
 
+    $symlink_error = novamira_reject_final_path_symlink($resolved);
+    if (is_wp_error($symlink_error)) {
+        return $symlink_error;
+    }
+
     $sandbox_error = novamira_check_php_execution_sandbox($resolved);
     if (is_wp_error($sandbox_error)) {
         return $sandbox_error;
