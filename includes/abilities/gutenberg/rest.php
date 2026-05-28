@@ -138,7 +138,7 @@ function rest_can_access_item(WP_REST_Request $request): bool|WP_Error
     }
 
     $target_id = meta_int($item->ID, META_TARGET_ID);
-    if (!current_user_can('manage_options') && ($target_id <= 0 || !current_user_can('edit_post', $target_id))) {
+    if (!novamira_current_user_can_manage() && ($target_id <= 0 || !current_user_can('edit_post', $target_id))) {
         return new WP_Error('rest_forbidden', 'You are not allowed to finalize this Gutenberg item.', [
             'status' => 403,
         ]);

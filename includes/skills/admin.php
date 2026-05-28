@@ -19,7 +19,15 @@ if (!defined('ABSPATH')) {
 
 const PAGE_SLUG = 'novamira-skills';
 
-const CAPABILITY = 'manage_options';
+function capability(): string
+{
+    return \novamira_manage_capability();
+}
+
+function current_user_can_manage(): bool
+{
+    return \novamira_current_user_can_manage();
+}
 
 /**
  * Skills lives as a submenu under the Novamira top-level menu registered
@@ -35,7 +43,7 @@ function register_menu(): void
         parent_slug: 'novamira-connect',
         page_title: __('Skills', domain: 'novamira'),
         menu_title: __('Skills', domain: 'novamira'),
-        capability: CAPABILITY,
+        capability: capability(),
         menu_slug: PAGE_SLUG,
         callback: __NAMESPACE__ . '\\render_page',
     );
@@ -86,7 +94,7 @@ function reorder_submenu(): void
 
 function render_page(): void
 {
-    if (!current_user_can(CAPABILITY)) {
+    if (!current_user_can_manage()) {
         wp_die(__('You do not have permission to manage skills.', domain: 'novamira'));
     }
     $view = ($_GET['skill'] ?? null) !== null ? 'edit' : 'list';
@@ -572,7 +580,7 @@ function handle_download_all(): void
 
 function require_capability_and_nonce(string $nonce_action): void
 {
-    if (!current_user_can(CAPABILITY)) {
+    if (!current_user_can_manage()) {
         wp_die(__('Not allowed.', domain: 'novamira'), title: '', args: ['response' => 403]);
     }
     check_admin_referer($nonce_action);

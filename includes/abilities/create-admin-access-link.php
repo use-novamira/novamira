@@ -116,7 +116,7 @@ wp_register_ability('novamira/create-admin-access-link', [
 function novamira_create_admin_access_link(array $input = [])
 {
     $user_id = get_current_user_id();
-    if ($user_id <= 0 || !current_user_can('manage_options')) {
+    if ($user_id <= 0 || !novamira_current_user_can_manage()) {
         return new WP_Error('admin_access_forbidden', 'Only administrators can create admin access links.');
     }
 

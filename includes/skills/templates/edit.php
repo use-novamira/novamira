@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
-if (!current_user_can(Admin\CAPABILITY)) {
+if (!Admin\current_user_can_manage()) {
     wp_die(__('You do not have permission to edit skills.', domain: 'novamira'));
 }
 

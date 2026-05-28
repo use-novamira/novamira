@@ -46,7 +46,7 @@ function novamira_handle_toggle_enabled(): ?bool
     if (($_POST['novamira_submit'] ?? null) === null) {
         return null;
     }
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return null;
     }
 
@@ -61,7 +61,7 @@ function novamira_handle_toggle_enabled(): ?bool
  */
 function novamira_handle_admin_bar_toggle(): void
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         wp_die(esc_html__('You are not allowed to manage Novamira settings.', domain: 'novamira'));
     }
 
@@ -228,7 +228,7 @@ function novamira_handle_use_existing_password()
         return null;
     }
 
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return new WP_Error('forbidden', __(
             'You do not have permission to use application passwords.',
             domain: 'novamira',
@@ -263,7 +263,7 @@ function novamira_handle_create_password()
         return null;
     }
 
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return new WP_Error('forbidden', __(
             'You do not have permission to create application passwords.',
             domain: 'novamira',
@@ -313,7 +313,7 @@ function novamira_handle_revoke_password(): void
         return;
     }
 
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 
@@ -1481,7 +1481,7 @@ function novamira_render_enable_prompt(?WP_Error $dependency_error): void
 // @mago-expect lint:cyclomatic-complexity
 function novamira_render_connect_page(): void
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 

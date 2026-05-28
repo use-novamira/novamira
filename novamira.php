@@ -151,7 +151,7 @@ function novamira_activation_check(): void
  */
 function novamira_render_mcp_dependency_notice(): void
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 
@@ -284,7 +284,7 @@ function novamira_load_gutenberg_abilities(): void
  */
 function novamira_register_admin_bar_toggle(\WP_Admin_Bar $wp_admin_bar): void
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 
@@ -362,7 +362,7 @@ function novamira_register_admin_bar_toggle(\WP_Admin_Bar $wp_admin_bar): void
  */
 function novamira_render_admin_bar_toggle_assets(): void
 {
-    if (!current_user_can('manage_options') || !is_admin_bar_showing()) {
+    if (!novamira_current_user_can_manage() || !is_admin_bar_showing()) {
         return;
     }
 
@@ -486,7 +486,7 @@ add_action('admin_menu', static function () {
     add_menu_page(
         page_title: __('Configuration', domain: 'novamira'),
         menu_title: 'Novamira',
-        capability: 'manage_options',
+        capability: novamira_manage_capability(),
         menu_slug: 'novamira-connect',
         callback: 'novamira_render_connect_page',
         icon_url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHBhdGggZmlsbD0iYmxhY2siIGQ9Ik01IDRoNi41bDkuNSAxNi41VjRIMjd2MjRoLTYuNUwxMSAxMS41VjI4SDVWNHoiLz48L3N2Zz4=',
@@ -498,7 +498,7 @@ add_action('admin_menu', static function () {
         parent_slug: 'novamira-connect',
         page_title: __('Configuration', domain: 'novamira'),
         menu_title: __('Configuration', domain: 'novamira'),
-        capability: 'manage_options',
+        capability: novamira_manage_capability(),
         menu_slug: 'novamira-connect',
         callback: 'novamira_render_connect_page',
     );
@@ -508,7 +508,7 @@ add_action('admin_menu', static function () {
         parent_slug: 'novamira-connect',
         page_title: __('AI Abilities', domain: 'novamira'),
         menu_title: __('AI Abilities', domain: 'novamira'),
-        capability: 'manage_options',
+        capability: novamira_manage_capability(),
         menu_slug: 'novamira',
         callback: 'novamira_render_settings_page',
     );
@@ -518,7 +518,7 @@ add_action('admin_menu', static function () {
         parent_slug: 'novamira-connect',
         page_title: __('Sandbox', domain: 'novamira'),
         menu_title: __('Sandbox', domain: 'novamira'),
-        capability: 'manage_options',
+        capability: novamira_manage_capability(),
         menu_slug: 'novamira-sandbox',
         callback: 'novamira_render_sandbox_page',
     );
@@ -528,7 +528,7 @@ $is_enabled = novamira_is_enabled();
 
 if (!$is_enabled && novamira_is_domain_mismatch()) {
     add_action('admin_notices', static function () {
-        if (!current_user_can('manage_options')) {
+        if (!novamira_current_user_can_manage()) {
             return;
         }
         /** @var string $locked */
@@ -725,7 +725,7 @@ if ($is_enabled) {
     // Info notice if the standalone MCP Adapter plugin is still active.
     if (function_exists('is_plugin_active') && is_plugin_active('mcp-adapter/mcp-adapter.php')) {
         add_action('admin_notices', static function () {
-            if (!current_user_can('manage_options')) {
+            if (!novamira_current_user_can_manage()) {
                 return;
             }
             wp_admin_notice(

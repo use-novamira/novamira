@@ -1100,7 +1100,7 @@ function conflict_payload(WP_Post $item): array
 
 function current_user_can_finalize_batch(WP_Post $batch): bool
 {
-    if (current_user_can('manage_options')) {
+    if (novamira_current_user_can_manage()) {
         return true;
     }
 

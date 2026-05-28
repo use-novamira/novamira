@@ -35,7 +35,7 @@ function set_pending_reload_notice(): void
  */
 function render(): void
 {
-    if (!current_user_can(Admin\CAPABILITY)) {
+    if (!Admin\current_user_can_manage()) {
         return;
     }
 

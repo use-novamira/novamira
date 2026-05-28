@@ -45,7 +45,7 @@ function novamira_create_admin_access_token(
     string $admin_path,
 ): array|WP_Error {
     $user = get_user_by('id', $user_id);
-    if (!$user instanceof WP_User || !user_can($user, capability: 'manage_options')) {
+    if (!$user instanceof WP_User || !novamira_user_can_manage($user)) {
         return new WP_Error('invalid_admin_access_user', 'Admin access links can only be created for administrators.');
     }
 
@@ -220,7 +220,7 @@ function novamira_validate_admin_access_payload(array $payload): array|WP_Error
 
     $user_id = (int) ($payload['user_id'] ?? 0);
     $user = get_user_by('id', $user_id);
-    if (!$user instanceof WP_User || !user_can($user, capability: 'manage_options')) {
+    if (!$user instanceof WP_User || !novamira_user_can_manage($user)) {
         return new WP_Error('invalid_admin_access_token', 'Invalid or expired admin access token.', ['status' => 401]);
     }
 

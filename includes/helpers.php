@@ -433,6 +433,35 @@ function novamira_production_warning_dismissed(): bool
 }
 
 /**
+ * Runtime permission check for privileged Novamira administration.
+ */
+function novamira_current_user_can_manage(): bool
+{
+    return is_multisite() ? is_super_admin() : current_user_can('manage_options');
+}
+
+/**
+ * Runtime permission check for a specific user.
+ */
+function novamira_user_can_manage(int|WP_User $user): bool
+{
+    $user_id = $user instanceof WP_User ? $user->ID : $user;
+    if ($user_id <= 0) {
+        return false;
+    }
+
+    return is_multisite() ? is_super_admin($user_id) : user_can($user, 'manage_options');
+}
+
+/**
+ * Capability string for WordPress APIs that cannot accept a boolean callback.
+ */
+function novamira_manage_capability(): string
+{
+    return is_multisite() ? 'manage_network_options' : 'manage_options';
+}
+
+/**
  * Handle the dismiss-production-warning form submission. Called from admin_init.
  */
 function novamira_handle_dismiss_production_warning(): void
@@ -441,7 +470,7 @@ function novamira_handle_dismiss_production_warning(): void
         return;
     }
 
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 
@@ -529,13 +558,13 @@ function novamira_get_datetime_format($fallback = 'Y-m-d H:i:s')
 }
 
 /**
- * Permission callback: requires manage_options capability.
+ * Permission callback for privileged Novamira administration.
  *
  * @return bool
  */
 function novamira_permission_callback()
 {
-    return current_user_can('manage_options');
+    return novamira_current_user_can_manage();
 }
 
 /**

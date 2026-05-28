@@ -65,7 +65,7 @@ function novamira_collect_public_abilities(): array
 
 function novamira_handle_sandbox_actions()
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 
@@ -102,7 +102,7 @@ function novamira_handle_sandbox_actions()
 
 function novamira_render_sandbox_page(): void
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 
@@ -325,7 +325,7 @@ function novamira_render_sandbox_pills(string $ext, string $file_status): void
 
 function novamira_render_settings_page()
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
 

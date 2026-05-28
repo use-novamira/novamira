@@ -46,7 +46,7 @@ add_action(
         // @mago-expect analysis:mixed-array-assignment
         $submenu['novamira-connect'][] = [
             '<span style="color:#f8ca50;font-weight:600;">' . esc_html__('Get Pro', domain: 'novamira') . '</span>',
-            'manage_options',
+            novamira_manage_capability(),
             esc_url(NOVAMIRA_PRO_URL . '?utm_source=plugin&utm_medium=submenu'),
         ];
     },
@@ -74,7 +74,7 @@ add_filter(
 );
 
 add_action('admin_footer', static function (): void {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
     ?>
@@ -111,7 +111,7 @@ add_action('admin_init', static function (): void {
     if (!is_string($key) || $key === '') {
         return;
     }
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
     $key = sanitize_key($key);
@@ -126,7 +126,7 @@ add_action('admin_notices', callback: 'novamira_render_pro_welcome_notice');
 
 function novamira_render_pro_welcome_notice(): void
 {
-    if (!current_user_can('manage_options')) {
+    if (!novamira_current_user_can_manage()) {
         return;
     }
     if (novamira_pro_is_active()) {

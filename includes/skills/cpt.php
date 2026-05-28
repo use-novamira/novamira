@@ -19,6 +19,8 @@ const META_ENABLE_AGENTIC = '_enable_agentic';
 
 function register(): void
 {
+    $capability = \novamira_manage_capability();
+
     register_post_type(POST_TYPE, [
         'label' => __('Skills', domain: 'novamira'),
         'public' => false,
@@ -29,18 +31,18 @@ function register(): void
         'capability_type' => ['novamira_skill', 'novamira_skills'],
         'map_meta_cap' => true,
         'capabilities' => [
-            'read' => 'manage_options',
-            'edit_posts' => 'manage_options',
-            'edit_others_posts' => 'manage_options',
-            'edit_private_posts' => 'manage_options',
-            'edit_published_posts' => 'manage_options',
-            'publish_posts' => 'manage_options',
-            'read_private_posts' => 'manage_options',
-            'delete_posts' => 'manage_options',
-            'delete_others_posts' => 'manage_options',
-            'delete_private_posts' => 'manage_options',
-            'delete_published_posts' => 'manage_options',
-            'create_posts' => 'manage_options',
+            'read' => $capability,
+            'edit_posts' => $capability,
+            'edit_others_posts' => $capability,
+            'edit_private_posts' => $capability,
+            'edit_published_posts' => $capability,
+            'publish_posts' => $capability,
+            'read_private_posts' => $capability,
+            'delete_posts' => $capability,
+            'delete_others_posts' => $capability,
+            'delete_private_posts' => $capability,
+            'delete_published_posts' => $capability,
+            'create_posts' => $capability,
         ],
         // `revisions` enables WP's native history for post_title /
         // post_content / post_excerpt on every save. Post meta is not
@@ -56,7 +58,7 @@ function register(): void
         accepted_args: 2,
     );
 
-    $auth = static fn(): bool => current_user_can('manage_options');
+    $auth = static fn(): bool => \novamira_current_user_can_manage();
 
     register_post_meta(POST_TYPE, META_ENABLE_PROMPT, [
         'type' => 'boolean',
