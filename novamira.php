@@ -244,6 +244,8 @@ require_once __DIR__ . '/includes/upload-link.php';
 require_once __DIR__ . '/includes/admin-access-link.php';
 require_once __DIR__ . '/includes/skills/bootstrap.php';
 
+add_action('admin_post_novamira_toggle_ai_abilities', callback: 'novamira_handle_admin_bar_toggle');
+
 function novamira_unschedule_gutenberg_cron(): void
 {
     require_once __DIR__ . '/includes/abilities/gutenberg/bootstrap.php';
@@ -276,6 +278,135 @@ function novamira_load_gutenberg_abilities(): void
     require_once $gutenberg_dir . 'delete-pending-change.php';
     require_once $gutenberg_dir . 'get-finalization-url.php';
 }
+
+/**
+ * Add the Novamira AI Abilities status and toggle to the WordPress admin bar.
+ */
+function novamira_register_admin_bar_toggle(\WP_Admin_Bar $wp_admin_bar): void
+{
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    $dependency_error = novamira_get_mcp_dependency_error();
+    $configured_enabled = novamira_is_enabled();
+    $active = $configured_enabled && $dependency_error === null;
+    $can_enable = $configured_enabled || $dependency_error === null;
+    $target = $configured_enabled ? 'off' : 'on';
+    $toggle_url = wp_nonce_url(
+        admin_url('admin-post.php?action=novamira_toggle_ai_abilities&novamira_target=' . $target),
+        action: 'novamira_toggle_ai_abilities',
+    );
+
+    $wp_admin_bar->add_node([
+        'id' => 'novamira-mcp-status',
+        'title' => match (true) {
+            $active => esc_html__('Novamira ON', domain: 'novamira'),
+            $configured_enabled => esc_html__('Novamira ERROR', domain: 'novamira'),
+            default => esc_html__('Novamira', domain: 'novamira'),
+        },
+        'href' => admin_url('admin.php?page=novamira-connect'),
+        'meta' => [
+            'class' => match (true) {
+                $active => 'novamira-mcp-on',
+                $configured_enabled => 'novamira-mcp-error',
+                default => 'novamira-mcp-off',
+            },
+        ],
+    ]);
+
+    $wp_admin_bar->add_node([
+        'id' => 'novamira-mcp-status-label',
+        'parent' => 'novamira-mcp-status',
+        'title' => match (true) {
+            $active => esc_html__('AI Abilities: On', domain: 'novamira'),
+            $configured_enabled => esc_html__('AI Abilities: Error', domain: 'novamira'),
+            default => esc_html__('AI Abilities: Off', domain: 'novamira'),
+        },
+        'href' => false,
+    ]);
+
+    if (!$can_enable) {
+        $wp_admin_bar->add_node([
+            'id' => 'novamira-mcp-unavailable',
+            'parent' => 'novamira-mcp-status',
+            'title' => esc_html__('AI Abilities unavailable', domain: 'novamira'),
+            'href' => admin_url('admin.php?page=novamira-connect'),
+        ]);
+    }
+
+    if ($can_enable) {
+        $wp_admin_bar->add_node([
+            'id' => 'novamira-mcp-toggle',
+            'parent' => 'novamira-mcp-status',
+            'title' => $configured_enabled
+                ? esc_html__('Turn Off AI Abilities', domain: 'novamira')
+                : esc_html__('Turn On AI Abilities', domain: 'novamira'),
+            'href' => $toggle_url,
+            'meta' => [
+                'class' => $configured_enabled ? 'novamira-mcp-toggle-off' : 'novamira-mcp-toggle-on',
+            ],
+        ]);
+    }
+
+    $wp_admin_bar->add_node([
+        'id' => 'novamira-mcp-config',
+        'parent' => 'novamira-mcp-status',
+        'title' => esc_html__('Configuration', domain: 'novamira'),
+        'href' => admin_url('admin.php?page=novamira-connect'),
+    ]);
+}
+
+/**
+ * Style the admin-bar status chip and require confirmation before enabling from the dropdown.
+ */
+function novamira_render_admin_bar_toggle_assets(): void
+{
+    if (!current_user_can('manage_options') || !is_admin_bar_showing()) {
+        return;
+    }
+
+    $looks_production = novamira_looks_like_production();
+    $confirm_message = $looks_production
+        ? __(
+            'This looks like a production site. AI Abilities are intended for staging or development sites. Continue anyway?',
+            domain: 'novamira',
+        )
+        : __('AI agents will be able to execute PHP code and access the filesystem. Continue?', domain: 'novamira');
+    ?>
+    <style>
+    #wp-admin-bar-novamira-mcp-status.novamira-mcp-on > .ab-item {
+        background: #c00 !important;
+        color: #fff !important;
+    }
+    #wp-admin-bar-novamira-mcp-status.novamira-mcp-error > .ab-item {
+        background: #996800 !important;
+        color: #fff !important;
+    }
+    #wp-admin-bar-novamira-mcp-status-label > .ab-item {
+        cursor: default;
+        font-weight: 600;
+    }
+    </style>
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var toggle = document.querySelector('#wp-admin-bar-novamira-mcp-toggle.novamira-mcp-toggle-on > .ab-item');
+        if (!toggle) {
+            return;
+        }
+        toggle.addEventListener('click', function (event) {
+            if (!window.confirm(<?php echo wp_json_encode($confirm_message); ?>)) {
+                event.preventDefault();
+            }
+        });
+    });
+    </script>
+    <?php
+}
+
+add_action('admin_bar_menu', callback: 'novamira_register_admin_bar_toggle', priority: 999);
+add_action('admin_head', callback: 'novamira_render_admin_bar_toggle_assets');
+add_action('wp_head', callback: 'novamira_render_admin_bar_toggle_assets');
 
 // Optional dev mock for the external-skills source. Gitignored. Loaded
 // only when the constant is set (e.g. in wp-config.php) so it never ships
@@ -589,42 +720,6 @@ if ($is_enabled) {
         }
         $resultObj->tools = $tools;
         return $result;
-    });
-
-    // Admin bar indicator when MCP is active.
-    add_action(
-        'admin_bar_menu',
-        static function (\WP_Admin_Bar $wp_admin_bar) {
-            if (!current_user_can('manage_options')) {
-                return;
-            }
-
-            $wp_admin_bar->add_node([
-                'id' => 'novamira-mcp-status',
-                'title' => esc_html__('Novamira ON', domain: 'novamira'),
-                'href' => admin_url('admin.php?page=novamira-connect'),
-                'meta' => ['class' => 'novamira-mcp-on'],
-            ]);
-        },
-        priority: 999,
-    );
-
-    add_action('admin_head', static function () {
-        if (!current_user_can('manage_options')) {
-            return;
-        }
-
-        echo
-            '<style>#wp-admin-bar-novamira-mcp-status > .ab-item { background:#c00 !important; color:#fff !important; }</style>'
-        ;
-    });
-
-    add_action('wp_head', static function () {
-        if (current_user_can('manage_options') && is_admin_bar_showing()) {
-            echo
-                '<style>#wp-admin-bar-novamira-mcp-status > .ab-item { background:#c00 !important; color:#fff !important; }</style>'
-            ;
-        }
     });
 
     // Info notice if the standalone MCP Adapter plugin is still active.

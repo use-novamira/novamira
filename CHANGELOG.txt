@@ -1,3 +1,5 @@
+* Tweak: The Novamira admin bar item now includes a dropdown toggle for turning AI Abilities on and off.
+
 v1.5.0 - 2026/05/27
 * New: In the Gutenberg Block Editor AI agents can now create and edit third party blocks valid from the first save
 * Tweak: Large-file uploads and browser admin access now use header-based handoff flows, so generated endpoint URLs stay short and easier to reuse in tool commands.

@@ -14,6 +14,30 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Enable AI Abilities for the current site domain.
+ */
+function novamira_enable_ai_abilities(): bool
+{
+    if (function_exists('novamira_get_mcp_dependency_error') && novamira_get_mcp_dependency_error() !== null) {
+        return false;
+    }
+
+    update_option(option: 'novamira_ai_abilities_enabled', value: '1');
+    update_option(option: 'novamira_ai_abilities_domain', value: (string) wp_parse_url(home_url(), PHP_URL_HOST));
+    return true;
+}
+
+/**
+ * Disable AI Abilities and clear the domain lock.
+ */
+function novamira_disable_ai_abilities(): bool
+{
+    update_option(option: 'novamira_ai_abilities_enabled', value: '0');
+    delete_option('novamira_ai_abilities_domain');
+    return true;
+}
+
+/**
  * Handle the enable/disable AI Abilities toggle submission.
  * Returns true on save, null when no submission.
  */
@@ -29,21 +53,40 @@ function novamira_handle_toggle_enabled(): ?bool
     check_admin_referer('novamira_settings');
 
     $enabled = ($_POST['novamira_ai_abilities_enabled'] ?? null) !== null;
-    if (
-        $enabled
-        && function_exists('novamira_get_mcp_dependency_error')
-        && novamira_get_mcp_dependency_error() !== null
-    ) {
-        return false;
+    return $enabled ? novamira_enable_ai_abilities() : novamira_disable_ai_abilities();
+}
+
+/**
+ * Handle the admin-bar AI Abilities toggle.
+ */
+function novamira_handle_admin_bar_toggle(): void
+{
+    if (!current_user_can('manage_options')) {
+        wp_die(esc_html__('You are not allowed to manage Novamira settings.', domain: 'novamira'));
     }
 
-    update_option('novamira_ai_abilities_enabled', $enabled);
-    if ($enabled) {
-        update_option('novamira_ai_abilities_domain', (string) wp_parse_url(home_url(), PHP_URL_HOST));
-        return true;
+    check_admin_referer('novamira_toggle_ai_abilities');
+
+    $target = $_GET['novamira_target'] ?? '';
+    $result = null;
+    if ($target === 'on') {
+        $result = novamira_enable_ai_abilities();
     }
-    delete_option('novamira_ai_abilities_domain');
-    return true;
+    if ($target === 'off') {
+        $result = novamira_disable_ai_abilities();
+    }
+
+    $redirect = wp_get_referer();
+    if (!is_string($redirect) || $redirect === '') {
+        $redirect = admin_url('admin.php?page=novamira-connect');
+    }
+
+    $redirect = add_query_arg([
+        'novamira_toggle_result' => $result === true ? $target : 'failed',
+    ], $redirect);
+
+    wp_safe_redirect($redirect);
+    exit();
 }
 
 function novamira_render_enable_toggle(): void
