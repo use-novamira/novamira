@@ -55,7 +55,7 @@ function novamira_resolve_path($path, $must_exist = false)
             $real_base = rtrim($base_dir, characters: '/\\');
         }
 
-        if (!str_starts_with($resolved, $real_base)) {
+        if (!novamira_path_is_within_directory($resolved, $real_base)) {
             return new WP_Error('path_outside_base', sprintf(
                 __('Path "%s" is outside the allowed base directory "%s".', domain: 'novamira'),
                 $resolved,
@@ -101,7 +101,7 @@ function novamira_validate_sandbox_path($resolved)
         $real_resolved = $resolved;
     }
 
-    if (!str_starts_with($real_resolved, $real_sandbox . DIRECTORY_SEPARATOR)) {
+    if (!novamira_path_is_child_of_directory($real_resolved, $real_sandbox)) {
         return new WP_Error('outside_sandbox', sprintf(
             /* translators: %s: sandbox directory path */
             __('Only files inside the sandbox (%s) can be modified.', domain: 'novamira'),
@@ -132,7 +132,7 @@ function novamira_check_php_sandbox(string $resolved): bool|WP_Error
         $parent_dir = dirname($resolved);
     }
 
-    if (!str_starts_with($parent_dir, $real_sandbox)) {
+    if (!novamira_path_is_within_directory($parent_dir, $real_sandbox)) {
         return new WP_Error('php_sandbox_required', sprintf(
             'PHP files can only be written to the sandbox directory: %s. Use a path like "wp-content/novamira-sandbox/my-feature.php".',
             $sandbox_dir,
@@ -140,6 +140,54 @@ function novamira_check_php_sandbox(string $resolved): bool|WP_Error
     }
 
     return true;
+}
+
+/**
+ * Check whether a path is equal to or contained by a directory boundary.
+ */
+function novamira_path_is_within_directory(string $path, string $directory): bool
+{
+    $normalized_path = novamira_normalize_boundary_path($path);
+    $normalized_directory = novamira_normalize_boundary_path($directory);
+
+    if ($normalized_path === $normalized_directory) {
+        return true;
+    }
+
+    return novamira_path_is_child_of_normalized_directory($normalized_path, $normalized_directory);
+}
+
+/**
+ * Check whether a path is contained by a directory boundary, excluding the directory itself.
+ */
+function novamira_path_is_child_of_directory(string $path, string $directory): bool
+{
+    return novamira_path_is_child_of_normalized_directory(
+        novamira_normalize_boundary_path($path),
+        novamira_normalize_boundary_path($directory),
+    );
+}
+
+/**
+ * Normalize path separators for directory-boundary comparisons.
+ */
+function novamira_normalize_boundary_path(string $path): string
+{
+    $normalized = rtrim(string: str_replace(search: '\\', replace: '/', subject: $path), characters: '/');
+
+    return $normalized === '' ? '/' : $normalized;
+}
+
+/**
+ * Check whether a normalized path is contained by a normalized directory.
+ */
+function novamira_path_is_child_of_normalized_directory(string $normalized_path, string $normalized_directory): bool
+{
+    if ($normalized_directory === '/') {
+        return str_starts_with($normalized_path, '/');
+    }
+
+    return str_starts_with($normalized_path, $normalized_directory . '/');
 }
 
 /**
