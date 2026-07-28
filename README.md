@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/pulsemcp%2Fnovamira.svg)](https://mcptoplist.com/server/pulsemcp%2Fnovamira)
+
 <p align="center">
   <img src="assets/banner.png" alt="Novamira" />
 </p>
