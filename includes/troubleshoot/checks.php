@@ -288,6 +288,33 @@ function check_permalinks(): array
     );
 }
 
+/**
+ * The OAuth installer runs on every request (via the `boot()` guard chain in
+ * includes/oauth/bootstrap.php), not only on activation, so "deactivate and reactivate" does
+ * nothing that the next page load would not already have done. When the tables are missing, name
+ * the guard that is actually blocking `boot()` from ever reaching the installer, instead of
+ * pointing at reactivation as if the installer itself were the failing step.
+ *
+ * @return string|null A specific reason the installer never runs, or null when both guards pass
+ *                      and the missing tables point to the installer itself.
+ */
+function schema_blocked_reason(): ?string
+{
+    if (!\novamira_is_enabled()) {
+        return __(
+            'AI Abilities are turned off (or locked to a different domain than this site), so the OAuth installer never runs. See the "AI Abilities" check above.',
+            domain: 'novamira',
+        );
+    }
+    if (!\novamira_oauth_transport_allowed()) {
+        return __(
+            'This site is not served over HTTPS, so OAuth is disabled here. See the "Secure transport" check above.',
+            domain: 'novamira',
+        );
+    }
+    return null;
+}
+
 /** @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string} */
 function check_schema(): array
 {
@@ -301,12 +328,23 @@ function check_schema(): array
     if (is_string($found) && $found === $table) {
         return ok('schema', $label, __('The OAuth tables are installed.', domain: 'novamira'));
     }
+
+    $blocked_reason = schema_blocked_reason();
+    if ($blocked_reason !== null) {
+        return fail(
+            'schema',
+            $label,
+            $blocked_reason,
+            __('Resolve the blocking check above, then run these checks again.', domain: 'novamira'),
+        );
+    }
+
     return fail(
         'schema',
         $label,
         __('The OAuth tables are missing, so no OAuth client can register or authenticate.', domain: 'novamira'),
         __(
-            'Deactivate and reactivate Novamira to re-run the installer, then run these checks again.',
+            'AI Abilities are on and this site is served over HTTPS, so the installer should have run. Check the PHP error log for a database error, then run these checks again; deactivating and reactivating Novamira re-triggers the same installer but will not help if the underlying database error persists.',
             domain: 'novamira',
         ),
     );
