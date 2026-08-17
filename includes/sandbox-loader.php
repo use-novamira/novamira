@@ -132,9 +132,18 @@ function novamira_sandbox_crash_handler(string $crashed_file, ?string $current_s
 
     foreach ($files as $file) {
         $current_sandbox_file = $file;
+        // Sandbox files are meant to register hooks/functions, not print output at require-time: any
+        // top-level echo, stray warning, or leftover debug statement would otherwise land in whatever
+        // response happens to be building on every other request (REST/MCP JSON included) rather than
+        // staying local to this file. Buffer and discard it. A file that deliberately serves its own
+        // response and calls exit() is unaffected, since exit() skips the ob_end_clean() below and
+        // PHP flushes the buffered output normally at shutdown.
+        ob_start();
         try {
             require_once $file;
+            ob_end_clean();
         } catch (\Throwable $e) {
+            ob_end_clean();
             // Isolate this file's failure instead of letting it take down the whole request: log it,
             // arm safe mode for the next request, and keep loading the remaining sandbox files and the
             // rest of the WordPress bootstrap.

@@ -61,6 +61,19 @@ final class SandboxLoaderTest extends TestCase
         self::assertSame('runner-complete', $secondOutput);
     }
 
+    public function testStrayOutputFromASandboxFileDoesNotLeakIntoTheResponse(): void
+    {
+        file_put_contents(
+            $this->sandboxDirectory . '/extension.php',
+            "<?php echo 'File OK: 42 chars';",
+        );
+
+        [$output, $exitCode] = $this->runLoader('request');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+    }
+
     public function testThrowableFromOneFileDoesNotBlockOtherSandboxFilesOrTheRequest(): void
     {
         file_put_contents($this->sandboxDirectory . '/a-crash.php', "<?php throw new \\Error('boom');");
