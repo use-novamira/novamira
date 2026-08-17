@@ -117,16 +117,19 @@ function handle(WP_REST_Request $req): WP_REST_Response|WP_Error
 
     // @mago-expect analysis:mixed-assignment
     $requested_grants = $body['grant_types'] ?? null;
+    // @mago-expect analysis:mixed-assignment
+    $redirect_uris = $body['redirect_uris'] ?? null;
+    // A client that supplies redirect_uris needs the Authorization Code flow even if it also lists
+    // device_code among its supported grants, so only the redirect-less case is device-only.
     $device_client =
         is_array($requested_grants)
-        && in_array(\Novamira\OAuth\DEVICE_CODE_GRANT_TYPE, $requested_grants, strict: true);
+        && in_array(\Novamira\OAuth\DEVICE_CODE_GRANT_TYPE, $requested_grants, strict: true)
+        && (!is_array($redirect_uris) || $redirect_uris === []);
 
     if ($device_client) {
         return register_device_client($client_name, $client_ip);
     }
 
-    // @mago-expect analysis:mixed-assignment
-    $redirect_uris = $body['redirect_uris'] ?? null;
     if (!is_array($redirect_uris) || $redirect_uris === []) {
         return new WP_Error('invalid_request', 'redirect_uris must be a non-empty array', ['status' => 400]);
     }
