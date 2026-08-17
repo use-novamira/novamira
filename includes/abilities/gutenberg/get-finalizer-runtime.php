@@ -21,7 +21,7 @@ wp_register_ability('novamira/gutenberg-get-finalizer-runtime', [
     'input_schema' => [
         'type' => 'object',
         'default' => [],
-        'properties' => [],
+        'properties' => new \stdClass(),
         'additionalProperties' => false,
     ],
     'output_schema' => [
