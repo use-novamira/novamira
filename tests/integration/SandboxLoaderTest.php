@@ -61,6 +61,23 @@ final class SandboxLoaderTest extends TestCase
         self::assertSame('runner-complete', $secondOutput);
     }
 
+    public function testThrowableFromOneFileDoesNotBlockOtherSandboxFilesOrTheRequest(): void
+    {
+        file_put_contents($this->sandboxDirectory . '/a-crash.php', "<?php throw new \\Error('boom');");
+        file_put_contents(
+            $this->sandboxDirectory . '/b-survivor.php',
+            "<?php file_put_contents(__DIR__ . '/survivor-loaded', '1');",
+        );
+
+        [$output, $exitCode] = $this->runLoader('request');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+        self::assertFileExists($this->sandboxDirectory . '/survivor-loaded');
+        self::assertFileExists($this->sandboxDirectory . '/.crashed');
+        self::assertStringContainsString('boom', (string) file_get_contents($this->sandboxDirectory . '/.crashed'));
+    }
+
     /** @return array{string, int} */
     private function runLoader(string $mode): array
     {
