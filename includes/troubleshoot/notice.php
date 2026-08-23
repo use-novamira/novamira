@@ -67,7 +67,7 @@ function maybe_render(): void
         add_query_arg('novamira_troubleshoot_dismiss', $hash),
         action: 'novamira_troubleshoot_dismiss',
     );
-    $connect_url = admin_url('admin.php?page=novamira-connect');
+    $troubleshoot_url = admin_url('admin.php?page=novamira-troubleshoot');
     echo
         '<div class="notice notice-error"><p><strong>'
             . esc_html__('Novamira connections are broken.', domain: 'novamira')
@@ -78,9 +78,9 @@ function maybe_render(): void
     }
     echo
         '<p><a href="'
-            . esc_url($connect_url)
+            . esc_url($troubleshoot_url)
             . '">'
-            . esc_html__('Open the Configuration page to run diagnostics', domain: 'novamira')
+            . esc_html__('Troubleshoot', domain: 'novamira')
             . '</a> · <a href="'
             . esc_url($dismiss_url)
             . '">'
