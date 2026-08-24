@@ -2,6 +2,7 @@
 * Fix: A sandbox file that stops with an error no longer ends the whole request. The remaining sandbox files still load, WordPress finishes loading, and safe mode switches on from the next request as before — where previously one broken sandbox file could surface as an unrelated fatal error elsewhere in WordPress.
 * Fix: AI clients that support both device authorization and browser sign-in, such as Visual Studio Code, can now connect over OAuth. They were registered as device-only clients, which discarded the redirect address they needed and left them refused at sign-in with "This application is registered for device authorization."
 * Tweak: When the OAuth tables are missing, the Troubleshoot page now names what is actually stopping the installer — AI Abilities being off, a domain lock, or the site not being served over HTTPS — instead of suggesting a deactivate and reactivate cycle that could not have helped.
+* Tweak: Updated the bundled MCP Adapter to version 0.6.1.
 
 v1.11.4 - 2026/08/13
 * New: Before deactivating Novamira, the review page now shows stored Novamira Pro memories, user-added skills, and Chat sessions. Choose whether to preserve or permanently delete each data type when removing the plugin.
