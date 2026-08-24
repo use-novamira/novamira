@@ -85,4 +85,3 @@ add_action('rest_api_init', __NAMESPACE__ . '\\Rest\\register_routes');
 // both at 10) and before Context (30). Diagnostics belong next to the connection they check.
 add_action('admin_menu', __NAMESPACE__ . '\\Admin\\register_menu', priority: 20);
 add_action('admin_notices', __NAMESPACE__ . '\\Notice\\maybe_render');
-add_action('admin_init', __NAMESPACE__ . '\\Notice\\handle_dismiss');

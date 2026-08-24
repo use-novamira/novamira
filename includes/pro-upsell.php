@@ -263,22 +263,6 @@ function novamira_pro_upsell_on_activate(): void
 }
 
 /**
- * Handle dismiss requests (AJAX GET from the notice).
- */
-add_action('admin_init', static function (): void {
-    $key = $_GET['novamira_pro_dismiss'] ?? null;
-    if (!is_string($key) || $key === '') {
-        return;
-    }
-    if (!novamira_current_user_can_manage()) {
-        return;
-    }
-    $key = sanitize_key($key);
-    update_user_meta(get_current_user_id(), NOVAMIRA_PRO_DISMISS_PREFIX . $key, meta_value: 1);
-    wp_die('Dismissed', title: 'Dismissed', args: ['response' => 200]);
-});
-
-/**
  * Render the one-time welcome notice until dismissed.
  */
 add_action('admin_notices', callback: 'novamira_render_pro_welcome_notice');
@@ -289,10 +273,6 @@ function novamira_render_pro_welcome_notice(): void
         return;
     }
     if (novamira_pro_is_active()) {
-        return;
-    }
-    $user_id = get_current_user_id();
-    if (get_user_meta($user_id, NOVAMIRA_PRO_DISMISS_PREFIX . NOVAMIRA_PRO_WELCOME_KEY, single: true)) {
         return;
     }
     // Don't show on the Pro page itself or irrelevant screens outside Novamira admin.
@@ -309,37 +289,23 @@ function novamira_render_pro_welcome_notice(): void
         return;
     }
 
-    $dismiss_url = add_query_arg(['novamira_pro_dismiss' => NOVAMIRA_PRO_WELCOME_KEY], admin_url());
     $pro_url = esc_url(NOVAMIRA_PRO_URL . '?utm_source=plugin&utm_medium=welcome_notice');
-    ?>
-    <div class="notice notice-info is-dismissible novamira-pro-notice" data-dismiss-url="<?php echo
-        esc_url($dismiss_url)
-    ; ?>" style="border-left-color:#f8ca50;">
-        <p style="font-size:14px;margin:10px 0;">
-            <strong><?php esc_html_e('Novamira Pro is here.', domain: 'novamira'); ?></strong>
-            <?php echo esc_html(novamira_pro_upsell_blurb()); ?>
-            &nbsp;
-            <a href="<?php echo
-                $pro_url
-            ; ?>" target="_blank" rel="noopener" class="button button-primary" style="background:#f8ca50;border-color:#f8ca50;color:#1a1a1a;">
-                <?php esc_html_e('Discover more', domain: 'novamira'); ?>
-            </a>
-        </p>
-    </div>
-    <script>
-    (function() {
-        var notices = document.querySelectorAll('.novamira-pro-notice');
-        for (var i = 0; i < notices.length; i++) {
-            notices[i].addEventListener('click', function(e) {
-                if (e.target && e.target.classList.contains('notice-dismiss')) {
-                    var url = this.getAttribute('data-dismiss-url');
-                    if (url) { fetch(url, {credentials: 'same-origin'}); }
-                }
-            });
-        }
-    })();
-    </script>
-    <?php
+    $message = sprintf(
+        '<strong>%s</strong> %s &nbsp; <a href="%s" target="_blank" rel="noopener" class="button button-primary" style="background:#f8ca50;border-color:#f8ca50;color:#1a1a1a;">%s</a>',
+        esc_html__('Novamira Pro is here.', domain: 'novamira'),
+        esc_html(novamira_pro_upsell_blurb()),
+        $pro_url,
+        esc_html__('Discover more', domain: 'novamira'),
+    );
+    novamira_render_persistent_admin_notice(
+        $message,
+        meta_key: NOVAMIRA_PRO_DISMISS_PREFIX . NOVAMIRA_PRO_WELCOME_KEY,
+        args: [
+            'type' => 'info',
+            'additional_classes' => ['novamira-pro-notice'],
+            'attributes' => ['style' => 'border-left-color:#f8ca50;'],
+        ],
+    );
 }
 
 /**

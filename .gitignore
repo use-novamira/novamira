@@ -11,6 +11,7 @@ node_modules/
 !/includes/assets/sandbox.css
 !/includes/assets/hub.css
 !/includes/assets/hub.js
+!/includes/assets/admin-notices.js
 /novamira-visual/dist/
 
 # IDE

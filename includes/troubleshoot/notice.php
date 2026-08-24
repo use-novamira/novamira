@@ -60,50 +60,20 @@ function maybe_render(): void
         return;
     }
     $hash = md5((string) wp_json_encode($found));
-    if (get_user_meta(get_current_user_id(), DISMISS_META, single: true) === $hash) {
-        return;
-    }
-    $dismiss_url = wp_nonce_url(
-        add_query_arg('novamira_troubleshoot_dismiss', $hash),
-        action: 'novamira_troubleshoot_dismiss',
-    );
     $troubleshoot_url = admin_url('admin.php?page=novamira-troubleshoot');
-    echo
-        '<div class="notice notice-error"><p><strong>'
-            . esc_html__('Novamira connections are broken.', domain: 'novamira')
-            . '</strong></p>'
-    ;
-    foreach ($found as $message) {
-        echo '<p>' . esc_html($message) . '</p>';
+    $message = '<p><strong>' . esc_html__('Novamira connections need attention.', domain: 'novamira') . '</strong></p>';
+    foreach ($found as $regression) {
+        $message .= '<p>' . esc_html($regression) . '</p>';
     }
-    echo
+    $message .=
         '<p><a href="'
-            . esc_url($troubleshoot_url)
-            . '">'
-            . esc_html__('Troubleshoot', domain: 'novamira')
-            . '</a> · <a href="'
-            . esc_url($dismiss_url)
-            . '">'
-            . esc_html__('Dismiss', domain: 'novamira')
-            . '</a></p></div>'
-    ;
-}
+        . esc_url($troubleshoot_url)
+        . '">'
+        . esc_html__('Troubleshoot', domain: 'novamira')
+        . '</a></p>';
 
-/**
- * Persist the dismissal keyed to the exact regression set, so the notice stays gone for this
- * state but re-arms the moment a different regression appears.
- */
-function handle_dismiss(): void
-{
-    $raw = $_GET['novamira_troubleshoot_dismiss'] ?? null;
-    if (!is_string($raw) || $raw === '') {
-        return;
-    }
-    check_admin_referer('novamira_troubleshoot_dismiss');
-    if (!\novamira_current_user_can_manage()) {
-        return;
-    }
-    update_user_meta(get_current_user_id(), DISMISS_META, sanitize_key($raw));
-    wp_safe_redirect(remove_query_arg(['novamira_troubleshoot_dismiss', '_wpnonce']));
-    exit();
+    \novamira_render_persistent_admin_notice($message, meta_key: DISMISS_META, dismiss_value: $hash, args: [
+        'type' => 'error',
+        'paragraph_wrap' => false,
+    ]);
 }
