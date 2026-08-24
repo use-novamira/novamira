@@ -566,7 +566,8 @@ add_action(
             capability: novamira_manage_capability(),
             menu_slug: 'novamira-connect',
             callback: 'novamira_render_connect_page',
-            icon_url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHBhdGggZmlsbD0iYmxhY2siIGQ9Ik01IDRoNi41bDkuNSAxNi41VjRIMjd2MjRoLTYuNUwxMSAxMS41VjI4SDVWNHoiLz48L3N2Zz4=',
+            // Official Novamira N, encoded so WordPress applies its native SVG menu sizing.
+            icon_url: 'data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMiIgZGF0YS1uYW1lPSJMYXllciAyIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0xNSAtMTUgMTQ4LjU4IDE0OC41OSIgd2lkdGg9IjIwIiBoZWlnaHQ9IjIwIj4KICA8ZGVmcz4KICAgIDxzdHlsZT4KICAgICAgLmNscy0xIHsKICAgICAgICBmaWxsOiAjZmZmOwogICAgICB9CiAgICA8L3N0eWxlPgogIDwvZGVmcz4KICA8ZyBpZD0iTGF5ZXJfMS0yIiBkYXRhLW5hbWU9IkxheWVyIDEiPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMCwwaDM3LjFsNDIuMTgsNTIuMzVWMGgzOS4zdjExOC41OWgtMzUuMjRsLTQ0LjA0LTU0LjcydjU0LjcySDBWMFoiLz4KICA8L2c+Cjwvc3ZnPgo=',
             position: 3,
         );
 
