@@ -123,7 +123,7 @@ function novamira_render_enable_toggle(): void
         </p>
         <p class="description" style="margin:0 0 14px;">
             <?php esc_html_e(
-                'Use Novamira with a capable AI model and set your client to ask for confirmation before every action. Read what the agent is about to do before approving.',
+                'Use Novamira with a capable AI model and set your AI tool to ask for confirmation before every action. Read what the agent is about to do before approving.',
                 domain: 'novamira',
             ); ?>
         </p>
@@ -382,11 +382,11 @@ function novamira_render_password_row(array $pw, string $dt_format): void
 }
 
 /**
- * AI clients shown in the configuration flow, in display order.
+ * MCP clients with a verified configuration format.
  *
  * @return array<string, string>
  */
-function novamira_ai_clients(): array
+function novamira_mcp_clients(): array
 {
     return [
         'claude-code' => 'Claude Code',
@@ -411,8 +411,37 @@ function novamira_ai_clients(): array
 }
 
 /**
+ * Every product shown in the Configuration chooser. CLI-only agents join the
+ * verified MCP products here, while aliases such as Codex CLI and Roo Code keep
+ * one visible entry even though their installer and MCP identifiers differ.
+ *
+ * @return array<string, string>
+ */
+function novamira_ai_clients(): array
+{
+    $clients = novamira_mcp_clients();
+    $cli_only_clients = [];
+    foreach (novamira_cli_agents() as $agent => $details) {
+        $client = match ($agent) {
+            'codex' => 'codex-cli',
+            'kilo' => 'kilo-code',
+            'roo' => 'roo-code',
+            default => $agent,
+        };
+        if (!array_key_exists($client, $clients)) {
+            $cli_only_clients[$client] = $details['label'];
+        }
+    }
+    uasort($cli_only_clients, static fn(string $left, string $right): int => strnatcasecmp($left, $right));
+    return $clients + $cli_only_clients;
+}
+
+/**
  * Render the AI client chooser before the authentication-method step.
  */
+// Inherent: each rendered tool carries its server-resolved OAuth, password, CLI, scope,
+// and visibility capabilities so the browser can keep all four support steps stable.
+// @mago-expect lint:cyclomatic-complexity
 function novamira_render_ai_client_chooser(): void
 {
     $name_placeholder = '__NOVAMIRA_MCP_NAME__';
@@ -426,13 +455,48 @@ function novamira_render_ai_client_chooser(): void
         mcp_name: $name_placeholder,
     );
     $clients = novamira_ai_clients();
+    $cli_transport_available = novamira_cli_transport_allowed(home_url('/'), wp_get_environment_type());
+    // Preserve the concise chooser users already know; CLI-only agents remain
+    // available through search and the explicit expanded view.
+    $common_clients = array_fill_keys(keys: array_keys(novamira_mcp_clients()), value: true);
     ?>
     <h2 class="novamira-step-heading">
         <span class="novamira-step-badge">2</span>
-        <?php esc_html_e('Choose your AI client', domain: 'novamira'); ?>
+        <?php esc_html_e('Choose your AI tool', domain: 'novamira'); ?>
     </h2>
+    <p class="description" style="margin:0;">
+        <?php esc_html_e('Choose the app, CLI, or agent you use.', domain: 'novamira'); ?>
+    </p>
 
-    <div class="novamira-client-tabs" style="gap:8px; margin:16px 0 0;">
+    <label class="screen-reader-text" for="novamira-client-search"><?php esc_html_e(
+        'Search AI tools',
+        domain: 'novamira',
+    ); ?></label>
+    <input
+        type="search"
+        id="novamira-client-search"
+        class="regular-text"
+        placeholder="<?php esc_attr_e('Search your AI tool…', domain: 'novamira'); ?>"
+        style="margin-top:12px; width:100%; max-width:420px;"
+    >
+
+    <div class="novamira-client-chooser-heading">
+        <strong id="novamira-client-list-label"><?php esc_html_e('Common AI tools', domain: 'novamira'); ?></strong>
+        <button
+            type="button"
+            class="button-link"
+            id="novamira-client-show-all"
+            aria-expanded="false"
+            aria-controls="novamira-client-list"
+        ><?php esc_html_e('Show all supported tools', domain: 'novamira'); ?></button>
+    </div>
+
+    <div
+        class="novamira-client-tabs novamira-client-chooser"
+        id="novamira-client-list"
+        aria-labelledby="novamira-client-list-label"
+        style="gap:8px;"
+    >
         <?php foreach ($clients as $key => $label): ?>
             <?php
 
@@ -441,6 +505,10 @@ function novamira_render_ai_client_chooser(): void
             $oauth_reason = is_array($oauth_config) && is_string($oauth_config['message'] ?? null)
                 ? $oauth_config['message']
                 : '';
+            $cli_agent = novamira_cli_agent_for_client($key);
+            $cli_details = $cli_agent !== null ? novamira_cli_agents()[$cli_agent] : null;
+            $cli_supported = $cli_agent !== null && $cli_transport_available;
+            $is_common = array_key_exists($key, $common_clients);
             ?>
             <button
                 type="button"
@@ -449,11 +517,20 @@ function novamira_render_ai_client_chooser(): void
                 data-oauth-supported="<?php echo $oauth_supported ? 'true' : 'false'; ?>"
                 data-oauth-reason="<?php echo esc_attr($oauth_reason); ?>"
                 data-password-supported="<?php echo array_key_exists($key, $password_configs) ? 'true' : 'false'; ?>"
+                data-cli-supported="<?php echo $cli_supported ? 'true' : 'false'; ?>"
+                data-cli-agent="<?php echo esc_attr($cli_agent ?? ''); ?>"
+                data-cli-scope="<?php echo esc_attr($cli_details['scope'] ?? ''); ?>"
+                data-common="<?php echo $is_common ? 'true' : 'false'; ?>"
                 aria-pressed="false"
+                <?php echo $is_common ? '' : 'hidden'; ?>
                 onclick="novamiraChooseAiClient('<?php echo esc_js($key); ?>', this)"
             ><?php echo esc_html($label); ?></button>
         <?php endforeach; ?>
     </div>
+    <p id="novamira-client-no-results" class="description" hidden><?php esc_html_e(
+        'No matching AI tool found.',
+        domain: 'novamira',
+    ); ?></p>
 
     <script>
     (function () {
@@ -469,11 +546,42 @@ function novamira_render_ai_client_chooser(): void
         ; ?>;
         var noMethodsAvailable = <?php echo
             wp_json_encode(__(
-                'No connection is possible with %s in this environment. Technical reason: this client runs in the provider’s cloud and cannot resolve or route to this site’s local-only hostname. Its MCP connector accepts OAuth, not WordPress Application Password credentials. Expose the staging site through a publicly reachable HTTPS URL, or choose an AI client that runs locally.',
+                'No working connection method is available for %s on this site. Check that the site uses HTTPS and can be reached from the environment where the selected AI tool runs.',
                 domain: 'novamira',
             ))
         ; ?>;
+        var commonClientsLabel = <?php echo wp_json_encode(__('Common AI tools', domain: 'novamira')); ?>;
+        var allClientsLabel = <?php echo wp_json_encode(__('All supported AI tools', domain: 'novamira')); ?>;
+        var searchResultsLabel = <?php echo wp_json_encode(__('Search results', domain: 'novamira')); ?>;
+        var showAllLabel = <?php echo wp_json_encode(__('Show all supported tools', domain: 'novamira')); ?>;
+        var showFewerLabel = <?php echo wp_json_encode(__('Show fewer tools', domain: 'novamira')); ?>;
+        var showingAllClients = false;
         window.novamiraSelectedAiClient = '';
+
+        function updateClientList() {
+            var search = document.getElementById('novamira-client-search');
+            var query = search.value.trim().toLowerCase();
+            var selectedClient = window.novamiraSelectedAiClient || '';
+            var visibleCount = 0;
+            document.querySelectorAll('.novamira-ai-client-choice').forEach(function (choice) {
+                var matches = choice.textContent.toLowerCase().indexOf(query) !== -1;
+                var common = choice.getAttribute('data-common') === 'true';
+                var selected = choice.getAttribute('data-client') === selectedClient;
+                var visible = query !== '' ? matches : (showingAllClients || common || selected);
+                choice.hidden = !visible;
+                if (visible) { visibleCount += 1; }
+            });
+
+            var list = document.getElementById('novamira-client-list');
+            list.classList.toggle('is-filtering', query !== '');
+            document.getElementById('novamira-client-list-label').textContent =
+                query !== '' ? searchResultsLabel : (showingAllClients ? allClientsLabel : commonClientsLabel);
+            var toggle = document.getElementById('novamira-client-show-all');
+            toggle.hidden = query !== '';
+            toggle.textContent = showingAllClients ? showFewerLabel : showAllLabel;
+            toggle.setAttribute('aria-expanded', showingAllClients ? 'true' : 'false');
+            document.getElementById('novamira-client-no-results').hidden = visibleCount !== 0;
+        }
 
         function updateAuthenticationAvailability(choice) {
             var clientLabel = choice.textContent.trim();
@@ -490,9 +598,12 @@ function novamira_render_ai_client_chooser(): void
                 }
 
                 card.disabled = !transportAvailable || !supported;
+                card.hidden = card.disabled;
                 card.setAttribute('aria-disabled', card.disabled ? 'true' : 'false');
                 if (!card.disabled) { availableMethods += 1; }
-                if (recommendation) { recommendation.hidden = !supported; }
+                if (recommendation) {
+                    recommendation.hidden = !supported || (method !== 'cli' && choice.getAttribute('data-cli-supported') === 'true');
+                }
 
                 if (description && !supported) {
                     var reason = unavailableReason || (method === 'password' ? passwordUnsupported : oauthUnsupported);
@@ -508,8 +619,8 @@ function novamira_render_ai_client_chooser(): void
                     document.querySelectorAll('.novamira-method-panel').forEach(function (panel) {
                         panel.hidden = true;
                     });
-                    var step4 = document.getElementById('novamira-step4');
-                    if (step4) { step4.hidden = true; }
+                    var step4Placeholder = document.getElementById('novamira-step4-placeholder');
+                    if (step4Placeholder) { step4Placeholder.hidden = false; }
                     var hostingWarning = document.getElementById('novamira-hosting-oauth-warning');
                     if (hostingWarning) { hostingWarning.hidden = true; }
                 }
@@ -520,9 +631,31 @@ function novamira_render_ai_client_chooser(): void
                 noMethodsNotice.hidden = availableMethods > 0;
                 noMethodsNotice.querySelector('p').textContent = noMethodsAvailable.replace('%s', clientLabel);
             }
+            var step3Placeholder = document.getElementById('novamira-step3-placeholder');
+            if (step3Placeholder) { step3Placeholder.hidden = true; }
+
+            var availableCards = Array.prototype.filter.call(
+                document.querySelectorAll('.novamira-method-card[data-method]'),
+                function (card) { return !card.disabled; }
+            );
+            var activeCard = document.querySelector('.novamira-method-card.is-active[data-method]');
+            if (activeCard && activeCard.disabled) {
+                activeCard.classList.remove('is-active');
+                activeCard = null;
+            }
+            if (availableCards.length === 1 && window.novamiraApplyAuthenticationMethod) {
+                window.novamiraApplyAuthenticationMethod(availableCards[0].getAttribute('data-method'));
+            } else if (!activeCard && window.novamiraClearAuthenticationMethod) {
+                window.novamiraClearAuthenticationMethod();
+            }
         }
 
-        window.novamiraChooseAiClient = function (key, button) {
+        window.novamiraChooseAiClient = function (key, button, preserveMethod) {
+            // A deliberate Step 2 choice starts a fresh route through Steps 3 and 4.
+            // Only restoring the saved choice on page load may keep a submitted password flow.
+            if (!preserveMethod && window.novamiraClearAuthenticationMethod) {
+                window.novamiraClearAuthenticationMethod();
+            }
             window.novamiraSelectedAiClient = key;
             try { window.localStorage.setItem(storageKey, key); } catch (error) {}
 
@@ -531,6 +664,7 @@ function novamira_render_ai_client_chooser(): void
                 choice.classList.toggle('active', selected);
                 choice.setAttribute('aria-pressed', selected ? 'true' : 'false');
             });
+            updateClientList();
             updateAuthenticationAvailability(button);
 
             var activeMethod = document.querySelector('.novamira-method-card.is-active[data-method]');
@@ -539,18 +673,25 @@ function novamira_render_ai_client_chooser(): void
             }
         };
 
+        document.getElementById('novamira-client-search').addEventListener('input', function () {
+            updateClientList();
+        });
+        document.getElementById('novamira-client-show-all').addEventListener('click', function () {
+            showingAllClients = !showingAllClients;
+            updateClientList();
+        });
+
         window.addEventListener('DOMContentLoaded', function () {
             var stored = '';
             try { stored = window.localStorage.getItem(storageKey) || ''; } catch (error) {}
-            // Google replaced the consumer Gemini CLI with Antigravity CLI in June 2026.
-            if (stored === 'gemini-cli') { stored = 'antigravity-cli'; }
             var choice = null;
             document.querySelectorAll('.novamira-ai-client-choice').forEach(function (candidate) {
                 if (candidate.getAttribute('data-client') === stored) { choice = candidate; }
             });
             if (choice) {
-                window.novamiraChooseAiClient(stored, choice);
+                window.novamiraChooseAiClient(stored, choice, true);
             }
+            updateClientList();
         });
     }());
     </script>
@@ -590,11 +731,9 @@ function novamira_hosting_support_email(string $authentication_context = 'both')
 }
 
 /**
- * Two-card chooser between OAuth and Application password. Security-first: OAuth is the
- * recommended card everywhere except a local site served over self-signed HTTPS, where the
- * browser sign-in would hit an unverifiable certificate; there the password flow (no browser
- * step) is recommended instead. Both panels are rendered; JS shows one at a time (defaulting
- * to the recommended one) and degrades to both visible without JS.
+ * Stable Step 3 chooser. It contains the three possible connection routes, while
+ * the selected client hides routes that do not apply. If exactly one remains, JS
+ * selects it automatically without removing or renumbering the step.
  */
 // The branches render the two authentication cards and their hosting-specific recommendation copy.
 // @mago-expect lint:cyclomatic-complexity
@@ -609,6 +748,7 @@ function novamira_render_method_chooser(
     // OAuth is only offered where its transport is safe (HTTPS, or a local site). On a public
     // HTTP site it is not selectable; WordPress already blocks application passwords there too.
     $oauth_available = novamira_oauth_transport_allowed();
+    $password_available = novamira_app_passwords_status()['available'];
     $hosting = \Novamira\Hosting\Detector::current();
     $hosting_name = is_array($hosting) ? $hosting['name'] : '';
     $hosting_edge = is_array($hosting) ? $hosting['edge'] : '';
@@ -622,7 +762,7 @@ function novamira_render_method_chooser(
         && !(novamira_host_unreachable_from_cloud() && novamira_likely_self_signed_https());
     // App password carries the recommendation on a local self-signed site and on a detected hosting
     // edge known to filter machine OAuth traffic. On a public HTTP site nothing is recommended.
-    $password_recommended = $oauth_available && !$oauth_recommended;
+    $password_recommended = $password_available && $oauth_available && !$oauth_recommended;
     $password_active = novamira_password_method_preselected($new_password, $existing_password, $existing_error);
     $has_password = $new_password !== null || $existing_password !== null;
     $badge_label = match (true) {
@@ -638,16 +778,43 @@ function novamira_render_method_chooser(
     ?>
     <h2 class="novamira-step-heading">
         <span class="novamira-step-badge">3</span>
-        <?php esc_html_e('Choose your authentication method', domain: 'novamira'); ?>
+        <?php esc_html_e('Choose how to connect', domain: 'novamira'); ?>
     </h2>
+    <p id="novamira-step3-placeholder" class="description" style="margin:0 0 16px;">
+        <?php esc_html_e('Choose your AI tool in step 2 to see its connection methods.', domain: 'novamira'); ?>
+    </p>
 
     <div class="novamira-method-cards">
+        <button
+            type="button"
+            class="novamira-method-card"
+            data-method="cli"
+            data-transport-available="true"
+            hidden
+            disabled
+            aria-disabled="true"
+        >
+            <span class="novamira-method-title">
+                <?php esc_html_e('Novamira CLI', domain: 'novamira'); ?>
+                <span class="novamira-recommended-badge novamira-method-recommendation"><?php esc_html_e(
+                    'Recommended',
+                    domain: 'novamira',
+                ); ?></span>
+            </span>
+            <span class="description"><?php esc_html_e(
+                'A command-line tool that sets up supported coding agents to connect to and work with this WordPress site.',
+                domain: 'novamira',
+            ); ?></span>
+        </button>
         <?php if ($oauth_available): ?>
         <button
             type="button"
             class="novamira-method-card"
             data-method="oauth"
             data-transport-available="true"
+            hidden
+            disabled
+            aria-disabled="true"
         >
             <span class="novamira-method-title">
                 <?php esc_html_e('OAuth', domain: 'novamira'); ?>
@@ -685,14 +852,17 @@ function novamira_render_method_chooser(
             type="button"
             class="novamira-method-card<?php echo $password_active ? ' is-active' : ''; ?>"
             data-method="password"
-            data-transport-available="true"
+            data-transport-available="<?php echo $password_available ? 'true' : 'false'; ?>"
+            hidden
+            disabled
+            aria-disabled="true"
         >
             <span class="novamira-method-title">
                 <?php esc_html_e('Application password', domain: 'novamira'); ?>
                 <?php echo $password_recommended ? $badge : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
             </span>
             <span class="description"><?php esc_html_e(
-                'Generate a password and paste it into the client config.',
+                'Generate a password and paste it into the selected tool’s config.',
                 domain: 'novamira',
             ); ?></span>
         </button>
@@ -776,7 +946,7 @@ function novamira_render_method_chooser(
     </div>
 
     <noscript>
-        <style>.novamira-method-panel[hidden], #novamira-step4[hidden] { display: block; }</style>
+        <style>.novamira-method-panel[hidden] { display: block; }</style>
     </noscript>
 
     <script>
@@ -793,18 +963,33 @@ function novamira_render_method_chooser(
                 p.hidden = p.getAttribute('data-panel') !== method;
             });
             var selectedClient = window.novamiraSelectedAiClient || '';
-            var step4 = document.getElementById('novamira-step4');
-            var visible = selectedClient !== '' && (method === 'oauth' || (method === 'password' && hasPassword));
-            if (step4) { step4.hidden = !visible; }
+            var ready = selectedClient !== '' && (method === 'cli' || method === 'oauth' || (method === 'password' && hasPassword));
+            var placeholder = document.getElementById('novamira-step4-placeholder');
+            if (placeholder) { placeholder.hidden = selectedClient !== ''; }
             var hostingWarning = document.getElementById('novamira-hosting-oauth-warning');
             if (hostingWarning) { hostingWarning.hidden = method !== 'oauth'; }
 
-            if (visible && method === 'oauth' && window.novamiraOauthSetClient) {
+            if (ready && method === 'cli' && window.novamiraCliSetClient) {
+                window.novamiraCliSetClient(selectedClient);
+            }
+            if (ready && method === 'oauth' && window.novamiraOauthSetClient) {
                 window.novamiraOauthSetClient(selectedClient);
             }
-            if (visible && method === 'password' && window.novamiraSetClient) {
+            if (ready && method === 'password' && window.novamiraSetClient) {
                 window.novamiraSetClient(selectedClient);
             }
+        };
+        window.novamiraClearAuthenticationMethod = function () {
+            document.querySelectorAll('.novamira-method-card').forEach(function (card) {
+                card.classList.remove('is-active');
+            });
+            document.querySelectorAll('.novamira-method-panel').forEach(function (panel) {
+                panel.hidden = true;
+            });
+            var placeholder = document.getElementById('novamira-step4-placeholder');
+            if (placeholder) { placeholder.hidden = false; }
+            var hostingWarning = document.getElementById('novamira-hosting-oauth-warning');
+            if (hostingWarning) { hostingWarning.hidden = true; }
         };
         document.querySelectorAll('.novamira-method-card').forEach(function (card) {
             card.addEventListener('click', function () {
@@ -875,11 +1060,6 @@ function novamira_render_oauth_config_section(string $rest_url): void
 
     $clients = array_intersect_key(novamira_ai_clients(), $configs);
     ?>
-    <h2 class="novamira-step-heading">
-        <span class="novamira-step-badge">4</span>
-        <?php esc_html_e('Connect Your AI Client', domain: 'novamira'); ?>
-    </h2>
-
     <div id="novamira-oauth-content" style="display:none; margin-top:16px;">
         <?php novamira_render_local_https_notice(); ?>
 
@@ -938,7 +1118,7 @@ function novamira_render_oauth_config_section(string $rest_url): void
             <div id="novamira-oauth-name-warning" class="notice notice-warning inline" style="display:none; margin:8px 0 0;">
                 <p style="margin:0;">
                     <?php esc_html_e(
-                        'Maximum 25 characters reached. Required for client compatibility.',
+                        'Maximum 25 characters reached. Required for tool compatibility.',
                         domain: 'novamira',
                     ); ?>
                 </p>
@@ -1005,14 +1185,14 @@ function novamira_render_oauth_config_section(string $rest_url): void
         var stepSignInLabel = <?php echo wp_json_encode(__('Sign in', domain: 'novamira')); ?>;
         var stepSignInNote = <?php echo
             wp_json_encode(__(
-                'The next time your AI client connects, your browser opens so you can authorize it. Approve to finish connecting.',
+                'The next time your AI tool connects, your browser opens so you can authorize it. Approve to finish connecting.',
                 domain: 'novamira',
             ))
         ; ?>;
         var stepSignInRestartLabel = <?php echo wp_json_encode(__('Restart and sign in', domain: 'novamira')); ?>;
         var stepSignInRestartNote = <?php echo
             wp_json_encode(__(
-                'Restart your AI client so it loads the server. On the next start your browser opens to sign in and authorize. Approve to finish.',
+                'Restart your AI tool so it loads the server. On the next start your browser opens to sign in and authorize. Approve to finish.',
                 domain: 'novamira',
             ))
         ; ?>;
@@ -1240,10 +1420,206 @@ function novamira_render_oauth_config_section(string $rest_url): void
 }
 
 /**
- * Render the "Connect Your AI Client" container (Step 4), with one method panel toggled by the
- * step 3 chooser. The OAuth panel is always populated; the app-password panel shows the config only
- * once a password exists. The wrapping section stays hidden until a method is picked (and, for app
- * password, until the password is generated), gated by its id from the chooser script.
+ * Render the Novamira CLI setup route for every agent that can load the bundled
+ * skill. The selected product swaps the installer destination without exposing
+ * a credential: authorization happens in the browser after installation.
+ */
+function novamira_render_cli_config_section(): void
+{
+    $site_url = home_url('/');
+    $allow_insecure_http = novamira_cli_needs_insecure_http_override($site_url, wp_get_environment_type());
+    $allow_self_signed_https = novamira_likely_self_signed_https();
+    $login_environment = [];
+    if ($allow_insecure_http) {
+        $login_environment['NOVAMIRA_ALLOW_INSECURE_HTTP'] = '1';
+    }
+    if ($allow_self_signed_https) {
+        $login_environment['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
+    }
+    $login_unix = novamira_cli_login_command($site_url, $login_environment);
+    $login_windows = novamira_cli_windows_login_command($site_url, $login_environment);
+    $hosting = \Novamira\Hosting\Detector::current();
+    $hosting_note = '';
+    if (is_array($hosting)) {
+        $hosting_note = match ($hosting['recommendation']) {
+            'password' => sprintf(
+                /* translators: 1: detected hosting provider name, 2: detected edge/security layer name */
+                __(
+                    'This site is hosted on %1$s behind %2$s. Novamira CLI uses OAuth directly and has no MCP bridge, so requests originate from the environment where this coding agent runs. If the diagnostics show that requests are blocked before reaching WordPress, explain that cloud-hosted agent traffic may be filtered by the hosting layer and direct me to the hosting support template on the Novamira Configuration page.',
+                    domain: 'novamira',
+                ),
+                $hosting['name'],
+                $hosting['edge'],
+            ),
+            default => '',
+        };
+    }
+    $configs = [];
+
+    foreach (novamira_ai_clients() as $client => $label) {
+        $agent = novamira_cli_agent_for_client($client);
+        if ($agent === null) {
+            continue;
+        }
+        $details = novamira_cli_agents()[$agent];
+        $unix_install = novamira_cli_unix_install_command($agent, $details['scope']);
+        $windows_install = novamira_cli_windows_install_command($agent, $details['scope']);
+        $project_note = $details['scope'] === 'project'
+            ? __(
+                'This agent loads skills from the current project only. Run the installation from that project’s root directory.',
+                domain: 'novamira',
+            )
+            : '';
+        $prompt_notes = implode(' ', array_filter([$project_note, $hosting_note]));
+        $configs[$client] = [
+            'label' => $label,
+            'agent' => $agent,
+            'scope' => $details['scope'],
+            'unixInstall' => $unix_install,
+            'windowsInstall' => $windows_install,
+            'unixLogin' => $login_unix,
+            'windowsLogin' => $login_windows,
+            'projectNote' => $project_note,
+            'prompt' => sprintf(
+                /* translators: 1: client label, 2: site URL, 3: Unix install command, 4: Windows install command, 5: Unix login command, 6: Windows login command, 7: optional project-only note */
+                __(
+                    "I want to connect %1\$s to this WordPress site with Novamira CLI: %2\$s\n\nInstall the official Novamira CLI and its Novamira skill for this agent. On macOS or Linux run:\n\n%3\$s\n\nOn Windows PowerShell run:\n\n%4\$s\n\nThen authorize the site. On macOS or Linux run:\n\n%5\$s\n\nOn Windows PowerShell run:\n\n%6\$s\n\nThe login opens my browser. Ask me to approve the authorization there, then run novamira doctor --json yourself and verify the connection. Do not ask me to run doctor. %7\$s",
+                    domain: 'novamira',
+                ),
+                $label,
+                $site_url,
+                $unix_install,
+                $windows_install,
+                $login_unix,
+                $login_windows,
+                $prompt_notes,
+            ),
+        ];
+    }
+    ?>
+    <div id="novamira-cli-content" style="display:none; margin-top:16px;">
+        <div id="novamira-cli-project-note" class="notice notice-info inline" hidden>
+            <p></p>
+        </div>
+
+        <?php if ($allow_insecure_http): ?>
+            <div class="notice notice-warning inline" style="margin:0 0 12px;">
+                <p><?php esc_html_e(
+                    'This local site uses HTTP on a non-loopback hostname. The command opts in to insecure HTTP for this login only. Use it only on a trusted development network.',
+                    domain: 'novamira',
+                ); ?></p>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($allow_self_signed_https): ?>
+            <div class="notice notice-warning inline" style="margin:0 0 12px;">
+                <p><?php printf(
+                    /* translators: %s: NODE_TLS_REJECT_UNAUTHORIZED=0 environment flag */
+                    esc_html__(
+                        'This local HTTPS certificate is not publicly trusted, so the login command sets %s for that CLI process. This disables certificate verification temporarily; use it only for a local site you trust.',
+                        domain: 'novamira',
+                    ),
+                    '<code>NODE_TLS_REJECT_UNAUTHORIZED=0</code>',
+                ); ?></p>
+            </div>
+        <?php endif; ?>
+
+        <div class="novamira-paste-block">
+            <div class="novamira-paste-content is-expanded">
+                <pre id="novamira-cli-prompt"></pre>
+            </div>
+            <div class="novamira-paste-actions">
+                <button type="button" class="button button-primary" onclick="novamiraCopyCliPrompt(this)"><?php esc_html_e(
+                    'Copy prompt',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+        </div>
+
+        <details id="novamira-cli-manual" style="margin-top:14px;">
+            <summary><?php esc_html_e('Manual terminal commands', domain: 'novamira'); ?></summary>
+            <h3><?php esc_html_e('macOS or Linux', domain: 'novamira'); ?></h3>
+            <p class="description"><?php esc_html_e(
+                'Install Novamira CLI and the agent skill:',
+                domain: 'novamira',
+            ); ?></p>
+            <div class="novamira-config-block">
+                <pre id="novamira-cli-unix-install"></pre>
+                <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyCliCode('novamira-cli-unix-install', this)"><?php esc_html_e(
+                    'Copy',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+            <p class="description"><?php esc_html_e('Authorize this WordPress site:', domain: 'novamira'); ?></p>
+            <div class="novamira-config-block">
+                <pre id="novamira-cli-unix-login"></pre>
+                <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyCliCode('novamira-cli-unix-login', this)"><?php esc_html_e(
+                    'Copy',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+
+            <h3><?php esc_html_e('Windows PowerShell', domain: 'novamira'); ?></h3>
+            <p class="description"><?php esc_html_e(
+                'Install Novamira CLI and the agent skill:',
+                domain: 'novamira',
+            ); ?></p>
+            <div class="novamira-config-block">
+                <pre id="novamira-cli-windows-install"></pre>
+                <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyCliCode('novamira-cli-windows-install', this)"><?php esc_html_e(
+                    'Copy',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+            <p class="description"><?php esc_html_e('Authorize this WordPress site:', domain: 'novamira'); ?></p>
+            <div class="novamira-config-block">
+                <pre id="novamira-cli-windows-login"></pre>
+                <button type="button" class="button novamira-copy-btn" onclick="novamiraCopyCliCode('novamira-cli-windows-login', this)"><?php esc_html_e(
+                    'Copy',
+                    domain: 'novamira',
+                ); ?></button>
+            </div>
+        </details>
+    </div>
+
+    <script>
+    (function () {
+        var configs = <?php echo wp_json_encode($configs); ?>;
+        var copiedLabel = <?php echo wp_json_encode(__('Copied!', domain: 'novamira')); ?>;
+
+        window.novamiraCliSetClient = function (client) {
+            var config = configs[client];
+            if (!config) { return; }
+            document.getElementById('novamira-cli-content').style.display = '';
+            document.getElementById('novamira-cli-prompt').textContent = config.prompt;
+            document.getElementById('novamira-cli-unix-install').textContent = config.unixInstall;
+            document.getElementById('novamira-cli-unix-login').textContent = config.unixLogin;
+            document.getElementById('novamira-cli-windows-install').textContent = config.windowsInstall;
+            document.getElementById('novamira-cli-windows-login').textContent = config.windowsLogin;
+            var projectNote = document.getElementById('novamira-cli-project-note');
+            projectNote.hidden = config.projectNote === '';
+            projectNote.querySelector('p').textContent = config.projectNote;
+        };
+
+        window.novamiraCopyCliCode = function (id, button) {
+            window.novamiraClipboardCopy(document.getElementById(id).textContent).then(function () {
+                var original = button.textContent;
+                button.textContent = copiedLabel;
+                setTimeout(function () { button.textContent = original; }, 1500);
+            });
+        };
+        window.novamiraCopyCliPrompt = function (button) {
+            window.novamiraCopyCliCode('novamira-cli-prompt', button);
+        };
+    }());
+    </script>
+    <?php
+}
+
+/**
+ * Render the stable "Connect Your AI Client" container (Step 4). Its heading and
+ * placeholder never disappear, so documentation and support can always refer to
+ * the same step numbers while the selected route swaps the content below.
  */
 function novamira_render_connect_client_section(
     ?string $new_password,
@@ -1259,12 +1635,31 @@ function novamira_render_connect_client_section(
     $username = wp_get_current_user()->user_login;
     $display_password = $new_password ?? $existing_password ?? 'YOUR-APP-PASSWORD';
     ?>
+    <h2 class="novamira-step-heading">
+        <span class="novamira-step-badge">4</span>
+        <?php esc_html_e('Connect Your AI Tool', domain: 'novamira'); ?>
+    </h2>
+    <p id="novamira-step4-placeholder" class="description" style="margin:16px 0 0;">
+        <?php esc_html_e(
+            'Choose an AI tool and connection method above to see the setup instructions.',
+            domain: 'novamira',
+        ); ?>
+    </p>
+    <div class="novamira-method-panel" data-panel="cli" hidden>
+        <?php novamira_render_cli_config_section(); ?>
+    </div>
     <div class="novamira-method-panel" data-panel="oauth" hidden>
         <?php novamira_render_oauth_config_section($oauth_rest_url); ?>
     </div>
     <div class="novamira-method-panel" data-panel="password"<?php echo $password_active ? '' : ' hidden'; ?>>
         <?php if ($has_password): ?>
             <?php novamira_render_config_section($rest_url, $username, $display_password); ?>
+        <?php endif; ?>
+        <?php if (!$has_password): ?>
+            <p class="description" style="margin:16px 0 0;"><?php esc_html_e(
+                'Generate or enter the Application Password in step 3 to continue.',
+                domain: 'novamira',
+            ); ?></p>
         <?php endif; ?>
     </div>
     <?php
@@ -1291,7 +1686,7 @@ function novamira_render_password_step(
     ?>
     <p class="description" style="margin:0 0 12px;">
         <?php esc_html_e(
-            'Generate an application password that your AI client will use to authenticate with WordPress. The password is embedded into the connection text in step 4.',
+            'Generate an application password that your AI tool will use to authenticate with WordPress. The password is embedded into the connection text in step 4.',
             domain: 'novamira',
         ); ?>
     </p>
@@ -1438,7 +1833,7 @@ function novamira_render_password_step(
 /**
  * Build the paste-to-agent paragraph displayed in Option A of the Connect section.
  *
- * Returns a plain-text block the user can copy and paste into their AI client / agent.
+ * Returns a plain-text block the user can copy and paste into their AI tool.
  * The MCP server name uses the same placeholder as the JSON snippets so the live JS
  * preview can swap it in without re-rendering the page.
  */
@@ -1451,7 +1846,7 @@ function novamira_build_paste_to_agent_paragraph(
 ): string {
     $password_value = $password_placeholder ?? $display_password;
     $lines = [
-        'I want to add this WordPress site as an MCP server to this AI client.',
+        'I want to add this WordPress site as an MCP server to this AI tool.',
         '',
         'Connection details:',
         '- Server URL: ' . $rest_url,
@@ -1472,7 +1867,7 @@ function novamira_build_paste_to_agent_paragraph(
         '',
         'Don\'t ask me to confirm choices already specified above. After writing the config, restart or reload the MCP session (most clients require it), then verify by listing the server\'s tools. If it fails, show me the stderr from the npx process before proposing changes.',
         '',
-        'If you cannot modify the config of this AI client from here, tell me to expand "Manual configuration for your AI client" on the Novamira Configuration page and copy the snippet manually.',
+        'If you cannot modify the config of this AI tool from here, tell me to expand "Manual configuration for your AI tool" on the Novamira Configuration page and copy the snippet manually.',
     ];
 
     return implode("\n", $lines);
@@ -2065,11 +2460,6 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         $pw_slot,
     );
     ?>
-    <h2 class="novamira-step-heading">
-        <span class="novamira-step-badge">4</span>
-        <?php esc_html_e('Connect Your AI Client', domain: 'novamira'); ?>
-    </h2>
-
     <div id="novamira-connect-content" style="display:none; margin-top:16px;">
 
     <?php novamira_render_local_https_notice(); ?>
@@ -2139,7 +2529,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         <div id="novamira-name-warning" class="notice notice-warning inline" style="display:none; margin:8px 0 0;">
             <p style="margin:0;">
                 <?php esc_html_e(
-                    'Maximum 25 characters reached. Required for client compatibility.',
+                    'Maximum 25 characters reached. Required for tool compatibility.',
                     domain: 'novamira',
                 ); ?>
             </p>
@@ -2163,7 +2553,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
             aria-expanded="false"
             aria-controls="novamira-manual-config"
             onclick="novamiraToggleManualConfig(this)"
-        ><?php esc_html_e('Manual configuration for your AI client', domain: 'novamira'); ?></button>
+        ><?php esc_html_e('Manual configuration for your AI tool', domain: 'novamira'); ?></button>
     </div>
 
     <div id="novamira-manual-config" hidden style="display:none; margin-top:14px;">
@@ -2633,7 +3023,7 @@ function novamira_render_enable_prompt(?WP_Error $dependency_error): void
 
     ?>
     <p style="color:#666; font-size:14px;">
-        <?php esc_html_e('Enable AI Abilities above to connect your AI client.', domain: 'novamira'); ?>
+        <?php esc_html_e('Enable AI Abilities above to connect your AI tool.', domain: 'novamira'); ?>
     </p>
     <?php
 }
@@ -2695,6 +3085,7 @@ function novamira_render_connect_page(): void
             border:1px solid #dcdcde; border-radius:6px; background:#fff; display:flex;
             flex-direction:column; gap:6px;
         }
+        .novamira-method-card[hidden], .novamira-method-panel[hidden] { display:none; }
         .novamira-method-card:disabled {
             background: #f6f7f7;
             color: #646970;
@@ -2765,6 +3156,24 @@ function novamira_render_connect_page(): void
             font-weight: bold;
         }
         .novamira-client-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .novamira-client-chooser-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin: 16px 0 8px;
+        }
+        .novamira-client-chooser {
+            padding: 10px;
+            border: 1px solid #dcdcde;
+            border-radius: 6px;
+            align-content: flex-start;
+        }
+        .novamira-client-chooser.is-filtering {
+            max-height: 300px;
+            overflow: auto;
+        }
+        .novamira-ai-client-choice[hidden] { display: none; }
         .novamira-client-tab {
             padding: 5px 14px;
             border: 1px solid #c3c4c7;
@@ -2907,7 +3316,7 @@ function novamira_render_connect_page(): void
 
         <?php novamira_render_production_warning(); ?>
 
-        <div class="novamira-connect-section">
+        <div class="novamira-connect-section" id="novamira-step1">
             <?php novamira_render_enable_toggle(); ?>
         </div>
 
@@ -2927,22 +3336,22 @@ function novamira_render_connect_page(): void
                 ?></p></div>
             <?php endif; ?>
 
-            <div class="novamira-connect-section">
+            <div class="novamira-connect-section" id="novamira-step2">
                 <?php novamira_render_ai_client_chooser(); ?>
             </div>
 
-            <div class="novamira-connect-section">
+            <div class="novamira-connect-section" id="novamira-step3">
                 <?php novamira_render_method_chooser($new_password, $existing_password, $existing_error); ?>
             </div>
 
-            <div class="novamira-connect-section" id="novamira-step4" hidden>
+            <div class="novamira-connect-section" id="novamira-step4">
                 <?php novamira_render_connect_client_section($new_password, $existing_password, $existing_error); ?>
             </div>
 
             <div class="novamira-connect-section">
                 <p class="description" style="margin:0;">
                     <?php esc_html_e(
-                        'Set up your client above, then use it once. You will see right away if it works.',
+                        'Set up your AI tool above, then use it once. You will see right away if it works.',
                         domain: 'novamira',
                     ); ?>
                     <a href="<?php echo

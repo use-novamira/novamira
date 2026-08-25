@@ -11,6 +11,244 @@ if (!defined('ABSPATH') && PHP_SAPI !== 'cli') {
 }
 
 /**
+ * Agent-skill destinations understood by the Novamira CLI installers. Keep these
+ * separate from MCP clients: a CLI agent key
+ * selects where the Novamira skill is installed, while an MCP client key selects
+ * a connection-file format.
+ *
+ * `project` entries cannot use the installers' normal --global path. They are
+ * still valid destinations, but their setup command must run from the agent's
+ * project directory.
+ *
+ * @return array<string, array{label: string, scope: 'global'|'project'}>
+ */
+// This is one flat external compatibility manifest; splitting it into arbitrary alphabetical
+// functions would hide duplicates and make updates against the pinned installer harder to review.
+// @mago-expect lint:halstead
+function novamira_cli_agents(): array
+{
+    return [
+        'adal' => ['label' => 'AdaL', 'scope' => 'global'],
+        'aider-desk' => ['label' => 'AiderDesk', 'scope' => 'global'],
+        'amp' => ['label' => 'Amp', 'scope' => 'global'],
+        'antigravity' => ['label' => 'Antigravity', 'scope' => 'global'],
+        'antigravity-cli' => ['label' => 'Antigravity CLI', 'scope' => 'global'],
+        'astrbot' => ['label' => 'AstrBot', 'scope' => 'global'],
+        'autohand-code' => ['label' => 'Autohand Code CLI', 'scope' => 'global'],
+        'augment' => ['label' => 'Augment', 'scope' => 'global'],
+        'bob' => ['label' => 'IBM Bob', 'scope' => 'global'],
+        'claude-code' => ['label' => 'Claude Code', 'scope' => 'global'],
+        'cline' => ['label' => 'Cline', 'scope' => 'global'],
+        'codearts-agent' => ['label' => 'CodeArts Agent', 'scope' => 'global'],
+        'codebuddy' => ['label' => 'CodeBuddy', 'scope' => 'global'],
+        'codemaker' => ['label' => 'Codemaker', 'scope' => 'global'],
+        'codestudio' => ['label' => 'Code Studio', 'scope' => 'global'],
+        'codex' => ['label' => 'Codex CLI', 'scope' => 'global'],
+        'command-code' => ['label' => 'Command Code', 'scope' => 'global'],
+        'continue' => ['label' => 'Continue', 'scope' => 'global'],
+        'cortex' => ['label' => 'Cortex Code', 'scope' => 'global'],
+        'crush' => ['label' => 'Crush', 'scope' => 'global'],
+        'cursor' => ['label' => 'Cursor', 'scope' => 'global'],
+        'deepagents' => ['label' => 'Deep Agents', 'scope' => 'global'],
+        'devin' => ['label' => 'Devin for Terminal', 'scope' => 'global'],
+        'dexto' => ['label' => 'Dexto', 'scope' => 'global'],
+        'droid' => ['label' => 'Droid', 'scope' => 'global'],
+        'eve' => ['label' => 'Eve', 'scope' => 'project'],
+        'firebender' => ['label' => 'Firebender', 'scope' => 'global'],
+        'forgecode' => ['label' => 'ForgeCode', 'scope' => 'global'],
+        'gemini-cli' => ['label' => 'Gemini CLI', 'scope' => 'global'],
+        'github-copilot' => ['label' => 'GitHub Copilot', 'scope' => 'global'],
+        'goose' => ['label' => 'Goose', 'scope' => 'global'],
+        'hermes-agent' => ['label' => 'Hermes Agent', 'scope' => 'global'],
+        'iflow-cli' => ['label' => 'iFlow CLI', 'scope' => 'global'],
+        'inference-sh' => ['label' => 'inference.sh', 'scope' => 'global'],
+        'jazz' => ['label' => 'Jazz', 'scope' => 'global'],
+        'junie' => ['label' => 'Junie', 'scope' => 'global'],
+        'kilo' => ['label' => 'Kilo Code', 'scope' => 'global'],
+        'kimi-code-cli' => ['label' => 'Kimi Code CLI', 'scope' => 'global'],
+        'kiro-cli' => ['label' => 'Kiro CLI', 'scope' => 'global'],
+        'kode' => ['label' => 'Kode', 'scope' => 'global'],
+        'lingma' => ['label' => 'Lingma', 'scope' => 'global'],
+        'loaf' => ['label' => 'Loaf', 'scope' => 'global'],
+        'mcpjam' => ['label' => 'MCPJam', 'scope' => 'global'],
+        'mistral-vibe' => ['label' => 'Mistral Vibe', 'scope' => 'global'],
+        'moxby' => ['label' => 'Moxby', 'scope' => 'global'],
+        'mux' => ['label' => 'Mux', 'scope' => 'global'],
+        'neovate' => ['label' => 'Neovate', 'scope' => 'global'],
+        'ona' => ['label' => 'Ona', 'scope' => 'global'],
+        'openclaw' => ['label' => 'OpenClaw', 'scope' => 'global'],
+        'opencode' => ['label' => 'OpenCode', 'scope' => 'global'],
+        'openhands' => ['label' => 'OpenHands', 'scope' => 'global'],
+        'pi' => ['label' => 'Pi', 'scope' => 'global'],
+        'pochi' => ['label' => 'Pochi', 'scope' => 'global'],
+        'promptscript' => ['label' => 'PromptScript', 'scope' => 'project'],
+        'qoder' => ['label' => 'Qoder', 'scope' => 'global'],
+        'qoder-cn' => ['label' => 'Qoder CN', 'scope' => 'global'],
+        'qwen-code' => ['label' => 'Qwen Code', 'scope' => 'global'],
+        'reasonix' => ['label' => 'Reasonix', 'scope' => 'global'],
+        'replit' => ['label' => 'Replit', 'scope' => 'global'],
+        'roo' => ['label' => 'Roo Code', 'scope' => 'global'],
+        'rovodev' => ['label' => 'Rovo Dev', 'scope' => 'global'],
+        'tabnine-cli' => ['label' => 'Tabnine CLI', 'scope' => 'global'],
+        'terramind' => ['label' => 'Terramind', 'scope' => 'global'],
+        'tinycloud' => ['label' => 'Tinycloud', 'scope' => 'global'],
+        'trae' => ['label' => 'Trae', 'scope' => 'global'],
+        'trae-cn' => ['label' => 'Trae CN', 'scope' => 'global'],
+        'warp' => ['label' => 'Warp', 'scope' => 'global'],
+        'windsurf' => ['label' => 'Windsurf', 'scope' => 'global'],
+        'zcode' => ['label' => 'ZCode', 'scope' => 'global'],
+        'zed' => ['label' => 'Zed', 'scope' => 'global'],
+        'zencoder' => ['label' => 'Zencoder', 'scope' => 'global'],
+        'zenflow' => ['label' => 'Zenflow', 'scope' => 'global'],
+    ];
+}
+
+/**
+ * Translate a visible Configuration-page client key to its skills installer key.
+ * Most names match; these aliases keep product distinctions visible without
+ * leaking incompatible implementation slugs into the UI.
+ */
+function novamira_cli_agent_for_client(string $client): ?string
+{
+    $agent = match ($client) {
+        'codex-cli' => 'codex',
+        'kilo-code' => 'kilo',
+        'roo-code' => 'roo',
+        default => $client,
+    };
+
+    return array_key_exists($agent, novamira_cli_agents()) ? $agent : null;
+}
+
+/**
+ * Quote one value for a POSIX shell command displayed to the user.
+ */
+function novamira_cli_shell_quote(string $value): string
+{
+    return "'" . str_replace(search: "'", replace: "'\\''", subject: $value) . "'";
+}
+
+/**
+ * Whether a CLI site URL uses plain HTTP on a loopback host, which the CLI
+ * permits without an insecure-transport override.
+ */
+function novamira_cli_uses_loopback_http(string $site_url): bool
+{
+    if (strtolower((string) parse_url($site_url, PHP_URL_SCHEME)) !== 'http') {
+        return false;
+    }
+    $host = strtolower(trim((string) parse_url($site_url, PHP_URL_HOST), characters: '[]'));
+    return $host === 'localhost' || $host === '::1' || preg_match('/^127(?:\.\d{1,3}){3}$/', $host) === 1;
+}
+
+/**
+ * The CLI requires HTTPS except on loopback or when WordPress explicitly marks
+ * a development site as local.
+ */
+function novamira_cli_transport_allowed(string $site_url, string $environment): bool
+{
+    $scheme = strtolower((string) parse_url($site_url, PHP_URL_SCHEME));
+    return (
+        $scheme === 'https'
+        || novamira_cli_uses_loopback_http($site_url)
+        || $scheme === 'http'
+        && $environment === 'local'
+    );
+}
+
+/**
+ * A non-loopback local HTTP site needs the CLI's explicit per-command opt-in.
+ */
+function novamira_cli_needs_insecure_http_override(string $site_url, string $environment): bool
+{
+    return (
+        novamira_cli_transport_allowed($site_url, $environment)
+        && strtolower((string) parse_url($site_url, PHP_URL_SCHEME)) === 'http'
+        && !novamira_cli_uses_loopback_http($site_url)
+    );
+}
+
+/**
+ * macOS/Linux installer command for one agent destination.
+ */
+function novamira_cli_unix_install_command(string $agent, string $scope): string
+{
+    if ($scope === 'project') {
+        return implode("\n", [
+            'npm install --global --ignore-scripts @novamira/cli',
+            'DISABLE_TELEMETRY=1 npm_config_ignore_scripts=true npx --yes skills@1.5.18 add "$(npm root --global)/@novamira/cli"'
+                . ' --skill novamira --agent '
+                . novamira_cli_shell_quote($agent)
+                . ' --yes',
+            'novamira doctor --offline',
+        ]);
+    }
+
+    return (
+        'curl -fsSL https://raw.githubusercontent.com/use-novamira/novamira-cli/main/install.sh'
+        . ' | env NOVAMIRA_AGENT='
+        . novamira_cli_shell_quote($agent)
+        . ' sh'
+    );
+}
+
+/**
+ * Windows PowerShell installer command for one agent destination.
+ */
+function novamira_cli_windows_install_command(string $agent, string $scope): string
+{
+    $quoted_agent = "'" . str_replace(search: "'", replace: "''", subject: $agent) . "'";
+    if ($scope === 'project') {
+        return implode("\n", [
+            'npm install --global --ignore-scripts @novamira/cli',
+            '$skillSource = Join-Path (npm root --global) \'@novamira/cli\'',
+            '$env:DISABLE_TELEMETRY = \'1\'; $env:npm_config_ignore_scripts = \'true\'',
+            'npx --yes skills@1.5.18 add $skillSource --skill novamira --agent ' . $quoted_agent . ' --yes',
+            'novamira doctor --offline',
+        ]);
+    }
+
+    return (
+        '$env:NOVAMIRA_AGENT = '
+        . $quoted_agent
+        . '; irm https://raw.githubusercontent.com/use-novamira/novamira-cli/main/install.ps1 | iex'
+    );
+}
+
+/**
+ * Login command after installing the CLI. The flags mirror the two local-site
+ * exceptions already explained elsewhere on the Configuration page.
+ *
+ * @param array<string, string> $environment
+ */
+function novamira_cli_login_command(string $site_url, array $environment = []): string
+{
+    $assignments = [];
+    foreach ($environment as $key => $value) {
+        $assignments[] = $key . '=' . novamira_cli_shell_quote($value);
+    }
+    $prefix = $assignments !== [] ? implode(' ', $assignments) . ' ' : '';
+    return $prefix . 'novamira auth login ' . novamira_cli_shell_quote($site_url);
+}
+
+/**
+ * PowerShell form of the CLI login command.
+ *
+ * @param array<string, string> $environment
+ */
+function novamira_cli_windows_login_command(string $site_url, array $environment = []): string
+{
+    $commands = [];
+    foreach ($environment as $key => $value) {
+        $quoted_value = "'" . str_replace(search: "'", replace: "''", subject: $value) . "'";
+        $commands[] = '$env:' . $key . ' = ' . $quoted_value;
+    }
+    $quoted_url = "'" . str_replace(search: "'", replace: "''", subject: $site_url) . "'";
+    $commands[] = 'novamira auth login ' . $quoted_url;
+    return implode('; ', $commands);
+}
+
+/**
  * True when an IPv4/IPv6 literal is in a private, loopback, link-local, or reserved range.
  */
 function novamira_ip_is_private_or_loopback(string $ip): bool
