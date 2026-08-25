@@ -2,7 +2,7 @@ php-version = "8.0"
 
 [source]
 paths = ["includes", "novamira.php"]
-includes = ["vendor/php-stubs/wordpress-stubs", "vendor/wordpress/mcp-adapter/includes", "vendor/league/oauth2-server/src", "vendor/lcobucci/jwt/src", "vendor/nyholm/psr7/src", "vendor/psr/http-message/src", "vendor/psr/http-factory/src", "vendor/defuse/php-encryption/src", "stubs"]
+includes = ["vendor/php-stubs/wordpress-stubs", "vendor/novamira/mcp-adapter/includes", "vendor/novamira/mcp-adapter/schema", "vendor/league/oauth2-server/src", "vendor/lcobucci/jwt/src", "vendor/nyholm/psr7/src", "vendor/psr/http-message/src", "vendor/psr/http-factory/src", "vendor/defuse/php-encryption/src", "stubs"]
 excludes = [".git/**"]
 
 

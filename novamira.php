@@ -43,7 +43,8 @@ define(constant_name: 'NOVAMIRA_MAX_EXECUTION_TIME', value: 30);
 define('NOVAMIRA_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('NOVAMIRA_SANDBOX_DIR', WP_CONTENT_DIR . '/novamira-sandbox/');
 define(constant_name: 'NOVAMIRA_VENDOR_AUTOLOAD', value: __DIR__ . '/vendor/autoload_packages.php');
-define(constant_name: 'NOVAMIRA_MCP_ADAPTER_CLASS', value: 'WP\\MCP\\Core\\McpAdapter');
+define(constant_name: 'NOVAMIRA_MCP_AUTOLOAD', value: __DIR__ . '/vendor/novamira/mcp-adapter/autoload.php');
+define(constant_name: 'NOVAMIRA_MCP_ADAPTER_CLASS', value: 'Novamira\\Vendor\\WP\\MCP\\Core\\McpAdapter');
 
 /**
  * Load bundled Composer dependencies and report the common source-ZIP install mistake clearly.
@@ -52,7 +53,7 @@ define(constant_name: 'NOVAMIRA_MCP_ADAPTER_CLASS', value: 'WP\\MCP\\Core\\McpAd
  */
 function novamira_load_bundled_dependencies()
 {
-    if (!file_exists(NOVAMIRA_VENDOR_AUTOLOAD)) {
+    if (!file_exists(NOVAMIRA_VENDOR_AUTOLOAD) || !file_exists(NOVAMIRA_MCP_AUTOLOAD)) {
         return new WP_Error('novamira_missing_vendor', __(
             'Novamira is installed without its bundled vendor directory. This usually means the GitHub/source ZIP was installed instead of the Novamira release build ZIP. The MCP Adapter cannot load, so Novamira will not register an MCP endpoint. Install the Novamira release build ZIP before using Novamira.',
             domain: 'novamira',
@@ -61,6 +62,7 @@ function novamira_load_bundled_dependencies()
 
     try {
         require_once NOVAMIRA_VENDOR_AUTOLOAD;
+        require_once NOVAMIRA_MCP_AUTOLOAD;
     } catch (\Throwable $e) {
         return new WP_Error('novamira_autoload_failed', sprintf(
             __(
@@ -202,7 +204,7 @@ function novamira_initialize_mcp_adapter(): bool
     }
 
     try {
-        \WP\MCP\Core\McpAdapter::instance();
+        \Novamira\Vendor\WP\MCP\Core\McpAdapter::instance();
         return true;
     } catch (\Throwable $e) {
         novamira_set_mcp_dependency_error(
@@ -651,12 +653,28 @@ if ($is_enabled && $novamira_abilities_supported) {
 
     // MCP clients commonly leave sessions behind when they disconnect. Keep enough short-lived
     // sessions to avoid the adapter evicting active sessions when its default 32-session cap is reached.
-    add_filter('mcp_adapter_session_max_per_user', static fn(): int => 128);
-    add_filter('mcp_adapter_session_inactivity_timeout', static fn(): int => 4 * HOUR_IN_SECONDS);
+    add_filter('novamira_mcp_adapter_session_max_per_user', static fn(): int => 128);
+    add_filter('novamira_mcp_adapter_session_inactivity_timeout', static fn(): int => 4 * HOUR_IN_SECONDS);
 
     // Brand the default MCP server. Usage instructions are returned from the
     // discover-abilities tool instead of the initialize handshake.
-    add_filter('mcp_adapter_default_server_config', static function (mixed $config): mixed {
+    add_filter(
+        'novamira_mcp_adapter_tool_name',
+        static function (string $tool_name, mixed $ability): string {
+            if (!$ability instanceof \WP_Ability) {
+                return $tool_name;
+            }
+            return match ($ability->get_name()) {
+                'novamira-mcp-adapter/discover-abilities' => 'mcp-adapter-discover-abilities',
+                'novamira-mcp-adapter/get-ability-info' => 'mcp-adapter-get-ability-info',
+                'novamira-mcp-adapter/execute-ability' => 'mcp-adapter-execute-ability',
+                default => $tool_name,
+            };
+        },
+        accepted_args: 2,
+    );
+
+    add_filter('novamira_mcp_adapter_default_server_config', static function (mixed $config): mixed {
         if (!is_array($config)) {
             return $config;
         }
@@ -668,13 +686,13 @@ if ($is_enabled && $novamira_abilities_supported) {
 
     // Register a legacy alias server at the old slug so configs that still point at
     // /wp-json/mcp/mcp-adapter-default-server keep working after the rename.
-    add_action('mcp_adapter_init', callback: 'novamira_register_legacy_mcp_server', priority: 20);
+    add_action('novamira_mcp_adapter_init', callback: 'novamira_register_legacy_mcp_server', priority: 20);
 
     // Register the OAuth-only server at /mcp/novamira-oauth. Keeping the OAuth Bearer flow on a
     // route of its own means the OAuth middleware never touches the canonical /mcp/novamira
     // endpoint that the existing Application Password installs use. Gated on the same transport
     // check as the OAuth bootstrap so the endpoint never exists without its token/authorize peers.
-    add_action('mcp_adapter_init', callback: 'novamira_register_oauth_mcp_server', priority: 20);
+    add_action('novamira_mcp_adapter_init', callback: 'novamira_register_oauth_mcp_server', priority: 20);
 
     // Initialize the optional bundled adapter after the transport-neutral Ability and REST hooks.
     // An adapter failure must not remove those hooks or make the REST Ability surface disappear.
@@ -690,7 +708,7 @@ if ($is_enabled && $novamira_abilities_supported) {
  */
 function novamira_register_legacy_mcp_server(mixed $adapter): void
 {
-    if (!$adapter instanceof \WP\MCP\Core\McpAdapter) {
+    if (!$adapter instanceof \Novamira\Vendor\WP\MCP\Core\McpAdapter) {
         return;
     }
 
@@ -718,7 +736,7 @@ function novamira_register_legacy_mcp_server(mixed $adapter): void
  */
 function novamira_register_oauth_mcp_server(mixed $adapter): void
 {
-    if (!$adapter instanceof \WP\MCP\Core\McpAdapter) {
+    if (!$adapter instanceof \Novamira\Vendor\WP\MCP\Core\McpAdapter) {
         return;
     }
 
@@ -745,7 +763,7 @@ function novamira_register_oauth_mcp_server(mixed $adapter): void
  * neither drifts from the default server's exposed abilities.
  */
 function novamira_create_mirror_mcp_server(
-    \WP\MCP\Core\McpAdapter $adapter,
+    \Novamira\Vendor\WP\MCP\Core\McpAdapter $adapter,
     string $server_id,
     string $route,
     string $name,
@@ -758,13 +776,13 @@ function novamira_create_mirror_mcp_server(
         $name,
         $description,
         'v1.0.0',
-        [\WP\MCP\Transport\HttpTransport::class],
-        \WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
-        \WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
+        [\Novamira\Vendor\WP\MCP\Transport\HttpTransport::class],
+        \Novamira\Vendor\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+        \Novamira\Vendor\WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
         [
-            'mcp-adapter/discover-abilities',
-            'mcp-adapter/get-ability-info',
-            'mcp-adapter/execute-ability',
+            'novamira-mcp-adapter/discover-abilities',
+            'novamira-mcp-adapter/get-ability-info',
+            'novamira-mcp-adapter/execute-ability',
         ],
         novamira_discover_public_abilities('resource'),
         novamira_discover_public_abilities('prompt'),
@@ -837,7 +855,7 @@ if ($novamira_adapter_initialized) {
     // suffix on the error message. The suffix rides inside the string and
     // survives the downstream flatten.
     add_filter(
-        'mcp_adapter_tool_call_result',
+        'novamira_mcp_adapter_tool_call_result',
         static function (mixed $result, array $args, string $tool_name): mixed {
             // Tool names are MCP-sanitized from ability slugs — `/` becomes `-`.
             if ($tool_name !== 'mcp-adapter-execute-ability') {
@@ -909,7 +927,7 @@ if ($novamira_adapter_initialized) {
     }
 }
 add_filter(
-    'mcp_adapter_tool_call_result',
+    'novamira_mcp_adapter_tool_call_result',
     callback: 'novamira_enrich_disabled_ability_error',
     priority: 10,
     accepted_args: 2,

@@ -756,7 +756,7 @@ function novamira_always_on_ability_names(): array
 function novamira_ability_is_hub_protected(string $ability_name): bool
 {
     return (
-        str_starts_with($ability_name, 'mcp-adapter/')
+        str_starts_with($ability_name, 'novamira-mcp-adapter/')
         || in_array($ability_name, novamira_always_on_ability_names(), strict: true)
     );
 }
