@@ -1,11 +1,12 @@
 * New: The Configuration page now includes every AI agent supported by the Novamira CLI installer. Choose an agent once, then see only the connection routes that work for it — Novamira CLI, OAuth, or Application Password — while the four setup steps remain fixed for documentation and support.
+* Tweak: When the OAuth tables are missing, the Troubleshoot page now names what is actually stopping the installer — AI Abilities being off, a domain lock, or the site not being served over HTTPS — instead of suggesting a deactivate and reactivate cycle that could not have helped.
+* Tweak: Updated the bundled MCP Adapter to version 0.6.1.
+* Tweak: Recurring admin notices now use a consistent close button and stay dismissed for each administrator, while critical setup errors remain visible.
 * Fix: Anything a sandbox file prints while it loads is now discarded instead of being added to the response being built at the time. A single leftover debug line in a sandbox file used to appear ahead of the JSON on the MCP and OAuth endpoints, which broke every AI client's connection with a parse error, and showed up on front-end pages and admin screens too. With WP_DEBUG on, the discarded text is written to the PHP error log along with the file that printed it.
 * Fix: A sandbox file that stops with an error no longer ends the whole request. The remaining sandbox files still load, WordPress finishes loading, and safe mode switches on from the next request as before — where previously one broken sandbox file could surface as an unrelated fatal error elsewhere in WordPress.
 * Fix: AI clients that support both device authorization and browser sign-in, such as Visual Studio Code, can now connect over OAuth. They were registered as device-only clients, which discarded the redirect address they needed and left them refused at sign-in with "This application is registered for device authorization."
 * Fix: The admin warning for detected connection problems now opens Troubleshoot directly instead of sending administrators to Configuration.
-* Tweak: When the OAuth tables are missing, the Troubleshoot page now names what is actually stopping the installer — AI Abilities being off, a domain lock, or the site not being served over HTTPS — instead of suggesting a deactivate and reactivate cycle that could not have helped.
-* Tweak: Updated the bundled MCP Adapter to version 0.6.1.
-* Tweak: Recurring admin notices now use a consistent close button and stay dismissed for each administrator, while critical setup errors remain visible.
+* Fix: The Block Editor Queue can now finalize third-party blocks in Chromium on WordPress 7.1, where the isolated editor previously caused registered block libraries to appear unavailable.
 
 v1.11.4 - 2026/08/13
 * New: Before deactivating Novamira, the review page now shows stored Novamira Pro memories, user-added skills, and Chat sessions. Choose whether to preserve or permanently delete each data type when removing the plugin.

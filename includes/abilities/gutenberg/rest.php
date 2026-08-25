@@ -481,12 +481,22 @@ function rest_complete_item(WP_REST_Request $request): WP_REST_Response|WP_Error
 
     $lease_owner = is_scalar($params['lease_owner'] ?? null) ? (string) $params['lease_owner'] : '';
     $content = is_scalar($params['content'] ?? null) ? (string) $params['content'] : '';
+    $serialization_runtime = is_scalar($params['serialization_runtime'] ?? null)
+        ? (string) $params['serialization_runtime']
+        : '';
+    $serialization_runtime_reason = is_scalar($params['serialization_runtime_reason'] ?? null)
+        ? (string) $params['serialization_runtime_reason']
+        : '';
 
     return rest_response(complete_item(
         rest_int_param($request, name: 'item_id'),
         $lease_owner,
         $content,
         $params['validations'] ?? null,
+        [
+            'runtime' => $serialization_runtime,
+            'reason' => $serialization_runtime_reason,
+        ],
     ));
 }
 
@@ -500,12 +510,22 @@ function rest_fail_item(WP_REST_Request $request): WP_REST_Response|WP_Error
 
     $lease_owner = is_scalar($params['lease_owner'] ?? null) ? (string) $params['lease_owner'] : '';
     $message = is_scalar($params['message'] ?? null) ? (string) $params['message'] : '';
+    $serialization_runtime = is_scalar($params['serialization_runtime'] ?? null)
+        ? (string) $params['serialization_runtime']
+        : '';
+    $serialization_runtime_reason = is_scalar($params['serialization_runtime_reason'] ?? null)
+        ? (string) $params['serialization_runtime_reason']
+        : '';
 
     return rest_response(fail_item(
         rest_int_param($request, name: 'item_id'),
         $lease_owner,
         $params['errors'] ?? null,
         message: $message,
+        serialization: [
+            'runtime' => $serialization_runtime,
+            'reason' => $serialization_runtime_reason,
+        ],
     ));
 }
 

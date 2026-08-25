@@ -61,7 +61,15 @@ const META_VALIDATION_ERRORS = '_novamira_gb_validation_errors';
 
 const META_FINALIZATION_MODE = '_novamira_gb_finalization_mode';
 
+const META_SERIALIZATION_RUNTIME = '_novamira_gb_serialization_runtime';
+
+const META_SERIALIZATION_RUNTIME_REASON = '_novamira_gb_serialization_runtime_reason';
+
 const META_FINALIZED_CONTENT = '_novamira_gb_finalized_content';
+
+const SERIALIZATION_RUNTIME_IFRAME = 'iframe';
+
+const SERIALIZATION_RUNTIME_FALLBACK = 'fallback';
 
 const STATUS_DRAFT = 'draft';
 
@@ -1102,6 +1110,8 @@ function shape_item(WP_Post $item): array
         'change_summary' => $item->post_excerpt,
         'validation_errors' => validation_errors($item->ID),
         'finalization_mode' => meta_string($item->ID, META_FINALIZATION_MODE),
+        'serialization_runtime' => meta_string($item->ID, META_SERIALIZATION_RUNTIME),
+        'serialization_runtime_reason' => meta_string($item->ID, META_SERIALIZATION_RUNTIME_REASON),
     ];
 }
 
@@ -1737,9 +1747,15 @@ function fail_prepared_item(WP_Post $item, mixed $errors, string $message): WP_E
 
 /**
  * @param mixed $validations
+ * @param array{runtime?: string, reason?: string} $serialization
  */
-function complete_item(int $item_id, string $lease_owner, string $content, mixed $validations): array|WP_Error
-{
+function complete_item(
+    int $item_id,
+    string $lease_owner,
+    string $content,
+    mixed $validations,
+    array $serialization = [],
+): array|WP_Error {
     $item = find_item($item_id);
     if (!$item instanceof WP_Post) {
         return new WP_Error('gutenberg_item_not_found', sprintf('Gutenberg item %d was not found.', $item_id), [
@@ -1753,12 +1769,23 @@ function complete_item(int $item_id, string $lease_owner, string $content, mixed
         ]);
     }
 
+    $serialization_runtime = $serialization['runtime'] ?? '';
+    $serialization_runtime_reason = $serialization['reason'] ?? '';
+    if (!valid_serialization_runtime($serialization_runtime, $serialization_runtime_reason)) {
+        return new WP_Error(
+            'gutenberg_invalid_serialization_runtime',
+            'The Gutenberg serialization runtime must be iframe or fallback.',
+            ['status' => 400],
+        );
+    }
+
     if (validation_payload_has_failures($validations)) {
         return fail_item(
             $item->ID,
             $lease_owner,
             $validations,
             message: 'JS validation failed; canonical content was not written.',
+            serialization: $serialization,
         );
     }
 
@@ -1791,6 +1818,7 @@ function complete_item(int $item_id, string $lease_owner, string $content, mixed
     set_status($item->ID, STATUS_PREPARED);
     clear_lease($item->ID);
     update_post_meta($item->ID, META_VALIDATION_ERRORS, []);
+    store_serialization_runtime($item->ID, $serialization_runtime, $serialization_runtime_reason);
 
     $batch = find_batch($item->post_parent);
     $batch_result = $batch instanceof WP_Post ? finish_batch_if_complete($batch) : ['done' => true, 'batch' => null];
@@ -1808,9 +1836,15 @@ function complete_item(int $item_id, string $lease_owner, string $content, mixed
 
 /**
  * @param mixed $errors
+ * @param array{runtime?: string, reason?: string} $serialization
  */
-function fail_item(int $item_id, string $lease_owner, mixed $errors, string $message = ''): array|WP_Error
-{
+function fail_item(
+    int $item_id,
+    string $lease_owner,
+    mixed $errors,
+    string $message = '',
+    array $serialization = [],
+): array|WP_Error {
     $item = find_item($item_id);
     if (!$item instanceof WP_Post) {
         return new WP_Error('gutenberg_item_not_found', sprintf('Gutenberg item %d was not found.', $item_id), [
@@ -1824,9 +1858,20 @@ function fail_item(int $item_id, string $lease_owner, mixed $errors, string $mes
         ]);
     }
 
+    $serialization_runtime = $serialization['runtime'] ?? '';
+    $serialization_runtime_reason = $serialization['reason'] ?? '';
+    if (!valid_serialization_runtime($serialization_runtime, $serialization_runtime_reason)) {
+        return new WP_Error(
+            'gutenberg_invalid_serialization_runtime',
+            'The Gutenberg serialization runtime must be iframe or fallback.',
+            ['status' => 400],
+        );
+    }
+
     set_status($item->ID, STATUS_FAILED);
     clear_lease($item->ID);
     update_post_meta($item->ID, META_VALIDATION_ERRORS, compact_validation_errors($errors, $item));
+    store_serialization_runtime($item->ID, $serialization_runtime, $serialization_runtime_reason);
     mark_batch_failed(
         $item->post_parent,
         $message !== '' ? $message : 'One or more Gutenberg items failed validation.',
@@ -1840,6 +1885,33 @@ function fail_item(int $item_id, string $lease_owner, mixed $errors, string $mes
         'batch' => $batch instanceof WP_Post ? shape_batch($batch) : null,
         'done' => true,
     ];
+}
+
+function valid_serialization_runtime(string $serialization_runtime, string $serialization_runtime_reason): bool
+{
+    if (!in_array(
+        $serialization_runtime,
+        ['', SERIALIZATION_RUNTIME_IFRAME, SERIALIZATION_RUNTIME_FALLBACK],
+        strict: true,
+    )) {
+        return false;
+    }
+
+    return $serialization_runtime !== '' || $serialization_runtime_reason === '';
+}
+
+function store_serialization_runtime(int $item_id, string $serialization_runtime, string $reason): void
+{
+    if ($serialization_runtime === '') {
+        return;
+    }
+
+    update_post_meta($item_id, META_SERIALIZATION_RUNTIME, $serialization_runtime);
+    update_post_meta(
+        $item_id,
+        META_SERIALIZATION_RUNTIME_REASON,
+        substr(sanitize_text_field($reason), offset: 0, length: 1000),
+    );
 }
 
 function mark_batch_failed(int $batch_id, string $message): void

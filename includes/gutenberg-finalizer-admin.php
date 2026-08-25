@@ -40,6 +40,12 @@ function register_gutenberg_finalizer_menu(): void
 
 function enqueue_gutenberg_finalizer_assets(string $hook_suffix): void
 {
+    if (is_gutenberg_finalizer_editor_request()) {
+        enqueue_gutenberg_finalizer_editor_bridge();
+
+        return;
+    }
+
     if (!is_gutenberg_finalizer_request()) {
         return;
     }
@@ -47,6 +53,275 @@ function enqueue_gutenberg_finalizer_assets(string $hook_suffix): void
     enqueue_gutenberg_finalizer_runtime_assets();
 
     unset($hook_suffix);
+}
+
+function enqueue_gutenberg_finalizer_editor_bridge(): void
+{
+    wp_register_script(
+        handle: 'novamira-gutenberg-finalizer-editor-bridge',
+        src: false,
+        deps: ['wp-blocks'],
+        ver: NOVAMIRA_VERSION,
+        args: true,
+    );
+    wp_add_inline_script(handle: 'novamira-gutenberg-finalizer-editor-bridge', data: <<<'JS'
+        ( function () {
+            const parentOrigin = window.location.origin;
+            const sleep = ( milliseconds ) => new Promise( ( resolve ) => {
+                window.setTimeout( resolve, milliseconds );
+            } );
+            const postToParent = ( data ) => window.parent.postMessage( data, parentOrigin );
+
+            const collectBlockRefs = ( blocks, prefix = '' ) => {
+                const refs = [];
+                ( Array.isArray( blocks ) ? blocks : [] ).forEach( ( block, index ) => {
+                    if ( ! block || typeof block !== 'object' ) {
+                        return;
+                    }
+                    const pathText = prefix === '' ? String( index ) : `${ prefix }.${ index }`;
+                    if ( typeof block.name === 'string' && block.name !== '' ) {
+                        refs.push( { name: block.name, path: pathText } );
+                    }
+                    refs.push( ...collectBlockRefs( block.innerBlocks || [], pathText ) );
+                } );
+                return refs;
+            };
+
+            const missingRegistrationError = ( missingRefs ) => {
+                const names = Array.from( new Set( missingRefs.map( ( ref ) => ref.name ) ) );
+                const error = new Error(
+                    `The editor iframe did not register required block types: ${ names.join( ', ' ) }.`
+                );
+                error.code = 'missing_block_registration';
+                error.missingBlockRefs = missingRefs;
+                return error;
+            };
+
+            const waitForBlockRegistrations = async ( blocksApi, refs ) => {
+                const deadline = Date.now() + 30000;
+                let missingRefs = refs.filter( ( ref ) => ! blocksApi.getBlockType( ref.name ) );
+                while ( missingRefs.length && Date.now() < deadline ) {
+                    await sleep( 100 );
+                    missingRefs = refs.filter( ( ref ) => ! blocksApi.getBlockType( ref.name ) );
+                }
+                if ( missingRefs.length ) {
+                    throw missingRegistrationError( missingRefs );
+                }
+            };
+
+            const toBlock = ( blocksApi, spec ) => blocksApi.createBlock(
+                spec.name,
+                spec.attributes || {},
+                ( spec.innerBlocks || [] ).map( ( innerSpec ) => toBlock( blocksApi, innerSpec ) )
+            );
+
+            const issueMessage = ( issue ) => {
+                if ( ! issue ) {
+                    return 'Block validation failed.';
+                }
+                if ( typeof issue === 'string' ) {
+                    return issue;
+                }
+                if ( issue.message ) {
+                    return issue.message;
+                }
+                if ( Array.isArray( issue.args ) ) {
+                    return issue.args.map( String ).join( ' ' );
+                }
+                return 'Block validation failed.';
+            };
+
+            const blockName = ( block ) => block.name || block.blockName || '';
+
+            const validateBlocks = ( blocksApi, blocks, prefix = '' ) => {
+                const validations = [];
+                blocks.forEach( ( block, index ) => {
+                    const pathText = prefix === '' ? String( index ) : `${ prefix }.${ index }`;
+                    let result;
+                    try {
+                        result = blocksApi.validateBlock( block );
+                    } catch ( error ) {
+                        result = [ false, [ { message: error.message || String( error ) } ] ];
+                    }
+                    const isValid = Array.isArray( result ) ? result[ 0 ] === true : result === true;
+                    const issues = Array.isArray( result ) ? ( result[ 1 ] || [] ) : [];
+                    validations.push( {
+                        name: blockName( block ),
+                        path: pathText,
+                        isValid,
+                        issues: issues.map( ( issue ) => ( {
+                            message: issueMessage( issue ).replace( /\s+/g, ' ' ).trim().slice( 0, 300 ),
+                        } ) ),
+                    } );
+                    if ( Array.isArray( block.innerBlocks ) && block.innerBlocks.length ) {
+                        validations.push( ...validateBlocks( blocksApi, block.innerBlocks, pathText ) );
+                    }
+                } );
+                return validations;
+            };
+
+            const mountAndSettleBlocks = async ( created ) => {
+                const wpApi = window.wp;
+                if ( ! wpApi || ! wpApi.data || ! wpApi.blocks ) {
+                    return null;
+                }
+
+                const blockEditorDispatch = wpApi.data.dispatch( 'core/block-editor' );
+                const blockEditorSelect = wpApi.data.select( 'core/block-editor' );
+                if (
+                    ! blockEditorDispatch
+                    || ! blockEditorSelect
+                    || typeof blockEditorDispatch.resetBlocks !== 'function'
+                    || typeof blockEditorSelect.getBlocks !== 'function'
+                ) {
+                    return null;
+                }
+
+                const editorSelect = wpApi.data.select( 'core/editor' );
+                const editorDispatch = wpApi.data.dispatch( 'core/editor' );
+                const hydrationDeadline = Date.now() + 30000;
+                while ( Date.now() < hydrationDeadline ) {
+                    const ready = editorSelect && typeof editorSelect.__unstableIsEditorReady === 'function'
+                        ? editorSelect.__unstableIsEditorReady()
+                        : blockEditorSelect.getBlocks().length > 0;
+                    if ( ready ) {
+                        break;
+                    }
+                    await sleep( 200 );
+                }
+
+                try {
+                    editorDispatch.lockPostAutosaving( 'novamira-gb-finalizer' );
+                    editorDispatch.lockPostSaving( 'novamira-gb-finalizer' );
+                } catch ( lockError ) {
+                    // Older editors may lack the locks. The Queue still owns persistence.
+                }
+
+                if ( editorDispatch && typeof editorDispatch.resetEditorBlocks === 'function' ) {
+                    editorDispatch.resetEditorBlocks( created );
+                } else {
+                    blockEditorDispatch.resetBlocks( created );
+                }
+
+                const sameTopLevelNames = ( currentBlocks ) => Array.isArray( currentBlocks )
+                    && currentBlocks.length === created.length
+                    && currentBlocks.every( ( block, index ) => block && block.name === created[ index ].name );
+
+                const applyDeadline = Date.now() + 5000;
+                let applied = false;
+                while ( Date.now() < applyDeadline ) {
+                    if ( sameTopLevelNames( blockEditorSelect.getBlocks() ) ) {
+                        applied = true;
+                        break;
+                    }
+                    await sleep( 100 );
+                }
+                if ( ! applied ) {
+                    return null;
+                }
+
+                const settleDeadline = Date.now() + 5000;
+                let previousSnapshot = '';
+                while ( Date.now() < settleDeadline ) {
+                    await sleep( 250 );
+                    const snapshot = wpApi.blocks.serialize( blockEditorSelect.getBlocks() );
+                    if ( snapshot !== '' && snapshot === previousSnapshot ) {
+                        break;
+                    }
+                    previousSnapshot = snapshot;
+                }
+
+                const settled = blockEditorSelect.getBlocks();
+                return sameTopLevelNames( settled ) ? settled : null;
+            };
+
+            const serializeBlocks = async ( blockSpecs ) => {
+                const blocksApi = window.wp && window.wp.blocks;
+                if ( ! blocksApi ) {
+                    throw new Error( 'The editor iframe block API is unavailable.' );
+                }
+
+                await waitForBlockRegistrations( blocksApi, collectBlockRefs( blockSpecs ) );
+                const created = blockSpecs.map( ( spec ) => toBlock( blocksApi, spec ) );
+                const settled = await mountAndSettleBlocks( created );
+                const content = blocksApi.serialize( settled || created );
+                const parsed = blocksApi.parse( content );
+                const validations = validateBlocks( blocksApi, parsed );
+                const errors = [];
+                validations.forEach( ( validation ) => {
+                    if ( validation.isValid ) {
+                        return;
+                    }
+                    const issues = validation.issues.length
+                        ? validation.issues
+                        : [ { message: 'Block validation failed.' } ];
+                    issues.forEach( ( issue ) => errors.push( {
+                        block_name: validation.name || '',
+                        path: validation.path || '',
+                        category: 'validation',
+                        code: 'block_validation_failed',
+                        message: issue.message || 'Block validation failed.',
+                    } ) );
+                } );
+
+                return { content, validations, errors };
+            };
+
+            window.addEventListener( 'message', async ( event ) => {
+                if (
+                    event.source !== window.parent
+                    || event.origin !== parentOrigin
+                    || ! event.data
+                    || event.data.type !== 'novamira-gb-serialize-request'
+                ) {
+                    return;
+                }
+
+                const requestId = String( event.data.requestId || '' );
+                if ( requestId === '' ) {
+                    return;
+                }
+
+                try {
+                    const result = await serializeBlocks( Array.isArray( event.data.blocks ) ? event.data.blocks : [] );
+                    postToParent( {
+                        type: 'novamira-gb-serialize-response',
+                        requestId,
+                        ok: true,
+                        result,
+                    } );
+                } catch ( error ) {
+                    postToParent( {
+                        type: 'novamira-gb-serialize-response',
+                        requestId,
+                        ok: false,
+                        error: {
+                            code: ( error && error.code ) || 'iframe_bridge_exception',
+                            message: error && error.message ? error.message : String( error ),
+                            missingBlockRefs: error && Array.isArray( error.missingBlockRefs )
+                                ? error.missingBlockRefs
+                                : [],
+                        },
+                    } );
+                }
+            } );
+
+            postToParent( {
+                type: 'novamira-gb-editor-diagnostic',
+                href: window.location.href,
+                origin: window.location.origin,
+                documentDomain: document.domain || '',
+                crossOriginIsolated: window.crossOriginIsolated === true,
+                originAgentCluster: window.originAgentCluster === true,
+                ancestorOrigin: window.location.ancestorOrigins && window.location.ancestorOrigins.length
+                    ? window.location.ancestorOrigins[ 0 ]
+                    : '',
+                hasBlocksApi: !! ( window.wp && window.wp.blocks ),
+                hasSerializerBridge: true,
+            } );
+        } )();
+        JS);
+    wp_enqueue_script(handle: 'novamira-gutenberg-finalizer-editor-bridge');
 }
 
 function enqueue_gutenberg_finalizer_runtime_assets(): void
@@ -77,6 +352,11 @@ function enqueue_gutenberg_finalizer_runtime_assets(): void
 function is_gutenberg_finalizer_request(): bool
 {
     return ($_GET['page'] ?? '') === gutenberg_finalizer_page_slug();
+}
+
+function is_gutenberg_finalizer_editor_request(): bool
+{
+    return ($_GET['novamira_gb_finalizer'] ?? '') === '1';
 }
 
 function render_gutenberg_finalizer_page(): void
@@ -226,8 +506,23 @@ function gutenberg_finalizer_script(): string
             let editorFrameLoadPromise = Promise.resolve();
             let frameAccessError = null;
             let fallbackWarning = '';
+            let editorFrameDiagnostic = null;
 
             const path = ( suffix ) => `/novamira/v1${ suffix }`;
+
+            window.addEventListener( 'message', ( event ) => {
+                if (
+                    ! editorFrame
+                    || event.source !== editorFrame.contentWindow
+                    || event.origin !== window.location.origin
+                    || ! event.data
+                    || event.data.type !== 'novamira-gb-editor-diagnostic'
+                ) {
+                    return;
+                }
+
+                editorFrameDiagnostic = event.data;
+            } );
 
             const setNotice = ( type, message ) => {
                 if ( ! notice ) {
@@ -342,6 +637,7 @@ function gutenberg_finalizer_script(): string
                 }
 
                 editorFrameUrl = nextUrl;
+                editorFrameDiagnostic = null;
                 editorFrameLoadPromise = new Promise( ( resolve, reject ) => {
                     let settled = false;
                     const cleanup = () => {
@@ -425,9 +721,9 @@ function gutenberg_finalizer_script(): string
             const crossOriginFrameError = ( error ) => {
                 const detail = error && error.message ? ` (${ error.message })` : '';
                 const frameError = new Error(
-                    'The hidden editor iframe loaded in a different origin, so its block editor runtime cannot be read. '
-                    + 'This usually means the editor URL redirected to another host or scheme, or the iframe was blocked '
-                    + `by an X-Frame-Options / Content-Security-Policy header, a proxy, or a browser extension.${ detail }`
+                    'The hidden editor iframe browsing context is isolated from the Queue page, so its block editor '
+                    + 'runtime cannot be read directly. This can happen even when both documents report the same origin, '
+                    + `for example when the browser applies cross-origin isolation or origin-keying policy.${ detail }`
                 );
                 frameError.code = 'editor_frame_cross_origin';
                 return frameError;
@@ -510,38 +806,96 @@ function gutenberg_finalizer_script(): string
                 }
             };
 
-            const loadEditorBlocksApi = async ( editorUrl, blocks ) => {
-                const refs = collectBlockRefs( blocks );
-                let frameError = null;
-
-                try {
-                    await navigateEditorFrame( editorUrl );
-                    const blocksApi = await waitForEditorBlocksApi();
-                    await waitForBlockRegistrations( blocksApi, refs );
-                    return blocksApi;
-                } catch ( error ) {
-                    frameError = error;
+            const editorFrameDiagnosticSummary = () => {
+                if ( ! editorFrameDiagnostic ) {
+                    return 'Editor diagnostic unavailable.';
                 }
 
-                const fallbackApi = localBlocksApi();
-                if ( ! fallbackApi ) {
-                    throw frameError;
+                return 'Editor diagnostic: '
+                    + `href=${ String( editorFrameDiagnostic.href || '' ) }; `
+                    + `origin=${ String( editorFrameDiagnostic.origin || '' ) }; `
+                    + `document.domain=${ String( editorFrameDiagnostic.documentDomain || '' ) }; `
+                    + `crossOriginIsolated=${ editorFrameDiagnostic.crossOriginIsolated === true ? 'true' : 'false' }; `
+                    + `originAgentCluster=${ editorFrameDiagnostic.originAgentCluster === true ? 'true' : 'false' }; `
+                    + `ancestorOrigin=${ String( editorFrameDiagnostic.ancestorOrigin || '' ) }; `
+                    + `parentDocument.domain=${ String( document.domain || '' ) }; `
+                    + `parentCrossOriginIsolated=${ window.crossOriginIsolated === true ? 'true' : 'false' }; `
+                    + `parentOriginAgentCluster=${ window.originAgentCluster === true ? 'true' : 'false' }; `
+                    + `wp.blocks=${ editorFrameDiagnostic.hasBlocksApi === true ? 'available' : 'missing' }; `
+                    + `serializerBridge=${ editorFrameDiagnostic.hasSerializerBridge === true ? 'available' : 'missing' }.`;
+            };
+
+            const waitForEditorSerializerBridge = async () => {
+                const startedAt = Date.now();
+                while ( Date.now() - startedAt < editorLoadTimeoutMs ) {
+                    if ( editorFrameDiagnostic && editorFrameDiagnostic.hasSerializerBridge === true ) {
+                        return;
+                    }
+                    await sleep( 100 );
                 }
 
-                const missingRefs = refs.filter( ( ref ) => ! fallbackApi.getBlockType( ref.name ) );
-                if ( missingRefs.length ) {
-                    // Blocks the iframe would have registered, such as plugin or theme blocks, are
-                    // unavailable here. Report the missing names rather than the frame failure.
-                    throw frameError && frameError.code === 'missing_block_registration'
-                        ? frameError
-                        : missingRegistrationError( missingRefs );
+                throw new Error( 'The hidden editor iframe serializer bridge did not become available.' );
+            };
+
+            const serializeThroughEditorFrame = async ( blocks ) => {
+                await waitForEditorSerializerBridge();
+
+                const frameWindow = editorFrame && editorFrame.contentWindow;
+                if ( ! frameWindow ) {
+                    throw new Error( 'The hidden editor iframe window is unavailable.' );
                 }
 
-                fallbackWarning = 'The hidden block editor iframe could not be used, so blocks were serialized with the '
-                    + 'block runtime of this page. Only blocks registered on this page are supported. Reason: '
-                    + ( frameError && frameError.message ? frameError.message : 'unknown.' );
+                const requestId = `${ Date.now() }-${ Math.random().toString( 36 ).slice( 2 ) }`;
+                return new Promise( ( resolve, reject ) => {
+                    let settled = false;
+                    const cleanup = () => {
+                        window.removeEventListener( 'message', onMessage );
+                        window.clearTimeout( timeoutId );
+                    };
+                    const onMessage = ( event ) => {
+                        if (
+                            event.source !== frameWindow
+                            || event.origin !== window.location.origin
+                            || ! event.data
+                            || event.data.type !== 'novamira-gb-serialize-response'
+                            || event.data.requestId !== requestId
+                        ) {
+                            return;
+                        }
 
-                return fallbackApi;
+                        settled = true;
+                        cleanup();
+                        if ( event.data.ok === true && event.data.result ) {
+                            resolve( event.data.result );
+                            return;
+                        }
+
+                        const responseError = event.data.error || {};
+                        const error = new Error(
+                            responseError.message || 'The hidden editor iframe serializer bridge failed.'
+                        );
+                        error.code = responseError.code || 'iframe_bridge_exception';
+                        error.missingBlockRefs = Array.isArray( responseError.missingBlockRefs )
+                            ? responseError.missingBlockRefs
+                            : [];
+                        reject( error );
+                    };
+                    const timeoutId = window.setTimeout( () => {
+                        if ( settled ) {
+                            return;
+                        }
+                        settled = true;
+                        cleanup();
+                        reject( new Error( 'The hidden editor iframe serializer bridge timed out.' ) );
+                    }, editorLoadTimeoutMs + Number( config.mountSettleTimeoutMs || 5000 ) );
+
+                    window.addEventListener( 'message', onMessage );
+                    frameWindow.postMessage( {
+                        type: 'novamira-gb-serialize-request',
+                        requestId,
+                        blocks,
+                    }, window.location.origin );
+                } );
             };
 
             const toBlock = ( blocksApi, spec ) => blocksApi.createBlock(
@@ -675,9 +1029,7 @@ function gutenberg_finalizer_script(): string
                 }
             };
 
-            const serializeJob = async ( job ) => {
-                const blocks = job.blocks || [];
-                const blocksApi = await loadEditorBlocksApi( job.editor_url || '', blocks );
+            const serializeWithBlocksApi = async ( blocksApi, blocks ) => {
                 const created = blocks.map( ( spec ) => toBlock( blocksApi, spec ) );
                 const settled = await mountAndSettleBlocks( created );
                 const content = blocksApi.serialize( settled || created );
@@ -694,13 +1046,94 @@ function gutenberg_finalizer_script(): string
                 return { content, validations, errors };
             };
 
-            const failCurrentItem = async ( itemId, errors, message ) => apiFetch( {
+            const errorMessage = ( error, fallback ) => error && error.message ? error.message : fallback;
+
+            const serializeJob = async ( job ) => {
+                const blocks = job.blocks || [];
+                const refs = collectBlockRefs( blocks );
+                let frameError = null;
+                let bridgeError = null;
+
+                try {
+                    await navigateEditorFrame( job.editor_url || '' );
+                    const blocksApi = await waitForEditorBlocksApi();
+                    await waitForBlockRegistrations( blocksApi, refs );
+                    const result = await serializeWithBlocksApi( blocksApi, blocks );
+                    return {
+                        ...result,
+                        serializationRuntime: 'iframe',
+                        serializationRuntimeReason: '',
+                    };
+                } catch ( error ) {
+                    frameError = error;
+                }
+
+                try {
+                    const result = await serializeThroughEditorFrame( blocks );
+                    return {
+                        content: typeof result.content === 'string' ? result.content : '',
+                        validations: Array.isArray( result.validations ) ? result.validations : [],
+                        errors: Array.isArray( result.errors ) ? result.errors : [],
+                        serializationRuntime: 'iframe',
+                        serializationRuntimeReason: errorMessage(
+                            frameError,
+                            'Direct iframe access was unavailable.'
+                        ) + ' Recovered through the same-origin postMessage serializer bridge. '
+                            + editorFrameDiagnosticSummary(),
+                    };
+                } catch ( error ) {
+                    bridgeError = error;
+                }
+
+                const frameReason = errorMessage( frameError, 'Direct iframe access was unavailable.' );
+                const bridgeReason = errorMessage( bridgeError, 'The iframe serializer bridge was unavailable.' );
+                const serializationRuntimeReason = `${ frameReason } Bridge: ${ bridgeReason } `
+                    + editorFrameDiagnosticSummary();
+                const fallbackApi = localBlocksApi();
+                if ( ! fallbackApi ) {
+                    const error = bridgeError || frameError || new Error( 'No block serialization runtime is available.' );
+                    error.serializationRuntime = 'fallback';
+                    error.serializationRuntimeReason = serializationRuntimeReason;
+                    throw error;
+                }
+
+                const missingRefs = refs.filter( ( ref ) => ! fallbackApi.getBlockType( ref.name ) );
+                if ( missingRefs.length ) {
+                    const registrationError = bridgeError && bridgeError.code === 'missing_block_registration'
+                        ? bridgeError
+                        : missingRegistrationError( missingRefs );
+                    registrationError.serializationRuntime = 'fallback';
+                    registrationError.serializationRuntimeReason = serializationRuntimeReason;
+                    throw registrationError;
+                }
+
+                fallbackWarning = 'The hidden block editor iframe and its serializer bridge could not be used, so blocks '
+                    + 'were serialized with the block runtime of this page. Only blocks registered on this page are '
+                    + `supported. Reason: ${ serializationRuntimeReason }`;
+
+                const result = await serializeWithBlocksApi( fallbackApi, blocks );
+                return {
+                    ...result,
+                    serializationRuntime: 'fallback',
+                    serializationRuntimeReason,
+                };
+            };
+
+            const failCurrentItem = async (
+                itemId,
+                errors,
+                message,
+                serializationRuntime = '',
+                serializationRuntimeReason = ''
+            ) => apiFetch( {
                 path: path( `/gutenberg/items/${ itemId }/fail` ),
                 method: 'POST',
                 data: {
                     lease_owner: leaseOwner,
                     errors,
                     message,
+                    serialization_runtime: serializationRuntime,
+                    serialization_runtime_reason: serializationRuntimeReason,
                 },
             } );
 
@@ -771,7 +1204,13 @@ function gutenberg_finalizer_script(): string
                         try {
                             const result = await serializeJob( job );
                             if ( result.errors.length ) {
-                                await failCurrentItem( item.item_id, result.errors, 'JS validation failed; canonical content was not written.' );
+                                await failCurrentItem(
+                                    item.item_id,
+                                    result.errors,
+                                    'JS validation failed; canonical content was not written.',
+                                    result.serializationRuntime,
+                                    result.serializationRuntimeReason
+                                );
                                 setProgress( 'Something needs attention. Return to the agent.' );
                                 setNotice( 'error', 'Something needs attention. Return to the agent.' );
                                 break;
@@ -784,6 +1223,8 @@ function gutenberg_finalizer_script(): string
                                     lease_owner: leaseOwner,
                                     content: result.content,
                                     validations: result.validations,
+                                    serialization_runtime: result.serializationRuntime,
+                                    serialization_runtime_reason: result.serializationRuntimeReason,
                                 },
                             } );
                             processed += 1;
@@ -813,7 +1254,9 @@ function gutenberg_finalizer_script(): string
                                 errorItems,
                                 isMissingRegistration
                                     ? 'One or more Gutenberg blocks were not registered in the block editor runtime; canonical content was not written.'
-                                    : 'The browser block serializer threw an exception.'
+                                    : 'The browser block serializer threw an exception.',
+                                error && error.serializationRuntime ? error.serializationRuntime : '',
+                                error && error.serializationRuntimeReason ? error.serializationRuntimeReason : ''
                             );
                             setProgress( 'Something needs attention. Return to the agent.' );
                             setNotice( 'error', 'Something needs attention. Return to the agent.' );
