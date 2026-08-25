@@ -684,8 +684,8 @@ function novamira_oauth_codex_desktop_steps(string $mcp_name, string $mcp_url): 
 {
     return [
         [
-            'title' => __('Open MCP servers', domain: 'novamira'),
-            'body' => __('In ChatGPT Desktop, open Settings and select MCP servers.', domain: 'novamira'),
+            'title' => __('Open MCP settings', domain: 'novamira'),
+            'body' => __('In ChatGPT Desktop, open Settings > Plugins > MCP.', domain: 'novamira'),
         ],
         [
             'title' => __('Add a server name', domain: 'novamira'),
