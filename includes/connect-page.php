@@ -3356,7 +3356,7 @@ function novamira_render_connect_page(): void
                     ); ?>
                     <a href="<?php echo
                         esc_url(admin_url('admin.php?page=novamira-troubleshoot'))
-                    ; ?>"><?php esc_html_e('Not working? Run diagnostics', domain: 'novamira'); ?></a>
+                    ; ?>"><?php esc_html_e('Not working? Open Troubleshoot', domain: 'novamira'); ?></a>
                 </p>
             </div>
         <?php endif; ?>
