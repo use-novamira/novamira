@@ -74,8 +74,8 @@ function novamira_register_ability_categories(): void
         'description' => __('Temporary browser access to WordPress admin.', domain: 'novamira'),
     ]);
 
-    if (!wp_has_ability_category('mcp-adapter')) {
-        wp_register_ability_category('mcp-adapter', [
+    if (!wp_has_ability_category('novamira-mcp-adapter')) {
+        wp_register_ability_category('novamira-mcp-adapter', [
             'label' => __('MCP Adapter', domain: 'novamira'),
             'description' => __('Meta-abilities for MCP protocol bridging.', domain: 'novamira'),
         ]);

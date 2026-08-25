@@ -33,7 +33,7 @@ function novamira_discover_abilities_permission(): bool|\WP_Error
     }
 
     /** @var string $capability */
-    $capability = apply_filters('mcp_adapter_discover_abilities_capability', value: 'read');
+    $capability = apply_filters('novamira_mcp_adapter_discover_abilities_capability', value: 'read');
     if (!current_user_can($capability)) {
         return new \WP_Error('insufficient_capability', sprintf('User lacks required capability: %s', $capability));
     }
@@ -45,7 +45,7 @@ function novamira_discover_abilities_permission(): bool|\WP_Error
 function novamira_get_ability_info_permission(mixed $input = []): bool|\WP_Error
 {
     $arguments = is_array($input) ? $input : [];
-    $adapter_permission = \WP\MCP\Abilities\GetAbilityInfoAbility::check_permission($arguments);
+    $adapter_permission = \Novamira\Vendor\WP\MCP\Abilities\GetAbilityInfoAbility::check_permission($arguments);
     if (is_wp_error($adapter_permission) || !$adapter_permission) {
         return $adapter_permission;
     }
@@ -61,9 +61,9 @@ function novamira_get_ability_info_permission(mixed $input = []): bool|\WP_Error
 /** Register get-ability-info with the Novamira metadata visibility check. */
 function novamira_protect_get_ability_info(): void
 {
-    $ability_name = 'mcp-adapter/get-ability-info';
+    $ability_name = 'novamira-mcp-adapter/get-ability-info';
     $ability = wp_has_ability($ability_name) ? wp_get_ability($ability_name) : null;
-    $execute_callback = [\WP\MCP\Abilities\GetAbilityInfoAbility::class, 'execute'];
+    $execute_callback = [\Novamira\Vendor\WP\MCP\Abilities\GetAbilityInfoAbility::class, 'execute'];
     if (!$ability instanceof \WP_Ability) {
         return;
     }
@@ -81,24 +81,24 @@ function novamira_protect_get_ability_info(): void
     ]);
 }
 
-$novamira_existing_ability = wp_has_ability('mcp-adapter/discover-abilities')
-    ? wp_get_ability('mcp-adapter/discover-abilities')
+$novamira_existing_ability = wp_has_ability('novamira-mcp-adapter/discover-abilities')
+    ? wp_get_ability('novamira-mcp-adapter/discover-abilities')
     : null;
 if ($novamira_existing_ability !== null) {
-    wp_unregister_ability('mcp-adapter/discover-abilities');
+    wp_unregister_ability('novamira-mcp-adapter/discover-abilities');
 }
 
-if (wp_has_ability('mcp-adapter/discover-abilities')) {
+if (wp_has_ability('novamira-mcp-adapter/discover-abilities')) {
     return;
 }
 
-wp_register_ability('mcp-adapter/discover-abilities', [
+wp_register_ability('novamira-mcp-adapter/discover-abilities', [
     'label' => __('Discover Abilities', domain: 'novamira'),
     'description' => __(
         'Discover all available WordPress abilities in the system. Returns a list of all registered abilities with their basic information, plus Novamira environment instructions.',
         domain: 'novamira',
     ),
-    'category' => 'mcp-adapter',
+    'category' => 'novamira-mcp-adapter',
     'output_schema' => [
         'type' => 'object',
         'properties' => [

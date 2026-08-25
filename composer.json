@@ -27,5 +27,10 @@
 			"automattic/jetpack-autoloader": true
 		},
 		"sort-packages": true
+	},
+	"scripts": {
+		"scope-mcp-adapter": "@php bin/scope-mcp-adapter.php",
+		"post-install-cmd": "@scope-mcp-adapter",
+		"post-update-cmd": "@scope-mcp-adapter"
 	}
 }
