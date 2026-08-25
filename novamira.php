@@ -55,7 +55,7 @@ function novamira_load_bundled_dependencies()
 {
     if (!file_exists(NOVAMIRA_VENDOR_AUTOLOAD) || !file_exists(NOVAMIRA_MCP_AUTOLOAD)) {
         return new WP_Error('novamira_missing_vendor', __(
-            'Novamira is installed without its bundled vendor directory. This usually means the GitHub/source ZIP was installed instead of the Novamira release build ZIP. The MCP Adapter cannot load, so Novamira will not register an MCP endpoint. Install the Novamira release build ZIP before using Novamira.',
+            'This Novamira installation is incomplete, so AI clients cannot connect to this site. Download the official Novamira plugin ZIP from novamira.ai, then reinstall it from Plugins → Add Plugin → Upload Plugin. Do not use a GitHub “Source code” ZIP.',
             domain: 'novamira',
         ));
     }
@@ -66,7 +66,7 @@ function novamira_load_bundled_dependencies()
     } catch (\Throwable $e) {
         return new WP_Error('novamira_autoload_failed', sprintf(
             __(
-                'Novamira could not load its bundled Composer dependencies. The MCP Adapter cannot load, so Novamira will not register an MCP endpoint. Reinstall the Novamira release build ZIP. Error: %s',
+                'Novamira could not load its required files, so AI clients cannot connect to this site. Reinstall Novamira using the official plugin ZIP from novamira.ai. Technical error: %s',
                 domain: 'novamira',
             ),
             $e->getMessage(),
@@ -76,7 +76,7 @@ function novamira_load_bundled_dependencies()
     if (!class_exists(NOVAMIRA_MCP_ADAPTER_CLASS)) {
         return new WP_Error('novamira_mcp_adapter_missing', sprintf(
             __(
-                'Novamira loaded its Composer autoloader, but the MCP Adapter class (%s) is not available. Novamira will not register an MCP endpoint. Reinstall the Novamira release build ZIP.',
+                'This Novamira installation is incomplete, so AI clients cannot connect to this site. Reinstall Novamira using the official plugin ZIP from novamira.ai. Missing component: %s',
                 domain: 'novamira',
             ),
             NOVAMIRA_MCP_ADAPTER_CLASS,
