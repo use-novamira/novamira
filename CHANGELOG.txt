@@ -1,3 +1,6 @@
+v1.11.6 - 2026/08/26
+* Fix: Novamira no longer announces classes of its bundled MCP Adapter at a location the plugin does not ship. On a site where another plugin checks whether those classes exist, that check ended in a critical error on every page after updating to 1.11.5.
+
 v1.11.5 - 2026/08/26
 * New: The Configuration page now covers all 72 AI agents supported by the Novamira CLI installer, from Claude Code and Codex CLI to Hermes Agent and OpenClaw. Choose an agent once and see only the connection routes that work for it: Novamira CLI, OAuth, or Application Password.
 * Tweak: Recurring admin notices now use a consistent close button and stay dismissed for each administrator, while critical setup errors remain visible.
