@@ -49,6 +49,10 @@ fi
 # development installation untouched.
 COMPOSER_VENDOR_DIR="$BUILD_DIR/vendor" composer install --no-dev --optimize-autoloader --no-interaction
 php "$BASEDIR/bin/scope-mcp-adapter.php" "$BUILD_DIR/vendor" --delete-originals
+# The scoped copy replaces the original packages, so the autoloader has to be
+# regenerated: the manifests Composer wrote during install still map every class
+# of those packages to sources this build no longer ships.
+COMPOSER_VENDOR_DIR="$BUILD_DIR/vendor" composer dump-autoload --no-dev --optimize --no-interaction
 rm -rf "$BUILD_DIR/vendor/php-stubs"
 # Every bin directory, not just vendor/bin: packages ship their own CLI scripts
 # (defuse/php-encryption/bin, ...) and none of them are used at runtime.
@@ -56,6 +60,8 @@ find "$BUILD_DIR/vendor" -type d -name bin -prune -exec rm -rf {} +
 
 # Remove empty directories
 find "$BUILD_DIR" -type d -empty -delete
+
+php "$BASEDIR/bin/verify-vendor-manifests.php" "$BUILD_DIR/vendor"
 
 cd "$BUILD_BASE"
 ZIPF="$SLUG-$VERSION.zip"
