@@ -81,6 +81,91 @@ function novamira_protect_get_ability_info(): void
     ]);
 }
 
+/** Declare execute-ability parameters as an open object for strict MCP clients. */
+function novamira_open_execute_ability_parameters(): void
+{
+    $ability_name = 'novamira-mcp-adapter/execute-ability';
+    $ability = wp_has_ability($ability_name) ? wp_get_ability($ability_name) : null;
+    if (!$ability instanceof \WP_Ability) {
+        return;
+    }
+
+    $input_schema = $ability->get_input_schema();
+    /** @var array<string, mixed>|null $properties */
+    $properties = $input_schema['properties'] ?? null;
+    if (!is_array($properties)) {
+        return;
+    }
+
+    /** @var array<string, mixed>|null $parameters_schema */
+    $parameters_schema = $properties['parameters'] ?? null;
+    if (!is_array($parameters_schema)) {
+        return;
+    }
+
+    // WordPress expects schemas as arrays. novamira_normalize_empty_schema_properties(), called by
+    // novamira.php's rest_pre_echo_response filter, converts this empty map to a JSON object.
+    $parameters_schema['properties'] = [];
+    $parameters_schema['additionalProperties'] = true;
+    $properties['parameters'] = $parameters_schema;
+    $input_schema['properties'] = $properties;
+
+    wp_unregister_ability($ability_name);
+    wp_register_ability($ability_name, [
+        'label' => $ability->get_label(),
+        'description' => $ability->get_description(),
+        'category' => $ability->get_category(),
+        'input_schema' => $input_schema,
+        'output_schema' => $ability->get_output_schema(),
+        'permission_callback' => [
+            \Novamira\Vendor\WP\MCP\Abilities\ExecuteAbilityAbility::class,
+            'check_permission',
+        ],
+        'execute_callback' => [\Novamira\Vendor\WP\MCP\Abilities\ExecuteAbilityAbility::class, 'execute'],
+        'meta' => $ability->get_meta(),
+    ]);
+}
+
+/** Recursively make empty JSON Schema property maps encode as JSON objects. */
+function novamira_normalize_empty_schema_properties(mixed $schema): mixed
+{
+    if (is_array($schema)) {
+        return novamira_normalize_empty_schema_property_array($schema);
+    }
+
+    if ($schema instanceof \stdClass) {
+        return (object) novamira_normalize_empty_schema_property_array((array) $schema);
+    }
+
+    return $schema;
+}
+
+/**
+ * @param array<array-key, mixed> $schema
+ * @return array<array-key, mixed>
+ */
+function novamira_normalize_empty_schema_property_array(array $schema): array
+{
+    // @mago-expect analysis:mixed-assignment -- JSON Schema values are intentionally heterogeneous.
+    foreach ($schema as $key => $value) {
+        if (
+            is_string($key)
+            && in_array(
+                $key,
+                ['properties', 'additionalProperties', 'patternProperties', '$defs', 'definitions'],
+                strict: true,
+            )
+            && $value === []
+        ) {
+            $schema[$key] = new \stdClass();
+            continue;
+        }
+
+        $schema[$key] = novamira_normalize_empty_schema_properties($value);
+    }
+    return $schema;
+}
+
 $novamira_existing_ability = wp_has_ability('novamira-mcp-adapter/discover-abilities')
     ? wp_get_ability('novamira-mcp-adapter/discover-abilities')
     : null;
@@ -169,3 +254,4 @@ wp_register_ability('novamira-mcp-adapter/discover-abilities', [
 ]);
 
 novamira_protect_get_ability_info();
+novamira_open_execute_ability_parameters();

@@ -941,11 +941,10 @@ if ($novamira_adapter_initialized) {
             foreach (['inputSchema', 'outputSchema'] as $key) {
                 /** @var array<string, mixed>|null $schema */
                 $schema = $tool[$key] ?? null;
-                if (!is_array($schema) || ($schema['properties'] ?? null) !== []) {
+                if (!is_array($schema)) {
                     continue;
                 }
-                $schema['properties'] = new \stdClass();
-                $tool[$key] = $schema;
+                $tool[$key] = novamira_normalize_empty_schema_properties($schema);
             }
         }
         $resultObj->tools = $tools;
