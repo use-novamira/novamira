@@ -459,6 +459,34 @@ function novamira_toggle_ability_disabled_rule(array $rules, string $ability_nam
     return $rules;
 }
 
+function novamira_delete_sandbox_file(string $path): bool
+{
+    if (!unlink($path)) {
+        return false;
+    }
+
+    $marker = novamira_sandbox_disabled_marker_path($path);
+    if (is_file($marker)) {
+        unlink($marker);
+    }
+
+    return true;
+}
+
+/**
+ * @return array<array-key, mixed>|WP_Error|bool
+ */
+function novamira_run_sandbox_action(string $action, string $file, string $path): array|WP_Error|bool
+{
+    return match ($action) {
+        'delete' => novamira_delete_sandbox_file($path),
+        'disable' => str_ends_with($file, '.php') ? novamira_disable_file(['path' => $path]) : false,
+        'enable' => str_ends_with($file, '.php') ? novamira_enable_file(['path' => $path]) : false,
+        'exit_safe_mode' => $file === '.crashed' && unlink($path),
+        default => false,
+    };
+}
+
 function novamira_handle_sandbox_actions()
 {
     if (!novamira_current_user_can_manage()) {
@@ -482,15 +510,10 @@ function novamira_handle_sandbox_actions()
         return;
     }
 
-    $result = match ($action) {
-        'delete' => unlink($path),
-        'disable' => str_ends_with($file, '.php') && rename($path, $path . '.disabled'),
-        'enable' => str_ends_with($file, '.disabled') && rename($path, substr($path, offset: 0, length: -9)),
-        'exit_safe_mode' => $file === '.crashed' && unlink($path),
-        default => false,
-    };
+    $result = novamira_run_sandbox_action($action, $file, $path);
 
-    if ($result) {
+    $succeeded = $result === true || is_array($result) && ($result['disabled'] ?? $result['enabled'] ?? false) === true;
+    if ($succeeded) {
         wp_safe_redirect(admin_url('admin.php?page=novamira-sandbox&novamira_result=' . $action));
         exit();
     }
@@ -589,9 +612,14 @@ function novamira_render_sandbox_list(string $sandbox_dir): void
 function novamira_get_sandbox_files(string $sandbox_dir): array
 {
     $scanned_files = is_dir($sandbox_dir) ? scandir($sandbox_dir) : false;
-    $files = $scanned_files !== false ? array_diff($scanned_files, ['.', '..', '.loading', '.crashed']) : [];
+    $files = $scanned_files !== false ? array_diff($scanned_files, ['.', '..']) : [];
 
-    return array_values(array_filter($files, static fn(string $file): bool => !is_dir($sandbox_dir . $file)));
+    return array_values(array_filter(
+        $files,
+        static fn(string $file): bool => (
+            !is_dir($sandbox_dir . $file) && !novamira_is_sandbox_internal_file_name($file)
+        ),
+    ));
 }
 
 /**
@@ -618,8 +646,8 @@ function novamira_render_sandbox_row(
     string $base_url,
 ): void {
     $path = $sandbox_dir . $file;
-    $file_status = novamira_get_sandbox_file_status($file, $sandbox_status);
-    $display_name = $file_status === 'disabled' ? substr($file, offset: 0, length: -9) : $file;
+    $file_status = novamira_get_sandbox_file_status($path, $sandbox_status);
+    $display_name = $file;
     $ext = strtolower(pathinfo($display_name, PATHINFO_EXTENSION));
     $mtime = filemtime($path);
     $wp_date = $mtime !== false ? wp_date($format, $mtime) : false;
@@ -655,13 +683,13 @@ function novamira_render_sandbox_row(
     <?php
 }
 
-function novamira_get_sandbox_file_status(string $file, string $sandbox_status): string
+function novamira_get_sandbox_file_status(string $path, string $sandbox_status): string
 {
     if ($sandbox_status === 'suspended') {
         return 'suspended';
     }
 
-    if (str_ends_with($file, '.disabled')) {
+    if (novamira_sandbox_file_is_disabled($path)) {
         return 'disabled';
     }
 

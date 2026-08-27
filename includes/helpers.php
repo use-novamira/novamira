@@ -168,6 +168,85 @@ function novamira_get_sandbox_dir($ensure_exists = false)
 }
 
 /**
+ * Return the sidecar marker used to disable a sandbox PHP file without renaming its source.
+ */
+function novamira_sandbox_disabled_marker_path(string $path): string
+{
+    return dirname($path) . DIRECTORY_SEPARATOR . '.' . basename($path) . '.disabled';
+}
+
+function novamira_sandbox_file_is_disabled(string $path): bool
+{
+    return is_file(novamira_sandbox_disabled_marker_path($path));
+}
+
+/**
+ * Create a disabled marker without replacing an existing filesystem entry.
+ */
+function novamira_create_sandbox_disabled_marker(string $path): bool
+{
+    $marker = novamira_sandbox_disabled_marker_path($path);
+    if (is_file($marker)) {
+        return true;
+    }
+
+    $handle = fopen(filename: $marker, mode: 'x');
+    if ($handle === false) {
+        return false;
+    }
+
+    return fclose($handle);
+}
+
+/**
+ * Identify files maintained by Novamira rather than user-authored sandbox files.
+ */
+function novamira_is_sandbox_internal_file_name(string $filename): bool
+{
+    if (in_array($filename, ['.loading', '.crashed', '.htaccess', 'web.config', 'index.html'], strict: true)) {
+        return true;
+    }
+
+    return str_starts_with($filename, '.') && str_ends_with($filename, '.php.disabled');
+}
+
+/**
+ * Add web-server protection and migrate legacy plaintext .php.disabled files to sidecar markers.
+ */
+function novamira_prepare_sandbox_directory(): void
+{
+    $sandbox_dir = novamira_get_sandbox_dir(ensure_exists: true);
+    if (!is_dir($sandbox_dir)) {
+        return;
+    }
+
+    $protection_files = [
+        '.htaccess' => "# Novamira sandbox: generated code and operational files are private.\n<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n",
+        'web.config' => "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n    <system.webServer>\n        <security>\n            <authorization>\n                <remove users=\"*\" roles=\"\" verbs=\"\" />\n                <add accessType=\"Deny\" users=\"*\" />\n            </authorization>\n        </security>\n    </system.webServer>\n</configuration>\n",
+        'index.html' => '',
+    ];
+
+    foreach ($protection_files as $filename => $contents) {
+        $path = $sandbox_dir . $filename;
+        if (!is_file($path)) {
+            file_put_contents($path, $contents, LOCK_EX);
+        }
+    }
+
+    $legacy_files = glob($sandbox_dir . '*.php.disabled');
+    foreach ($legacy_files !== false ? $legacy_files : [] as $legacy_path) {
+        $enabled_path = substr($legacy_path, offset: 0, length: -9);
+        if (file_exists($enabled_path) || !rename($legacy_path, $enabled_path)) {
+            continue;
+        }
+
+        if (!novamira_create_sandbox_disabled_marker($enabled_path)) {
+            rename($enabled_path, $legacy_path);
+        }
+    }
+}
+
+/**
  * Validate that a resolved path is inside the sandbox directory.
  *
  * @param string $resolved The resolved absolute path to check.

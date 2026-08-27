@@ -351,7 +351,7 @@ function novamira_uninstall_sandbox_file_count(): int
         if (!$file instanceof SplFileInfo || !$file->isFile()) {
             continue;
         }
-        if (in_array($file->getFilename(), ['.loading', '.crashed'], strict: true)) {
+        if (novamira_is_sandbox_internal_file_name($file->getFilename())) {
             continue;
         }
         $count++;

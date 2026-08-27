@@ -30,6 +30,31 @@ final class SandboxLoaderTest extends TestCase
         rmdir($this->sandboxDirectory);
     }
 
+    public function testPreparingSandboxProtectsItAndMigratesLegacyDisabledSource(): void
+    {
+        $legacy = $this->sandboxDirectory . '/extension.php.disabled';
+        file_put_contents($legacy, "<?php echo 'sandbox-loaded';");
+
+        [$output, $exitCode] = $this->runLoader('prepare');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+        self::assertFileExists($this->sandboxDirectory . '/.htaccess');
+        self::assertStringContainsString(
+            'Require all denied',
+            (string) file_get_contents($this->sandboxDirectory . '/.htaccess'),
+        );
+        self::assertFileExists($this->sandboxDirectory . '/web.config');
+        self::assertFileExists($this->sandboxDirectory . '/index.html');
+        self::assertFileExists($this->sandboxDirectory . '/extension.php');
+        self::assertFileExists($this->sandboxDirectory . '/.extension.php.disabled');
+        self::assertFileDoesNotExist($legacy);
+
+        [$loaderOutput, $loaderExitCode] = $this->runLoader('request');
+        self::assertSame(0, $loaderExitCode);
+        self::assertSame('runner-complete', $loaderOutput);
+    }
+
     public function testActivationProbeDoesNotLoadSandboxFiles(): void
     {
         file_put_contents($this->sandboxDirectory . '/extension.php', "<?php echo 'sandbox-loaded';");
@@ -59,6 +84,20 @@ final class SandboxLoaderTest extends TestCase
 
         self::assertSame(0, $secondExitCode);
         self::assertSame('runner-complete', $secondOutput);
+    }
+
+    public function testDisabledSidecarPreventsLoadingWithoutRenamingPhpSource(): void
+    {
+        $source = $this->sandboxDirectory . '/extension.php';
+        file_put_contents($source, "<?php echo 'sandbox-loaded';");
+        file_put_contents($this->sandboxDirectory . '/.extension.php.disabled', '');
+
+        [$output, $exitCode] = $this->runLoader('request');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+        self::assertFileExists($source);
+        self::assertFileDoesNotExist($source . '.disabled');
     }
 
     public function testStrayOutputFromASandboxFileStaysOutOfTheResponse(): void

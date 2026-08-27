@@ -964,8 +964,8 @@ add_filter(
     accepted_args: 2,
 );
 
-// Ensure sandbox directory exists.
-wp_mkdir_p(NOVAMIRA_SANDBOX_DIR);
+// Ensure the sandbox exists, cannot be served directly, and uses safe disabled-file markers.
+novamira_prepare_sandbox_directory();
 
 // Load sandbox plugins.
 require_once __DIR__ . '/includes/sandbox-loader.php';

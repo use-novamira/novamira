@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 /**
- * Ability: Disable a sandbox file by renaming it to .disabled.
+ * Ability: Disable a sandbox file with a sidecar marker.
  */
 
 if (!defined('ABSPATH')) {
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/disable-file', [
     'label' => __('Disable File', domain: 'novamira'),
     'description' => __(
-        'Disables a file in the sandbox (wp-content/novamira-sandbox/) by appending ".disabled" to its filename. The file is preserved on disk but no longer loaded by the sandbox loader. Use the same path with ".disabled" removed to re-enable. Only operates on files inside the sandbox directory. Idempotent: disabling an already-disabled file succeeds with disabled=false.',
+        'Disables a PHP file in the sandbox (wp-content/novamira-sandbox/) without renaming its source. Novamira records the disabled state in an empty sidecar marker so PHP source is never exposed under a non-PHP filename. Only operates on files inside the sandbox directory. Idempotent: disabling an already-disabled file succeeds with disabled=false.',
         domain: 'novamira',
     ),
     'category' => 'filesystem',
@@ -36,8 +36,8 @@ wp_register_ability('novamira/disable-file', [
         'type' => 'object',
         'properties' => [
             'original_path' => ['type' => 'string', 'description' => 'Absolute path of the original file.'],
-            'disabled_path' => ['type' => 'string', 'description' => 'Absolute path after renaming.'],
-            'disabled' => ['type' => 'boolean', 'description' => 'Whether the file was actually renamed.'],
+            'disabled_path' => ['type' => 'string', 'description' => 'Absolute path of the disabled-state marker.'],
+            'disabled' => ['type' => 'boolean', 'description' => 'Whether the disabled-state marker was created.'],
         ],
     ],
     'execute_callback' => 'novamira_disable_file',
@@ -49,8 +49,8 @@ wp_register_ability('novamira/disable-file', [
             'instructions' => implode("\n", [
                 'SANDBOX NOTES:',
                 '- Only files inside wp-content/novamira-sandbox/ (the PHP sandbox) can be disabled.',
-                '- Disabling appends ".disabled" to the filename so the loader skips it.',
-                '- To re-enable, rename the file back (remove the .disabled suffix).',
+                '- Disabling creates an empty sidecar marker; the PHP source keeps its .php filename.',
+                '- To re-enable, use enable-file with the original PHP file path.',
                 '- Safer than deleting: the file stays on disk for later re-use.',
             ]),
             'readonly' => false,
@@ -61,7 +61,7 @@ wp_register_ability('novamira/disable-file', [
 ]);
 
 /**
- * Disable a sandbox file by renaming it with a .disabled suffix.
+ * Disable a sandbox PHP file by creating an empty sidecar marker.
  *
  * @param array $input Input with 'path'.
  * @return array|WP_Error
@@ -82,23 +82,30 @@ function novamira_disable_file($input)
         return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved));
     }
 
+    if (strtolower(pathinfo($resolved, PATHINFO_EXTENSION)) !== 'php') {
+        return new WP_Error('not_a_php_file', sprintf('Only sandbox PHP files can be disabled: %s', $resolved));
+    }
+
+    $disabled_path = novamira_sandbox_disabled_marker_path($resolved);
+
     // Idempotent: already disabled.
-    if (novamira_is_disabled_file($resolved)) {
+    if (novamira_sandbox_file_is_disabled($resolved)) {
         return [
             'original_path' => $resolved,
-            'disabled_path' => $resolved,
+            'disabled_path' => $disabled_path,
             'disabled' => false,
         ];
     }
 
-    $disabled_path = $resolved . '.disabled';
-
     if (file_exists($disabled_path)) {
-        return new WP_Error('disabled_file_exists', sprintf('A disabled version already exists: %s', $disabled_path));
+        return new WP_Error('disabled_marker_exists', sprintf(
+            'The disabled marker path is occupied: %s',
+            $disabled_path,
+        ));
     }
 
-    if (!rename($resolved, $disabled_path)) {
-        return new WP_Error('rename_failed', sprintf('Failed to rename file: %s', $resolved));
+    if (!novamira_create_sandbox_disabled_marker($resolved)) {
+        return new WP_Error('marker_create_failed', sprintf('Failed to disable file: %s', $resolved));
     }
 
     return [

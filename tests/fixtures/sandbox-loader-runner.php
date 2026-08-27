@@ -26,6 +26,19 @@ function wp_json_encode(mixed $value): string|false
     return json_encode($value);
 }
 
+function wp_mkdir_p(string $path): bool
+{
+    return is_dir($path) || mkdir($path, permissions: 0755, recursive: true);
+}
+
+require dirname(__DIR__, 2) . '/includes/helpers.php';
+
+if ($argv[2] === 'prepare') {
+    novamira_prepare_sandbox_directory();
+    echo 'runner-complete';
+    exit();
+}
+
 // Stands in for a response that is already being buffered while sandbox files load: WordPress and
 // several hosts keep an output buffer open across the request. The loader must leave that buffer,
 // and only that buffer, exactly as it found it.

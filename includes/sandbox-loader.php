@@ -166,6 +166,13 @@ function novamira_sandbox_crash_handler(string $crashed_file, ?string $current_s
     if (!$files) {
         return;
     }
+    $files = array_values(array_filter(
+        $files,
+        static fn(string $file): bool => !novamira_sandbox_file_is_disabled($file),
+    ));
+    if ($files === []) {
+        return;
+    }
 
     // Tracks which sandbox file is currently being loaded. The shutdown handler uses this to
     // detect crashes even when the fatal error is thrown from a core or third-party file in the
