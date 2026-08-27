@@ -157,8 +157,8 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
     <?php endif; ?>
 
     <?php if ($user_posts !== []): ?>
-    <section class="novamira-skills-d-section">
-        <div class="novamira-skills-d-header">
+    <section class="novamira-admin-list-section">
+        <div class="novamira-admin-list-header">
             <h2><?php esc_html_e('Your Skills', domain: 'novamira'); ?> <span class="count"><?php
 
             echo (int) $user_total;
@@ -171,7 +171,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                 autocomplete="off"
             />
         </div>
-        <div class="novamira-skills-d-list" data-novamira-skills-list>
+        <div class="novamira-admin-list-list" data-novamira-skills-list>
             <?php foreach ($user_posts as $post):
                 $slug = $post->post_name;
                 $malformed_title = $slug === '';
@@ -191,7 +191,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                     'page' => Admin\PAGE_SLUG,
                     'skill' => $post->ID,
                 ], admin_url('admin.php'));
-                $row_classes = ['novamira-skills-d-row'];
+                $row_classes = ['novamira-admin-list-row'];
                 if ($enabled) {
                     $row_classes[] = 'is-on';
                 }
@@ -206,7 +206,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                 <form
                     method="post"
                     action="<?php echo esc_url($action_url); ?>"
-                    class="novamira-skills-d-toggle"
+                    class="novamira-admin-list-toggle"
                     title="<?php echo
                         $enabled ? esc_attr__('Disable', domain: 'novamira') : esc_attr__('Enable', domain: 'novamira')
                     ; ?>"
@@ -214,13 +214,13 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                     <?php wp_nonce_field('novamira_skill_toggle_status_' . $post->ID); ?>
                     <input type="hidden" name="action" value="novamira_skill_toggle_status" />
                     <input type="hidden" name="post_id" value="<?php echo (int) $post->ID; ?>" />
-                    <button type="submit" class="novamira-skills-d-check" aria-label="<?php echo
+                    <button type="submit" class="novamira-admin-list-check" aria-label="<?php echo
                         $enabled
                             ? esc_attr__('Click to disable', domain: 'novamira')
                             : esc_attr__('Click to enable', domain: 'novamira')
                     ; ?>"></button>
                 </form>
-                <a class="novamira-skills-d-main" href="<?php echo esc_url($edit_url); ?>">
+                <a class="novamira-admin-list-main" href="<?php echo esc_url($edit_url); ?>">
                     <span class="slug"><?php echo esc_html($slug !== '' ? $slug : $post->post_title); ?></span>
                     <?php if ($missing_description): ?>
                         <span class="desc-badge is-missing">⚠ <?php esc_html_e(
@@ -238,7 +238,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                         ); ?></span>
                     <?php endif; ?>
                 </a>
-                <div class="novamira-skills-d-pills">
+                <div class="novamira-admin-list-pills">
                     <?php if ($agentic_on): ?>
                         <span class="pill auto"><?php esc_html_e('Auto', domain: 'novamira'); ?></span>
                     <?php endif; ?>
@@ -267,7 +267,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                         >⚠ <?php echo (int) count($warnings); ?></span>
                     <?php endif; ?>
                 </div>
-                <div class="novamira-skills-d-actions">
+                <div class="novamira-admin-list-actions">
                     <a class="action-btn" href="<?php echo esc_url($edit_url); ?>"><?php
 
                     esc_html_e('Edit', domain: 'novamira');
@@ -327,36 +327,36 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
     <?php endif; ?>
 
     <?php if ($trashed_posts !== []): ?>
-    <section class="novamira-skills-d-section novamira-skills-d-section--trash">
-        <div class="novamira-skills-d-header">
+    <section class="novamira-admin-list-section novamira-admin-list-section--trash">
+        <div class="novamira-admin-list-header">
             <h2><?php esc_html_e('Trash', domain: 'novamira'); ?> <span class="count"><?php
 
             echo (int) count($trashed_posts);
             ?></span></h2>
-            <span class="novamira-skills-d-trash-hint"><?php esc_html_e(
+            <span class="novamira-admin-list-trash-hint"><?php esc_html_e(
                 'Trashed skills are not loaded by the AI. Items are auto-removed after 30 days.',
                 domain: 'novamira',
             ); ?></span>
         </div>
-        <div class="novamira-skills-d-list">
+        <div class="novamira-admin-list-list">
             <?php foreach ($trashed_posts as $post):
                 $slug = $post->post_name !== '' ? $post->post_name : $post->post_title;
                 // WP appends `__trashed` to post_name when trashing; strip for display.
                 $slug = (string) preg_replace('/__trashed$/', replacement: '', subject: $slug);
                 $description = trim($post->post_excerpt);
                 ?>
-            <div class="novamira-skills-d-row is-trashed">
-                <div class="novamira-skills-d-trash-icon" aria-hidden="true">⌫</div>
-                <div class="novamira-skills-d-main novamira-skills-d-main--trash">
+            <div class="novamira-admin-list-row is-trashed">
+                <div class="novamira-admin-list-trash-icon" aria-hidden="true">⌫</div>
+                <div class="novamira-admin-list-main novamira-admin-list-main--trash">
                     <span class="slug"><?php echo esc_html($slug); ?></span>
                     <?php if ($description !== ''): ?>
                         <span class="desc"><?php echo esc_html($description); ?></span>
                     <?php endif; ?>
                 </div>
-                <div class="novamira-skills-d-pills">
+                <div class="novamira-admin-list-pills">
                     <span class="pill"><?php esc_html_e('Trash', domain: 'novamira'); ?></span>
                 </div>
-                <div class="novamira-skills-d-actions novamira-skills-d-actions--trash">
+                <div class="novamira-admin-list-actions novamira-admin-list-actions--trash">
                     <form method="post" action="<?php echo esc_url($action_url); ?>">
                         <?php wp_nonce_field('novamira_skill_restore_' . $post->ID); ?>
                         <input type="hidden" name="action" value="novamira_skill_restore" />
@@ -389,8 +389,8 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
     <?php endif; ?>
 
     <?php foreach ($external_groups as $source_id => $group): ?>
-    <section class="novamira-skills-d-section novamira-skills-d-section--external">
-        <div class="novamira-skills-d-header">
+    <section class="novamira-admin-list-section novamira-admin-list-section--external">
+        <div class="novamira-admin-list-header">
             <h2><?php
 
             printf(
@@ -402,13 +402,13 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
 
             echo (int) count($group['skills']);
             ?></span></h2>
-            <span class="novamira-skills-d-readonly-note"><?php esc_html_e(
+            <span class="novamira-admin-list-readonly-note"><?php esc_html_e(
                 'Not editable',
                 domain: 'novamira',
             ); ?></span>
         </div>
         <?php if (str_starts_with($source_id, 'novamira-pro')): ?>
-            <p class="novamira-skills-d-source-blurb">
+            <p class="novamira-admin-list-source-blurb">
                 <?php
 
                 printf(
@@ -424,17 +424,30 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                 ?>
             </p>
         <?php endif; ?>
-        <div class="novamira-skills-d-list">
+        <div class="novamira-admin-list-list">
             <?php foreach ($group['skills'] as $skill):
                 $slug = (string) ($skill['slug'] ?? '');
                 $description = trim((string) ($skill['description'] ?? ''));
                 $missing_description = $description === '';
                 $prompt_on = boolval($skill['enable_prompt'] ?? false);
                 $agentic_on = boolval($skill['enable_agentic'] ?? false);
+                $features = \Novamira\Features\features();
+                $managers = $features->features_for_skill($slug);
+                $toggleable_managers = array_values(array_filter(
+                    $managers,
+                    static fn(\Novamira\Features\Definition $feature): bool => $feature->toggleable,
+                ));
+                $feature_managed = $toggleable_managers !== [];
+                $infrastructure = $managers !== [] && $toggleable_managers === [];
+                $active = $features->is_skill_active($slug);
+                $manager_label = implode(', ', array_map(
+                    static fn(\Novamira\Features\Definition $feature): string => $feature->label,
+                    $toggleable_managers,
+                ));
                 ?>
-            <div class="novamira-skills-d-row is-external is-on">
-                <div class="novamira-skills-d-source-icon" aria-hidden="true">↗</div>
-                <div class="novamira-skills-d-main novamira-skills-d-main--external">
+            <div class="novamira-admin-list-row is-external <?php echo $active ? 'is-on' : 'is-off'; ?>">
+                <div class="novamira-admin-list-source-icon" aria-hidden="true">↗</div>
+                <div class="novamira-admin-list-main novamira-admin-list-main--external">
                     <span class="slug"><?php echo esc_html($slug); ?></span>
                     <?php if ($missing_description): ?>
                         <span class="desc-badge is-missing">⚠ <?php esc_html_e(
@@ -446,15 +459,38 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                         <span class="desc"><?php echo esc_html($description); ?></span>
                     <?php endif; ?>
                 </div>
-                <div class="novamira-skills-d-pills">
+                <div class="novamira-admin-list-pills">
                     <?php if ($agentic_on): ?>
                         <span class="pill auto"><?php esc_html_e('Auto', domain: 'novamira'); ?></span>
                     <?php endif; ?>
                     <?php if ($prompt_on): ?>
                         <span class="pill cmd"><?php esc_html_e('Command', domain: 'novamira'); ?></span>
                     <?php endif; ?>
+                    <?php if ($infrastructure): ?>
+                        <span class="pill"><?php esc_html_e('Required by Novamira', domain: 'novamira'); ?></span>
+                    <?php endif; ?>
+                    <?php if ($feature_managed): ?>
+                        <span class="pill"><?php echo
+                            esc_html(
+                                $active
+                                    ? sprintf(__('Managed by %s', domain: 'novamira'), $manager_label)
+                                    : sprintf(__('%s disabled', domain: 'novamira'), $manager_label),
+                            )
+                        ; ?></span>
+                    <?php endif; ?>
                 </div>
-                <div class="novamira-skills-d-actions"></div>
+                <div class="novamira-admin-list-actions">
+                    <?php if ($feature_managed): ?>
+                        <a class="action-btn" href="<?php echo
+                            esc_url(\Novamira\Features\Admin\url(
+                                count($toggleable_managers) === 1 ? $toggleable_managers[0]->id : null,
+                            ))
+                        ; ?>"><?php
+
+                        esc_html_e('Manage feature', domain: 'novamira');
+                        ?></a>
+                    <?php endif; ?>
+                </div>
             </div>
             <?php endforeach; ?>
         </div>
@@ -486,7 +522,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
     var search = document.getElementById('novamira-skills-search');
     var list = document.querySelector('[data-novamira-skills-list]');
     if (search && list) {
-        var rows = Array.prototype.slice.call(list.querySelectorAll('.novamira-skills-d-row'));
+        var rows = Array.prototype.slice.call(list.querySelectorAll('.novamira-admin-list-row'));
         search.addEventListener('input', function () {
             var q = search.value.toLowerCase().trim();
             rows.forEach(function (row) {

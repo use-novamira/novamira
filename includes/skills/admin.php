@@ -92,9 +92,15 @@ function enqueue_assets(string $hook): void
         return;
     }
     wp_enqueue_style(
+        'novamira-admin-list',
+        (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/admin-list.css',
+        [],
+        NOVAMIRA_VERSION,
+    );
+    wp_enqueue_style(
         'novamira-skills-admin',
         (string) NOVAMIRA_PLUGIN_URL . 'includes/skills/assets/admin.css',
-        [],
+        ['novamira-admin-list'],
         NOVAMIRA_VERSION,
     );
 

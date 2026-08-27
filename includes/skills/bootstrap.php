@@ -9,9 +9,8 @@ declare(strict_types=1);
  * Skills module entry point.
  *
  * Loads the submodules (CPT, parser, sources, catalog, prompts, admin, abilities)
- * and wires the top-level WordPress hooks. The module is self-contained: every
- * piece of code it needs lives under `includes/skills/`, so it can be lifted as
- * a unit when a portable extraction is needed.
+ * and wires the top-level WordPress hooks. Feature ownership is resolved by the
+ * shared feature registry rather than duplicated inside the Skills module.
  */
 
 namespace Novamira\Skills;
@@ -20,6 +19,7 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
+require_once __DIR__ . '/../features/api.php';
 require_once __DIR__ . '/cpt.php';
 require_once __DIR__ . '/parser.php';
 require_once __DIR__ . '/sources.php';

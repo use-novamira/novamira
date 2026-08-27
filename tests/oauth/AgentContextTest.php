@@ -7,6 +7,7 @@ declare(strict_types=1);
 if (!defined('ABSPATH')) {
     define('ABSPATH', '/');
 }
+$GLOBALS['novamira_test_skill_source_loads'] = 0;
 if (!function_exists('__')) {
     function __(string $text, string $domain = 'default'): string
     {
@@ -41,13 +42,16 @@ if (!function_exists('apply_filters')) {
                     'id' => 'test-source',
                     'priority' => 1,
                     'label' => 'Test',
-                    'loader' => static fn(): array => [[
-                        'slug' => 'theme-maintenance',
-                        'name' => 'Theme Maintenance',
-                        'description' => 'Safely maintain the active theme.',
-                        'content' => 'Instructions',
-                        'enable_agentic' => true,
-                    ]],
+                    'loader' => static function (): array {
+                        $GLOBALS['novamira_test_skill_source_loads']++;
+                        return [[
+                            'slug' => 'theme-maintenance',
+                            'name' => 'Theme Maintenance',
+                            'description' => 'Safely maintain the active theme.',
+                            'content' => 'Instructions',
+                            'enable_agentic' => true,
+                        ]];
+                    },
                 ],
             ];
         }
@@ -55,6 +59,11 @@ if (!function_exists('apply_filters')) {
             return 'Filtered: ' . (string) $value;
         }
         return $value;
+    }
+}
+if (!function_exists('do_action')) {
+    function do_action(string $hook, mixed ...$args): void
+    {
     }
 }
 if (!function_exists('novamira_build_server_instructions')) {
@@ -75,10 +84,36 @@ if (!function_exists('get_locale')) {
         return 'en_US';
     }
 }
+if (!function_exists('get_option')) {
+    function get_option(string $name, mixed $default_value = false): mixed
+    {
+        return $GLOBALS['novamira_test_options'][$name] ?? $default_value;
+    }
+}
+if (!function_exists('get_site_option')) {
+    function get_site_option(string $name, mixed $default_value = false): mixed
+    {
+        return $default_value;
+    }
+}
+if (!function_exists('get_current_blog_id')) {
+    function get_current_blog_id(): int
+    {
+        return 1;
+    }
+}
+if (!function_exists('is_multisite')) {
+    function is_multisite(): bool
+    {
+        return false;
+    }
+}
 
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../includes/compatibility.php';
+require_once __DIR__ . '/../../includes/features/api.php';
+\Novamira\Features\initialize_features();
 require_once __DIR__ . '/../../includes/skills/sources.php';
 require_once __DIR__ . '/../../includes/abilities/agent-context.php';
 require_once __DIR__ . '/../../includes/skills/abilities/skill-get.php';
@@ -109,6 +144,7 @@ final class AgentContextTest extends TestCase
         self::assertSame('6.9.2', $context['environment']['wordpress_version']);
         self::assertSame(PHP_VERSION, $context['environment']['php_version']);
         self::assertSame('en_US', $context['environment']['locale']);
+        self::assertSame(1, $GLOBALS['novamira_test_skill_source_loads']);
     }
 
     public function testAllFourSkillAbilitiesAreRestVisibleWithoutChangingPermissions(): void

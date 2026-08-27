@@ -231,10 +231,10 @@ register_activation_hook(__FILE__, callback: 'novamira_chat_schema_install');
 register_deactivation_hook(__FILE__, callback: 'novamira_unschedule_gutenberg_cron');
 add_action('admin_notices', callback: 'novamira_render_mcp_dependency_notice');
 add_action('network_admin_notices', callback: 'novamira_render_mcp_dependency_notice');
-add_action('plugins_loaded', callback: 'novamira_chat_schema_maybe_install');
 add_action('rest_api_init', callback: 'novamira_register_missing_mcp_endpoint', priority: 999);
 
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/features/bootstrap.php';
 require_once __DIR__ . '/includes/admin-notices.php';
 require_once __DIR__ . '/includes/abilities/bootstrap.php';
 require_once __DIR__ . '/includes/updater.php';
@@ -251,7 +251,6 @@ require_once __DIR__ . '/includes/pro-upsell.php';
 require_once __DIR__ . '/includes/upload-link.php';
 require_once __DIR__ . '/includes/admin-access-link.php';
 require_once __DIR__ . '/includes/skills/bootstrap.php';
-require_once __DIR__ . '/includes/design/bootstrap.php';
 require_once __DIR__ . '/includes/oauth/bootstrap.php';
 require_once __DIR__ . '/includes/troubleshoot/bootstrap.php';
 require_once __DIR__ . '/includes/instructions-admin.php';
@@ -260,13 +259,46 @@ require_once __DIR__ . '/includes/instructions-admin.php';
 novamira_register_wordpress_compatibility_notice();
 novamira_boot_ability_rest_surface();
 novamira_register_ability_policy_hook();
-require_once __DIR__ . '/novamira-visual/bootstrap.php';
-require_once __DIR__ . '/includes/chat.php';
 
 add_action('admin_post_novamira_toggle_ai_abilities', callback: 'novamira_handle_admin_bar_toggle');
 add_action('admin_post_novamira_download_mcpb', callback: 'novamira_handle_download_mcpb');
 
 function novamira_unschedule_gutenberg_cron(): void
+{
+    require_once __DIR__ . '/includes/abilities/gutenberg/bootstrap.php';
+    \Novamira\Abilities\Gutenberg\unschedule_cleanup();
+}
+
+function novamira_boot_design_feature(): void
+{
+    require_once __DIR__ . '/includes/design/bootstrap.php';
+}
+
+function novamira_boot_visual_feature(): void
+{
+    require_once __DIR__ . '/novamira-visual/bootstrap.php';
+}
+
+function novamira_boot_chat_feature(): void
+{
+    novamira_chat_schema_maybe_install();
+    require_once __DIR__ . '/includes/chat.php';
+}
+
+function novamira_boot_block_editor_queue_feature(): void
+{
+    if (novamira_is_enabled() && novamira_wordpress_abilities_supported()) {
+        novamira_load_gutenberg_runtime();
+        add_action(
+            'wp_abilities_api_categories_init',
+            callback: 'novamira_register_gutenberg_ability_category',
+            priority: 20,
+        );
+        add_action('wp_abilities_api_init', callback: 'novamira_load_gutenberg_abilities', priority: 20);
+    }
+}
+
+function novamira_deactivate_block_editor_queue_feature(): void
 {
     require_once __DIR__ . '/includes/abilities/gutenberg/bootstrap.php';
     \Novamira\Abilities\Gutenberg\unschedule_cleanup();
@@ -648,7 +680,6 @@ $novamira_abilities_supported = novamira_wordpress_abilities_supported();
 $novamira_adapter_initialized = false;
 
 if ($is_enabled && $novamira_abilities_supported) {
-    novamira_load_gutenberg_runtime();
     novamira_register_ability_hooks();
 
     // MCP clients commonly leave sessions behind when they disconnect. Keep enough short-lived

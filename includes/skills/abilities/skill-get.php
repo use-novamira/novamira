@@ -29,6 +29,7 @@ function register_categories(): void
 
 namespace Novamira\Skills\Abilities\SkillGet;
 
+use Novamira\Features;
 use Novamira\Skills\Parser;
 use Novamira\Skills\Sources;
 use WP_Error;
@@ -116,10 +117,32 @@ function execute_skill_get(array $input, ?\WP_Ability $previous): array|WP_Error
 
     $skill = Sources\find($agent_slug);
     if ($skill !== null) {
+        $features = Features\features();
+        $managers = $features->features_for_skill($agent_slug);
+        if ($managers !== [] && !$features->is_skill_active($agent_slug)) {
+            return feature_disabled_error($agent_slug, array_map(
+                static fn(Features\Definition $feature): string => $feature->label,
+                $managers,
+            ));
+        }
         return format_skill_response($skill);
     }
 
     return forward_to_previous_skill_get($agent_slug, $previous);
+}
+
+/** @param list<string> $featureLabels */
+function feature_disabled_error(string $slug, array $featureLabels): WP_Error
+{
+    return new WP_Error('skill_feature_disabled', sprintf(
+        /* translators: 1: skill slug, 2: comma-separated feature labels */
+        __(
+            'Skill "%1$s" is managed by inactive features (%2$s). Ask the site admin to enable one under Novamira → Features.',
+            domain: 'novamira',
+        ),
+        $slug,
+        implode(', ', $featureLabels),
+    ));
 }
 
 /**

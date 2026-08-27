@@ -30,14 +30,10 @@ const NOVAMIRA_CHAT_MAX_SESSIONS_PER_USER = 50;
 
 const NOVAMIRA_CHAT_CONSENT_META = 'novamira_chat_consent';
 
-/**
- * Whether Novamira Chat is enabled. Site owners can turn the feature off entirely
- * with `add_filter('novamira_chat_enabled', '__return_false')`: no menu entry, no
- * assets, no REST routes, and the page itself refuses to render.
- */
+/** Whether the Novamira Chat feature is active. */
 function novamira_chat_is_enabled(): bool
 {
-    return apply_filters('novamira_chat_enabled', value: true) !== false;
+    return \Novamira\Features\features()->is_active('novamira/chat');
 }
 
 /**

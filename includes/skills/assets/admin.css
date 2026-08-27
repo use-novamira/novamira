@@ -125,46 +125,6 @@
     text-decoration: underline;
 }
 
-/* ====================================================================
- * Compact list (Your Skills)
- *
- * Tight 44px rows, hover-reveal actions, status indicated by a check
- * circle on the left that doubles as a click-target to toggle enabled.
- * Designed to scale to many entries without losing scanability.
- * ==================================================================== */
-
-.novamira-skills-d-section {
-    background: #fff;
-    border: 1px solid #c3c4c7;
-    border-radius: 6px;
-    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
-    overflow: hidden;
-    margin-bottom: 20px;
-}
-
-.novamira-skills-d-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 24px;
-    border-bottom: 1px solid #e4e4e7;
-}
-
-.novamira-skills-d-header h2 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 600;
-    color: #1d2327;
-    letter-spacing: -0.01em;
-}
-
-.novamira-skills-d-header h2 .count {
-    color: #71717a;
-    font-weight: 400;
-    font-size: 13px;
-    margin-left: 8px;
-}
-
 .novamira-skills-trust-warning {
     margin: 12px 0 16px;
     border: 1px solid #fde68a;
@@ -297,64 +257,45 @@
     background: transparent;
 }
 
-.novamira-skills-d-list {
-    display: block;
-}
-
-.novamira-skills-d-row {
-    display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) minmax(160px, auto) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 0 24px;
-    height: 44px;
-    border-bottom: 1px solid #f4f4f5;
-    transition: background 0.1s;
-}
-
-.novamira-skills-d-row:last-child {
-    border-bottom: none;
-}
-
-.novamira-skills-d-row.is-just-imported {
+.novamira-admin-list-row.is-just-imported {
     animation: novamira-skills-import-flash 3s ease-out;
 }
 
 /* External-source sections (e.g. Novamira Pro): read-only, no toggle,
-   no hover actions, subtle grey wash to differentiate from the user's
+   with a subtle grey wash to differentiate them from the user's
    own skills above. */
-.novamira-skills-d-section--external .novamira-skills-d-list {
+.novamira-admin-list-section--external .novamira-admin-list-list {
     background: #fafafa;
 }
 
-.novamira-skills-d-row.is-external {
+.novamira-admin-list-row.is-external {
     cursor: default;
 }
 
-.novamira-skills-d-row.is-external:hover {
+.novamira-admin-list-row.is-external:hover {
     background: #f4f4f5;
 }
 
-.novamira-skills-d-source-icon {
+.novamira-admin-list-source-icon {
     color: #a1a1aa;
     font-size: 14px;
     text-align: center;
 }
 
-.novamira-skills-d-main--external {
+.novamira-admin-list-main--external {
     pointer-events: none;
     text-decoration: none;
 }
 
-.novamira-skills-d-main--external .slug {
+.novamira-admin-list-main--external .slug {
     color: #52525b;
 }
 
-.novamira-skills-d-main--external .desc {
+.novamira-admin-list-main--external .desc {
     color: #a1a1aa;
 }
 
-.novamira-skills-d-readonly-note {
+.novamira-admin-list-readonly-note {
     display: inline-flex;
     align-items: center;
     padding: 2px 8px;
@@ -367,7 +308,7 @@
     letter-spacing: 0.04em;
 }
 
-.novamira-skills-d-source-blurb {
+.novamira-admin-list-source-blurb {
     margin: 0;
     padding: 10px 24px;
     border-bottom: 1px solid #e4e4e7;
@@ -377,12 +318,12 @@
     line-height: 1.55;
 }
 
-.novamira-skills-d-source-blurb a {
+.novamira-admin-list-source-blurb a {
     color: #2271b1;
     text-decoration: none;
 }
 
-.novamira-skills-d-source-blurb a:hover {
+.novamira-admin-list-source-blurb a:hover {
     text-decoration: underline;
 }
 
@@ -392,109 +333,7 @@
     100% { background: transparent; }
 }
 
-.novamira-skills-d-row:hover {
-    background: #fafafa;
-}
-
-.novamira-skills-d-toggle {
-    display: flex;
-    align-items: center;
-    margin: 0;
-}
-
-.novamira-skills-d-check {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    border: 1.5px solid #d4d4d8;
-    background: #fff;
-    padding: 0;
-    cursor: pointer;
-    position: relative;
-    transition: background 0.12s, border-color 0.12s;
-    outline: none;
-    box-shadow: none;
-}
-
-.novamira-skills-d-check:focus { outline: none; box-shadow: none; }
-.novamira-skills-d-check:focus-visible {
-    outline: 2px solid #2271b1;
-    outline-offset: 2px;
-}
-
-.novamira-skills-d-check:hover {
-    border-color: #71717a;
-}
-
-.novamira-skills-d-row.is-on .novamira-skills-d-check {
-    background: #1d2327;
-    border-color: #1d2327;
-}
-
-.novamira-skills-d-row.is-on .novamira-skills-d-check::after {
-    content: "";
-    width: 6px;
-    height: 3px;
-    border-left: 1.5px solid #fff;
-    border-bottom: 1.5px solid #fff;
-    position: absolute;
-    transform: rotate(-45deg);
-    top: 4px;
-    left: 3px;
-}
-
-.novamira-skills-d-main {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    overflow: hidden;
-    text-decoration: none;
-    color: inherit;
-    min-width: 0;
-}
-
-.novamira-skills-d-main:hover .slug {
-    color: #2271b1;
-}
-
-/* Suppress the browser's default focus ring on click; keep it only for
-   keyboard users via :focus-visible. */
-.novamira-skills-d-main:focus {
-    outline: none;
-}
-
-.novamira-skills-d-main:focus-visible {
-    outline: 2px solid #2271b1;
-    outline-offset: -2px;
-    border-radius: 4px;
-}
-
-.novamira-skills-d-main .slug {
-    font-family: ui-monospace, "DM Mono", "JetBrains Mono", Consolas, monospace;
-    font-size: 13px;
-    color: #1d2327;
-    font-weight: 500;
-    white-space: nowrap;
-    flex: 0 0 auto;
-    transition: color 0.12s;
-}
-
-.novamira-skills-d-main .desc {
-    color: #71717a;
-    font-size: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-}
-
-.novamira-skills-d-main .desc::before {
-    content: "—";
-    margin-right: 6px;
-    color: #d4d4d8;
-}
-
-.novamira-skills-d-main .desc-badge {
+.novamira-admin-list-main .desc-badge {
     display: inline-flex;
     align-items: center;
     padding: 2px 8px;
@@ -505,140 +344,52 @@
     line-height: 1.4;
 }
 
-.novamira-skills-d-main .desc-badge.is-missing {
+.novamira-admin-list-main .desc-badge.is-missing {
     background: #fee2e2;
     color: #b32d2e;
-}
-
-.novamira-skills-d-pills {
-    display: flex;
-    justify-content: flex-end;
-    gap: 4px;
-}
-
-.novamira-skills-d-pills .pill {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 3px;
-    background: #f4f4f5;
-    color: #52525b;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-}
-
-.novamira-skills-d-pills .pill.auto {
-    background: #eff6ff;
-    color: #1d4ed8;
-}
-
-.novamira-skills-d-pills .pill.cmd {
-    background: #faf5ff;
-    color: #7e22ce;
-}
-
-.novamira-skills-d-pills .pill.warn {
-    background: #fef3c7;
-    color: #92400e;
-    cursor: help;
-}
-
-.novamira-skills-d-pills .pill.warn.is-critical {
-    background: #fee2e2;
-    color: #b32d2e;
-}
-
-.novamira-skills-d-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.12s;
-}
-
-.novamira-skills-d-row:hover .novamira-skills-d-actions,
-.novamira-skills-d-row:focus-within .novamira-skills-d-actions {
-    opacity: 1;
-}
-
-.novamira-skills-d-actions form {
-    margin: 0;
-    display: inline;
-}
-
-.novamira-skills-d-actions .action-btn {
-    background: transparent;
-    border: 0;
-    padding: 4px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    color: #52525b;
-    font-size: 12px;
-    text-decoration: none;
-    line-height: 1.4;
-    transition: background 0.12s, color 0.12s;
-    outline: none;
-    box-shadow: none;
-}
-
-.novamira-skills-d-actions .action-btn:focus { outline: none; box-shadow: none; }
-.novamira-skills-d-actions .action-btn:focus-visible {
-    outline: 2px solid #2271b1;
-    outline-offset: 1px;
-}
-
-.novamira-skills-d-actions .action-btn:hover,
-.novamira-skills-d-actions .action-btn:focus {
-    background: #f4f4f5;
-    color: #1d2327;
-}
-
-.novamira-skills-d-actions .action-btn--danger:hover,
-.novamira-skills-d-actions .action-btn--danger:focus {
-    background: #fee2e2;
-    color: #b91c1c;
 }
 
 /* Trash subsection — visually subdued. Actions stay visible (no
    hover-reveal) so users can act on trashed items quickly. */
-.novamira-skills-d-section--trash {
+.novamira-admin-list-section--trash {
     background: #fafafa;
     border-color: #e4e4e7;
 }
 
-.novamira-skills-d-section--trash .novamira-skills-d-header {
+.novamira-admin-list-section--trash .novamira-admin-list-header {
     background: #f4f4f5;
 }
 
-.novamira-skills-d-section--trash .novamira-skills-d-header h2 {
+.novamira-admin-list-section--trash .novamira-admin-list-header h2 {
     color: #71717a;
 }
 
-.novamira-skills-d-trash-hint {
+.novamira-admin-list-trash-hint {
     font-size: 12px;
     color: #a1a1aa;
 }
 
-.novamira-skills-d-row.is-trashed {
+.novamira-admin-list-row.is-trashed {
     color: #71717a;
 }
 
-.novamira-skills-d-row.is-trashed .novamira-skills-d-main .slug {
+.novamira-admin-list-row.is-trashed .novamira-admin-list-main .slug {
     color: #71717a;
     text-decoration: line-through;
     text-decoration-color: #d4d4d8;
 }
 
-.novamira-skills-d-trash-icon {
+.novamira-admin-list-trash-icon {
     color: #a1a1aa;
     font-size: 16px;
     text-align: center;
 }
 
-.novamira-skills-d-main--trash {
+.novamira-admin-list-main--trash {
     pointer-events: none;
 }
 
-.novamira-skills-d-actions--trash {
+.novamira-admin-list-actions--trash {
     opacity: 1;
 }
 
@@ -1096,4 +847,3 @@ label.page-title-action {
         grid-template-columns: 1fr;
     }
 }
-

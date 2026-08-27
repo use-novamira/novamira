@@ -82,7 +82,10 @@ function execute(array $input): array|WP_Error
         return new WP_Error('missing_slug', __('A slug is required.', domain: 'novamira'));
     }
 
-    $post = SkillWrite\find_user_post_by_slug($slug);
+    $post = SkillWrite\resolve_mutation_target($slug);
+    if ($post instanceof WP_Error) {
+        return $post;
+    }
     if ($post === null) {
         return new WP_Error('not_found', __(
             'Skill not found. Only user-authored skills can be edited.',

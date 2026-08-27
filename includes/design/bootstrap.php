@@ -42,6 +42,7 @@ add_action('admin_menu', __NAMESPACE__ . '\\Admin\\reorder_submenu', priority: 9
 add_action('admin_init', __NAMESPACE__ . '\\Admin\\register_post_handlers');
 add_action('admin_notices', __NAMESPACE__ . '\\Notices\\render');
 add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\Admin\\enqueue_assets');
+add_filter('novamira_building_context_lines', __NAMESPACE__ . '\\add_building_context');
 add_filter(
     'wp_' . Cpt\POST_TYPE . '_revisions_to_keep',
     __NAMESPACE__ . '\\Revisions\\limit',
@@ -56,3 +57,12 @@ add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Save\\register
 add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Check\\register', priority: 999);
 add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Get\\register', priority: 999);
 add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Delete\\register', priority: 999);
+
+/** @param list<string> $lines @return list<string> */
+function add_building_context(array $lines): array
+{
+    $lines[] = '';
+    $lines[] = 'Before any visual work (building or restyling a page, template, section, or component), load the `novamira-design` skill and follow it.';
+
+    return $lines;
+}

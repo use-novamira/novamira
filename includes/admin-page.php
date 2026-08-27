@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
  * Disabled abilities are usually absent from the registry after the policy hook,
  * so persisted disabled rules are merged back in as placeholder rows.
  *
- * @return array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}>>
+ * @return array<string, array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>>
  */
 function novamira_collect_ability_hub_rows(): array
 {
@@ -36,6 +36,7 @@ function novamira_collect_ability_hub_rows(): array
         $groups[novamira_ability_prefix($row['name'])][] = $row;
     }
 
+    $groups = novamira_append_feature_ability_rows($groups, $seen);
     $groups = novamira_append_disabled_ability_rows($groups, $rules, $seen);
 
     foreach ($groups as $source => $rows) {
@@ -54,8 +55,9 @@ function novamira_collect_ability_hub_rows(): array
  * Build a hub row for a registered ability, or null when it is hidden or not exposed.
  *
  * @param array<string, array{disabled: bool}> $rules
- * @return array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}|null
+ * @return array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}|null
  */
+// The row combines registry metadata, feature ownership, direct rules, category lookup, and display state.
 function novamira_build_registered_ability_row(WP_Ability $ability, array $rules): ?array
 {
     $name = $ability->get_name();
@@ -67,8 +69,15 @@ function novamira_build_registered_ability_row(WP_Ability $ability, array $rules
         return null;
     }
 
-    $protected = novamira_ability_is_hub_protected($name);
-    $disabled = !$protected && ($rules[$name]['disabled'] ?? false);
+    $features = \Novamira\Features\features();
+    $feature_definition = $features->feature_for_ability($name, $ability->get_category());
+    $feature_id = $feature_definition->id ?? null;
+    $feature_label = $feature_definition->label ?? '';
+    $individually_manageable = $feature_definition === null;
+    $managed_by_feature = $feature_definition !== null && $feature_definition->toggleable;
+    $infrastructure = $feature_definition !== null && !$feature_definition->toggleable;
+    $feature_inactive = $feature_id !== null && !$features->is_active($feature_id);
+    $disabled = $feature_inactive || $individually_manageable && ($rules[$name]['disabled'] ?? false);
     $category_slug = $ability->get_category();
     $category = $category_slug !== '' ? wp_get_ability_category($category_slug) : null;
 
@@ -79,25 +88,90 @@ function novamira_build_registered_ability_row(WP_Ability $ability, array $rules
         'category' => $category !== null ? $category->get_label() : $category_slug,
         'mcp' => novamira_format_ability_mcp_meta($meta),
         'mcp_type' => novamira_ability_mcp_type($meta),
-        'status' => $disabled ? __('Disabled', domain: 'novamira') : __('Enabled', domain: 'novamira'),
+        'status' => match (true) {
+            $feature_inactive => __('Feature disabled', domain: 'novamira'),
+            $managed_by_feature => sprintf(__('Managed by %s', domain: 'novamira'), $feature_label),
+            $infrastructure => __('Required by Novamira', domain: 'novamira'),
+            $disabled => __('Disabled', domain: 'novamira'),
+            default => __('Enabled', domain: 'novamira'),
+        },
         'disabled' => $disabled,
-        'protected' => $protected,
+        'individually_manageable' => $individually_manageable,
+        'managed_by_feature' => $managed_by_feature,
+        'infrastructure' => $infrastructure,
+        'manage_url' => $managed_by_feature ? \Novamira\Features\Admin\url((string) $feature_id) : '',
     ];
+}
+
+/**
+ * Keep explicitly owned abilities visible when their feature is off and its
+ * registration module therefore did not boot. Category-owned abilities are
+ * already present because this screen keeps the complete registry intact.
+ *
+ * @param array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>> $groups
+ * @param array<string, bool> $seen
+ * @return array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>>
+ */
+function novamira_append_feature_ability_rows(array $groups, array $seen): array
+{
+    $manager = \Novamira\Features\features();
+    foreach ($manager->definitions() as $feature) {
+        foreach ($feature->abilities as $name) {
+            if (array_key_exists($name, $seen) || novamira_ability_is_hub_hidden($name)) {
+                continue;
+            }
+            $active = $manager->is_active($feature->id);
+            $managed = $feature->toggleable;
+            $groups[novamira_ability_prefix($name)][] = [
+                'name' => $name,
+                'label' => novamira_ability_placeholder_label($name),
+                'description' => '',
+                'category' => '',
+                'mcp' => __('Unknown', domain: 'novamira'),
+                'mcp_type' => '',
+                'status' => match (true) {
+                    !$active => __('Feature disabled', domain: 'novamira'),
+                    $managed => sprintf(__('Managed by %s', domain: 'novamira'), $feature->label),
+                    default => __('Required by Novamira', domain: 'novamira'),
+                },
+                'disabled' => !$active,
+                'individually_manageable' => false,
+                'managed_by_feature' => $managed,
+                'infrastructure' => !$managed,
+                'manage_url' => $managed ? \Novamira\Features\Admin\url($feature->id) : '',
+            ];
+        }
+    }
+
+    return $groups;
+}
+
+function novamira_ability_placeholder_label(string $name): string
+{
+    $parts = explode('/', $name, limit: 2);
+    $slug = $parts[1] ?? $name;
+
+    return ucwords(str_replace(search: '-', replace: ' ', subject: $slug));
 }
 
 /**
  * Merge persisted disabled rules back in as placeholder rows for abilities that
  * are no longer registered (disabled abilities are absent after the policy hook).
  *
- * @param array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}>> $groups
+ * @param array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>> $groups
  * @param array<string, array{disabled: bool}> $rules
  * @param array<string, bool> $seen
- * @return array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}>>
+ * @return array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>>
  */
 function novamira_append_disabled_ability_rows(array $groups, array $rules, array $seen): array
 {
     foreach ($rules as $name => $rule) {
-        if (novamira_ability_is_hub_hidden($name) || array_key_exists($name, $seen) || !$rule['disabled']) {
+        if (
+            \Novamira\Features\features()->feature_for_ability($name) !== null
+            || novamira_ability_is_hub_hidden($name)
+            || array_key_exists($name, $seen)
+            || !$rule['disabled']
+        ) {
             continue;
         }
         $groups[novamira_ability_prefix($name)][] = [
@@ -109,7 +183,10 @@ function novamira_append_disabled_ability_rows(array $groups, array $rules, arra
             'mcp_type' => '',
             'status' => __('Disabled', domain: 'novamira'),
             'disabled' => true,
-            'protected' => novamira_ability_is_hub_protected($name),
+            'individually_manageable' => true,
+            'managed_by_feature' => false,
+            'infrastructure' => false,
+            'manage_url' => '',
         ];
     }
 
@@ -143,10 +220,7 @@ function novamira_ability_hub_group_rank(string $source): int
 
 function novamira_ability_is_hub_hidden(string $ability_name): bool
 {
-    return (
-        str_starts_with($ability_name, 'novamira-mcp-adapter/')
-        || in_array($ability_name, novamira_always_on_ability_names(), strict: true)
-    );
+    return str_starts_with($ability_name, 'novamira-mcp-adapter/');
 }
 
 /**
@@ -223,6 +297,11 @@ function novamira_handle_ability_hub_actions(): void
         exit();
     }
 
+    if (!novamira_ability_can_be_managed_individually($ability_name)) {
+        wp_safe_redirect(admin_url('admin.php?page=novamira-abilities&novamira_result=managed'));
+        exit();
+    }
+
     $rules = novamira_get_ability_rules();
     $rules[$ability_name] ??= ['disabled' => false];
 
@@ -259,7 +338,7 @@ function novamira_handle_ability_toggle_ajax(): void
         wp_send_json_error(['message' => __('Invalid ability name.', domain: 'novamira')], status_code: 400);
     }
 
-    if (novamira_ability_is_hub_protected($ability_name)) {
+    if (!novamira_ability_can_be_managed_individually($ability_name)) {
         wp_send_json_error(['message' => __('This ability cannot be changed.', domain: 'novamira')], status_code: 403);
     }
 
@@ -337,7 +416,7 @@ function novamira_get_ability_hub_bulk_ability_names(): array
  */
 function novamira_apply_ability_hub_bulk_action_to_rules(array $rules, string $ability_name, string $action): array
 {
-    if (novamira_ability_is_hub_protected($ability_name)) {
+    if (!novamira_ability_can_be_managed_individually($ability_name)) {
         return $rules;
     }
 
@@ -372,7 +451,7 @@ function novamira_apply_ability_hub_action_to_rules(array $rules, string $abilit
  */
 function novamira_toggle_ability_disabled_rule(array $rules, string $ability_name): array
 {
-    if (novamira_ability_is_hub_protected($ability_name)) {
+    if (!novamira_ability_can_be_managed_individually($ability_name)) {
         return $rules;
     }
 
@@ -716,6 +795,13 @@ function novamira_render_ability_hub_result_notice(?string $result): void
         'invalid' => ['error', __('Invalid ability name.', domain: 'novamira')],
         'missing_bulk_action' => ['error', __('Choose a bulk action.', domain: 'novamira')],
         'nothing_selected' => ['error', __('Select at least one ability.', domain: 'novamira')],
+        'managed' => [
+            'info',
+            __(
+                'This ability is managed by Novamira or by a feature and cannot be changed independently.',
+                domain: 'novamira',
+            ),
+        ],
         default => null,
     };
 
@@ -739,7 +825,7 @@ function novamira_render_ability_other_plugins_divider(): void
     <?php }
 
 /**
- * @param list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}> $abilities
+ * @param array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}> $abilities
  * @param string|null $expanded_source Group key that should render expanded.
  */
 function novamira_render_ability_group_section(string $source, array $abilities, ?string $expanded_source): void
@@ -765,7 +851,7 @@ function novamira_render_ability_group_section(string $source, array $abilities,
  * the bare total when all are enabled. hub.js keeps both in sync after an
  * AJAX toggle.
  *
- * @param list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}> $abilities
+ * @param array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}> $abilities
  */
 function novamira_render_ability_header_meta(array $abilities): void
 {
@@ -806,7 +892,7 @@ function novamira_render_ability_select_all(string $label): void
  * Render a provider group's body: category sub-sections when there is more than
  * one category, otherwise a flat row list.
  *
- * @param list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}> $abilities
+ * @param array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}> $abilities
  */
 function novamira_render_ability_group_body(array $abilities): void
 {
@@ -829,8 +915,8 @@ function novamira_render_ability_group_body(array $abilities): void
 /**
  * Group hub rows by their category label. Uncategorized rows sort last.
  *
- * @param list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}> $abilities
- * @return array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}>>
+ * @param array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}> $abilities
+ * @return array<string, array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>>
  */
 function novamira_group_abilities_by_category(array $abilities): array
 {
@@ -850,7 +936,7 @@ function novamira_group_abilities_by_category(array $abilities): array
 }
 
 /**
- * @param list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool}> $rows
+ * @param array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}> $rows
  */
 function novamira_render_ability_category_subsection(string $category, array $rows): void
 {
@@ -877,14 +963,15 @@ function novamira_render_ability_category_subsection(string $category, array $ro
 }
 
 /**
- * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool} $ability
+ * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string} $ability
  */
 function novamira_render_ability_hub_row(array $ability): void
 {
     $row_class = 'novamira-hub-row ' . ($ability['disabled'] ? 'is-off' : 'is-on');
-    $row_class .= $ability['protected'] ? ' is-protected' : '';
+    $row_class .= $ability['individually_manageable'] ? '' : ' is-managed';
     ?>
     <div class="<?php echo esc_attr($row_class); ?>">
+        <?php if ($ability['individually_manageable']): ?>
         <label class="novamira-hub-select">
             <span class="screen-reader-text"><?php echo
                 esc_html(sprintf(
@@ -900,6 +987,10 @@ function novamira_render_ability_hub_row(array $ability): void
                 form="novamira-abilities-bulk"
             />
         </label>
+        <?php endif; ?>
+        <?php if (!$ability['individually_manageable']): ?>
+            <span class="novamira-hub-select" aria-hidden="true"></span>
+        <?php endif; ?>
 
         <?php novamira_render_ability_hub_main($ability); ?>
 
@@ -914,7 +1005,7 @@ function novamira_render_ability_hub_row(array $ability): void
  * row becomes expandable (CSS-only <details>) to reveal the full text and its
  * safety annotations; placeholder rows without a description stay flat.
  *
- * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool} $ability
+ * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string} $ability
  */
 function novamira_render_ability_hub_main(array $ability): void
 {
@@ -946,7 +1037,7 @@ function novamira_render_ability_hub_main(array $ability): void
 }
 
 /**
- * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool} $ability
+ * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string} $ability
  */
 function novamira_render_ability_hub_pills(array $ability): void
 { ?>
@@ -957,19 +1048,30 @@ function novamira_render_ability_hub_pills(array $ability): void
         <span class="<?php echo esc_attr('pill status ' . ($ability['disabled'] ? 'is-disabled' : 'is-enabled')); ?>">
             <?php echo esc_html($ability['status']); ?>
         </span>
-        <?php if ($ability['protected']): ?>
-            <span class="pill protected"><?php esc_html_e('Protected', domain: 'novamira'); ?></span>
+        <?php if ($ability['infrastructure']): ?>
+            <span class="pill managed"><?php esc_html_e('System', domain: 'novamira'); ?></span>
+        <?php endif; ?>
+        <?php if ($ability['managed_by_feature']): ?>
+            <span class="pill managed"><?php esc_html_e('Feature', domain: 'novamira'); ?></span>
         <?php endif; ?>
     </div>
     <?php }
 
 /**
- * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, protected: bool} $ability
+ * @param array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string} $ability
  */
 function novamira_render_ability_toggle_action(array $ability): void
 { ?>
     <div class="novamira-hub-actions">
-        <?php if (!$ability['protected']): ?>
+        <?php
+
+        if ($ability['managed_by_feature']) { ?>
+            <a class="action-btn" href="<?php echo esc_url($ability['manage_url']); ?>"><?php esc_html_e(
+                'Manage feature',
+                domain: 'novamira',
+            ); ?></a>
+            <?php }
+        if ($ability['individually_manageable']) { ?>
             <form method="post">
                 <?php wp_nonce_field('novamira_ability_hub_action'); ?>
                 <input type="hidden" name="novamira_ability_hub_action" value="toggle_disabled" />
@@ -982,7 +1084,7 @@ function novamira_render_ability_toggle_action(array $ability): void
                     ; ?>
                 </button>
             </form>
-        <?php endif; ?>
+            <?php } ?>
     </div>
     <?php }
 

@@ -80,7 +80,10 @@ function novamira_register_ability_categories(): void
             'description' => __('Meta-abilities for MCP protocol bridging.', domain: 'novamira'),
         ]);
     }
+}
 
+function novamira_register_gutenberg_ability_category(): void
+{
     wp_register_ability_category('gutenberg', [
         'label' => __('Gutenberg', domain: 'novamira'),
         'description' => __(
@@ -110,5 +113,4 @@ function novamira_register_builtin_abilities(): void
     require_once $dir . 'discover-abilities.php';
     require_once $dir . 'agent-context.php';
     require_once $dir . 'run-wp-cli.php';
-    novamira_load_gutenberg_abilities();
 }

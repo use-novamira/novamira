@@ -740,34 +740,21 @@ function novamira_sanitize_requested_ability_name(string $ability_name): string
     return sanitize_text_field(rawurldecode(wp_unslash($ability_name)));
 }
 
-/**
- * Ability names kept always-on and out of the abilities screen, alongside the mcp-adapter meta-tools:
- * the skills loader the discovery flow points agents to. Filterable so other infrastructure abilities
- * can opt in.
- *
- * @return list<string>
- */
-function novamira_always_on_ability_names(): array
+function novamira_ability_can_be_managed_individually(string $ability_name): bool
 {
-    /** @var list<string> */
-    return apply_filters('novamira_always_on_ability_names', ['novamira/skill-get']);
-}
+    $ability = function_exists('wp_get_ability') ? wp_get_ability($ability_name) : null;
+    $category = $ability instanceof WP_Ability ? $ability->get_category() : '';
 
-function novamira_ability_is_hub_protected(string $ability_name): bool
-{
-    return (
-        str_starts_with($ability_name, 'novamira-mcp-adapter/')
-        || in_array($ability_name, novamira_always_on_ability_names(), strict: true)
-    );
+    return \Novamira\Features\features()->feature_for_ability($ability_name, $category) === null;
 }
 
 /**
- * Whether the current request is rendering the Abilities Hub admin screen.
+ * Whether the current request is rendering a screen that needs the complete ability registry.
  *
- * The Hub manages every ability, disabled ones included, so it must see the
- * full registry; the disable policy is therefore not enforced while it renders.
+ * The Abilities and Features screens include resources that are currently off,
+ * so the disable policy is not enforced while either screen renders.
  */
-function novamira_is_ability_hub_screen(): bool
+function novamira_is_ability_management_screen(): bool
 {
     if (!is_admin()) {
         return false;
@@ -775,7 +762,7 @@ function novamira_is_ability_hub_screen(): bool
 
     $page = is_string($_GET['page'] ?? null) ? sanitize_key(wp_unslash($_GET['page'])) : '';
 
-    return $page === 'novamira-abilities';
+    return in_array($page, ['novamira-abilities', 'novamira-features'], strict: true);
 }
 
 /**
@@ -790,15 +777,11 @@ function novamira_apply_ability_policy(): void
     // The Hub screen lists disabled abilities with their full metadata, so do not
     // unregister them there. Enforcement still runs on REST/MCP and front-end
     // requests, which is where ability exposure actually matters.
-    if (novamira_is_ability_hub_screen()) {
+    if (novamira_is_ability_management_screen()) {
         return;
     }
 
     $rules = novamira_get_ability_rules();
-    if ($rules === []) {
-        return;
-    }
-
     foreach (wp_get_abilities() as $ability) {
         novamira_apply_ability_policy_rule($ability, $rules);
     }
@@ -810,12 +793,17 @@ function novamira_apply_ability_policy(): void
 function novamira_apply_ability_policy_rule(WP_Ability $ability, array $rules): void
 {
     $ability_name = $ability->get_name();
+    $category = $ability->get_category();
+    if (!\Novamira\Features\features()->is_ability_active($ability_name, $category)) {
+        wp_unregister_ability($ability_name);
+        return;
+    }
     $rule = $rules[$ability_name] ?? null;
     if ($rule === null) {
         return;
     }
 
-    if ($rule['disabled'] && !novamira_ability_is_hub_protected($ability_name)) {
+    if ($rule['disabled'] && \Novamira\Features\features()->feature_for_ability($ability_name, $category) === null) {
         wp_unregister_ability($ability_name);
     }
 }
@@ -832,6 +820,7 @@ function novamira_apply_ability_policy_rule(WP_Ability $ability, array $rules): 
  * @param mixed $args   The tool arguments; carries ability_name for the ability meta-tools.
  * @return mixed
  */
+// The adapter result has several independently guarded shapes and two distinct enriched error variants.
 function novamira_enrich_disabled_ability_error(mixed $result, mixed $args): mixed
 {
     if (!is_array($result) || ($result['success'] ?? null) !== false) {
@@ -844,7 +833,24 @@ function novamira_enrich_disabled_ability_error(mixed $result, mixed $args): mix
     }
 
     $rules = novamira_get_ability_rules();
-    if (($rules[$name]['disabled'] ?? false) !== true) {
+    $features = \Novamira\Features\features();
+    $feature = $features->feature_for_ability($name);
+    $feature_inactive = $feature !== null && !$features->is_active($feature->id);
+    $standalone_disabled = $feature === null && ($rules[$name]['disabled'] ?? false) === true;
+    if (!$standalone_disabled && !$feature_inactive) {
+        return $result;
+    }
+
+    if ($feature_inactive) {
+        $result['error'] = sprintf(
+            /* translators: 1: ability name, 2: feature label */
+            __(
+                "Ability '%1\$s' is managed by the %2\$s feature, which is currently inactive. Ask the site admin to enable it under Novamira → Features, then retry.",
+                domain: 'novamira',
+            ),
+            $name,
+            $feature->label,
+        );
         return $result;
     }
 
@@ -1046,15 +1052,23 @@ function novamira_build_building_context_lines(): array
             ' (child theme of ' . ($parent instanceof WP_Theme ? $parent->get('Name') : $theme->get_template()) . ')';
     }
 
-    return [
+    $lines = [
         '## Building pages and layout',
         '',
         'Active theme: ' . $theme_desc . '.',
-        '',
-        'Before any visual work (building or restyling a page, template, section, or component), load the `novamira-design` skill and follow it.',
+    ];
+    /** @var mixed $filtered_lines */
+    $filtered_lines = apply_filters('novamira_building_context_lines', $lines);
+    if (is_array($filtered_lines)) {
+        $lines = array_values(array_map(static fn(mixed $line): string => is_string($line)
+            ? $line
+            : '', $filtered_lines));
+    }
+
+    return array_values(array_merge($lines, [
         '',
         'Before building or restructuring a page\'s content or layout, check the installed-plugins inventory above for page builders (which replace the editor) and block libraries (which extend Gutenberg), then ask the user which approach to use: a page builder, Gutenberg, classic theme templates, a child theme, or a custom theme. Ask once and follow that choice; do not mix approaches (e.g. Gutenberg blocks in a page-builder page).',
-    ];
+    ]));
 }
 
 /**

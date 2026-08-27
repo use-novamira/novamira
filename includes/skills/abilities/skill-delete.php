@@ -50,9 +50,10 @@ function register(): void
             if ($slug === '') {
                 return new WP_Error('missing_slug', __('A slug is required.', domain: 'novamira'));
             }
-            // Only user-cpt skills can be deleted. If the slug exists in
-            // an external source, refuse cleanly without raising an error.
-            $post = SkillWrite\find_user_post_by_slug($slug);
+            $post = SkillWrite\resolve_mutation_target($slug);
+            if ($post instanceof WP_Error) {
+                return $post;
+            }
             if ($post === null) {
                 return [
                     'success' => true,

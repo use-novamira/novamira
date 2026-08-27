@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Novamira\Skills\Sources;
 
+use Novamira\Features;
 use Novamira\Skills\Cpt;
 
 if (!defined('ABSPATH')) {
@@ -31,6 +32,13 @@ const USER_CPT_PRIORITY = 50;
  */
 function registry(): array
 {
+    /** @var array<int, list<array{id: string, priority: int, label: string, loader: callable(): list<array<string,mixed>>}>> $registries */
+    static $registries = [];
+    $blog_id = get_current_blog_id();
+    if (array_key_exists($blog_id, $registries)) {
+        return $registries[$blog_id];
+    }
+
     $default = [
         'user-cpt' => [
             'id' => 'user-cpt',
@@ -43,9 +51,30 @@ function registry(): array
     /** @var array<string, array{id: string, priority: int, label: string, loader: callable(): list<array<string,mixed>>}> $sources */
     $sources = apply_filters('novamira_skill_lookup_sources', $default);
 
-    $list = array_values($sources);
-    usort($list, static fn(array $a, array $b): int => $a['priority'] <=> $b['priority']);
-    return $list;
+    $registry = array_values($sources);
+    usort($registry, static fn(array $a, array $b): int => $a['priority'] <=> $b['priority']);
+    $registries[$blog_id] = $registry;
+
+    return $registry;
+}
+
+/**
+ * Load each source at most once per request. Source loaders may scan the
+ * filesystem or query posts, so every consumer shares the same snapshot.
+ *
+ * @param array{id: string, priority: int, label: string, loader: callable(): list<array<string,mixed>>} $source
+ * @return list<array<string,mixed>>
+ */
+function skills_from_source(array $source): array
+{
+    /** @var array<int, array<string, list<array<string,mixed>>>> $cache */
+    static $cache = [];
+    $blog_id = get_current_blog_id();
+    if (!array_key_exists($source['id'], $cache[$blog_id] ?? [])) {
+        $cache[$blog_id][$source['id']] = $source['loader']();
+    }
+
+    return $cache[$blog_id][$source['id']];
 }
 
 /**
@@ -96,7 +125,7 @@ function load_user_cpt(): array
 function find(string $slug): ?array
 {
     foreach (registry() as $entry) {
-        foreach ($entry['loader']() as $skill) {
+        foreach (skills_from_source($entry) as $skill) {
             if (($skill['slug'] ?? '') !== $slug) {
                 continue;
             }
@@ -116,14 +145,23 @@ function find(string $slug): ?array
  */
 function all(): array
 {
+    /** @var array<int, list<array<string,mixed>>> $all */
+    static $all = [];
+    $blog_id = get_current_blog_id();
+    if (array_key_exists($blog_id, $all)) {
+        return $all[$blog_id];
+    }
+
     $result = [];
     foreach (registry() as $entry) {
-        foreach ($entry['loader']() as $skill) {
+        foreach (skills_from_source($entry) as $skill) {
             $skill['source'] = $entry['id'];
             $skill['source_label'] = $entry['label'];
             $result[] = $skill;
         }
     }
+    $all[$blog_id] = $result;
+
     return $result;
 }
 
@@ -147,6 +185,10 @@ function discoverable(string $mode): array
     $default = $mode === 'agentic';
     $result = [];
     foreach (all() as $skill) {
+        $slug = is_string($skill['slug'] ?? null) ? $skill['slug'] : '';
+        if (!Features\features()->is_skill_active($slug)) {
+            continue;
+        }
         if (trim((string) ($skill['description'] ?? '')) === '') {
             continue;
         }
@@ -172,7 +214,7 @@ function exists_in_external_source(string $slug): ?string
         if ($entry['id'] === 'user-cpt') {
             continue;
         }
-        foreach ($entry['loader']() as $skill) {
+        foreach (skills_from_source($entry) as $skill) {
             if (($skill['slug'] ?? '') === $slug) {
                 return $entry['label'];
             }

@@ -68,7 +68,10 @@ function novamira_uninstall_current_site(array $plan): void
         delete_option('novamira_oauth_dcr_epoch');
     }
 
+    delete_option('novamira_feature_preferences');
+
     wp_clear_scheduled_hook('novamira_oauth_gc');
+    wp_clear_scheduled_hook('novamira_gutenberg_cleanup');
 }
 
 function novamira_uninstall_post_type(string $post_type): void

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Novamira\Skills\Abilities\SkillWrite;
 
+use Novamira\Features;
 use Novamira\Skills\Cpt;
 use Novamira\Skills\Parser;
 use Novamira\Skills\Sources;
@@ -199,6 +200,64 @@ function find_user_post_by_slug(string $slug): ?\WP_Post
         'no_found_rows' => true,
     ]);
     return $posts[0] ?? null;
+}
+
+/**
+ * Resolve a skill mutation to its user-owned post, an immutable-resource error,
+ * or null when the slug does not exist anywhere.
+ *
+ * @return \WP_Post|WP_Error|null
+ */
+function resolve_mutation_target(string $slug): \WP_Post|WP_Error|null
+{
+    $post = find_user_post_by_slug($slug);
+    if ($post !== null) {
+        return $post;
+    }
+
+    $skill = Sources\find($slug);
+    if ($skill === null || ($skill['source'] ?? '') === 'user-cpt') {
+        return null;
+    }
+
+    $source_label = is_string($skill['source_label'] ?? null) ? $skill['source_label'] : '';
+
+    return immutable_skill_error($slug, $source_label);
+}
+
+function immutable_skill_error(string $slug, string $source_label): WP_Error
+{
+    $features = Features\features()->features_for_skill($slug);
+    $toggleable = array_values(array_filter(
+        $features,
+        static fn(Features\Definition $feature): bool => $feature->toggleable,
+    ));
+    if ($toggleable !== []) {
+        return new WP_Error('skill_managed_by_feature', sprintf(
+            /* translators: 1: skill slug, 2: comma-separated feature labels */
+            __(
+                'Skill "%1$s" is managed by %2$s and cannot be changed independently. Manage it under Novamira → Features.',
+                domain: 'novamira',
+            ),
+            $slug,
+            implode(', ', array_map(static fn(Features\Definition $feature): string => $feature->label, $toggleable)),
+        ));
+    }
+
+    if ($features !== []) {
+        return new WP_Error('system_skill', sprintf(
+            /* translators: %s: skill slug */
+            __('Skill "%s" is built into Novamira and cannot be changed.', domain: 'novamira'),
+            $slug,
+        ));
+    }
+
+    return new WP_Error('skill_read_only', sprintf(
+        /* translators: 1: skill slug, 2: source label */
+        __('Skill "%1$s" is provided by source "%2$s" and cannot be changed.', domain: 'novamira'),
+        $slug,
+        $source_label !== '' ? $source_label : __('External', domain: 'novamira'),
+    ));
 }
 
 function find_free_suffix(string $slug): string

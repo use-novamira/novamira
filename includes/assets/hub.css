@@ -37,8 +37,8 @@
     --nm-pill-on-text: #166534;
     --nm-pill-off-bg: #fee2e2;
     --nm-pill-off-text: #b32d2e;
-    --nm-pill-protected-bg: #fef3c7;
-    --nm-pill-protected-text: #92400e;
+    --nm-pill-managed-bg: #fef3c7;
+    --nm-pill-managed-text: #92400e;
 
     /* Focus, radius, shadow */
     --nm-focus: #2271b1;
@@ -432,9 +432,9 @@
     color: var(--nm-pill-off-text);
 }
 
-.novamira-hub-pills .pill.protected {
-    background: var(--nm-pill-protected-bg);
-    color: var(--nm-pill-protected-text);
+.novamira-hub-pills .pill.managed {
+    background: var(--nm-pill-managed-bg);
+    color: var(--nm-pill-managed-text);
 }
 
 /* Row actions (revealed on hover/focus) */
