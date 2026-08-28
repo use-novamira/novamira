@@ -1,4 +1,5 @@
 * Fix: The generic MCP execute-ability tool now declares its `parameters` argument as an open object (`additionalProperties: true`, empty `properties`), so strict MCP clients such as ChatGPT connectors can pass ability arguments instead of rejecting the call with "Invalid connector tool arguments."
+* Fix: The MCP execute-ability and get-ability-info tools are now registered even when another plugin uses the WordPress Abilities API before Novamira's bundled MCP Adapter initializes, such as the public MCP Adapter plugin running alongside Novamira, or initializes the adapter while Abilities are still being registered. On the sites affected by one of those orderings, the Novamira MCP server has exposed only the discover-abilities tool since 1.11.5; other sites were never affected.
 
 v1.11.6 - 2026/08/26
 * Fix: Novamira no longer announces classes of its bundled MCP Adapter at a location the plugin does not ship. On a site where another plugin checks whether those classes exist, that check ended in a critical error on every page after updating to 1.11.5.
