@@ -27,7 +27,7 @@ function register(): void
     wp_register_ability('novamira/activate-design', [
         'label' => __('Activate Design', domain: 'novamira'),
         'description' => __(
-            'Make a ready design system (by slug) active for this site. Incomplete saved drafts are rejected until their required colors and typography are repaired.',
+            'Make a ready design system (by slug) active for this site. Incomplete saved drafts are rejected until their required colors and typography are repaired. The response carries the readiness of the activated design, including any warnings.',
             domain: 'novamira',
         ),
         'category' => Abilities\CATEGORY,
@@ -46,6 +46,7 @@ function register(): void
             'properties' => [
                 'activated' => ['type' => 'boolean'],
                 'slug' => ['type' => 'string'],
+                'readiness' => Contract\ability_output_properties()['readiness'],
             ],
             'required' => ['activated'],
         ],
@@ -63,7 +64,7 @@ function register(): void
                 return new WP_Error('design_not_ready', Contract\activation_error($inspection));
             }
             Store\set_active($slug);
-            return ['activated' => true, 'slug' => $slug];
+            return ['activated' => true, 'slug' => $slug, 'readiness' => $inspection['readiness']];
         },
         'permission_callback' => 'novamira_permission_callback',
         'meta' => [

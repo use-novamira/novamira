@@ -786,6 +786,17 @@ function normalize_md(string $raw): string
 }
 
 /**
+ * Fold typographic apostrophes (right/left single quotation marks and the
+ * modifier letter apostrophe) into the ASCII `'` so "Don’t" and "Don't" read
+ * the same to the section-title and Do/Don't matchers. Matching only: the
+ * stored document is never rewritten.
+ */
+function normalize_apostrophes(string $text): string
+{
+    return str_replace(search: ["\u{2019}", "\u{2018}", "\u{02BC}"], replace: "'", subject: $text);
+}
+
+/**
  * Return the front-matter block lines (between the opening and closing `---`),
  * or [] if there is no valid front matter.
  *

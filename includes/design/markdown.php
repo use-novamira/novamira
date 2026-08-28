@@ -131,59 +131,166 @@ function section(string $md, array $titles): string
  */
 function raw_section(string $md, array $titles): string
 {
-    $normalized = Tokens\normalize_md($md);
-    $wanted = array_map(static fn(string $title): string => strtolower($title), $titles);
-    $body = '';
-    $capturing = false;
-    $m = [];
-    foreach (explode(separator: "\n", string: $normalized) as $line) {
-        if (preg_match('/^#{1,2}\s+(.*)$/', $line, $m) === 1) {
-            if ($capturing) {
-                break;
-            }
-            $capturing = in_array(strtolower(trim($m[1])), $wanted, strict: true);
-            continue;
-        }
-        if ($capturing) {
-            $body .= $line . "\n";
-        }
-    }
-    return $body;
+    $sections = raw_sections($md, $titles);
+    return $sections === [] ? '' : $sections[0]['body'];
 }
 
 /**
- * Split a guidance section into grouped Do items, Don't items and the
- * remaining prose, regardless of the order they appear in the source. Items
- * are safe inline HTML ready for an <li>; `rest` is rendered HTML.
+ * Every top-level or second-level section whose title matches one of $titles,
+ * in document order, each as its label key, heading level and raw body.
+ * Titles compare by label key (see label_key()), so apostrophe style, `&`
+ * versus "and" and emphasis marks around the title do not matter.
  *
  * @param list<string> $titles
- * @return array{dos: list<string>, donts: list<string>, rest: string}
+ * @return list<array{title: string, level: int, body: string}>
+ */
+function raw_sections(string $md, array $titles): array
+{
+    $normalized = Tokens\normalize_md($md);
+    $wanted = array_map(static fn(string $title): string => label_key($title), $titles);
+    $sections = [];
+    $title = null;
+    $level = 0;
+    $body = '';
+    $m = [];
+    foreach (explode(separator: "\n", string: $normalized) as $line) {
+        if (preg_match('/^(#{1,2})\s+(.*)$/', $line, $m) === 1) {
+            if ($title !== null) {
+                $sections[] = ['title' => $title, 'level' => $level, 'body' => $body];
+            }
+            $key = label_key($m[2]);
+            $title = in_array($key, $wanted, strict: true) ? $key : null;
+            $level = strlen($m[1]);
+            $body = '';
+            continue;
+        }
+        if ($title !== null) {
+            $body .= $line . "\n";
+        }
+    }
+    if ($title !== null) {
+        $sections[] = ['title' => $title, 'level' => $level, 'body' => $body];
+    }
+    return $sections;
+}
+
+/**
+ * Canonical comparison key for a section title or a Do/Don't label: ASCII
+ * apostrophes, lowercase, emphasis marks and closing hashes dropped, `&` read
+ * as "and", apostrophes removed and whitespace collapsed, so "Do’s & Don'ts",
+ * "**Dos and Donts:**" and "do's and don'ts" all compare equal.
+ */
+function label_key(string $text): string
+{
+    $plain = strtolower(Tokens\normalize_apostrophes($text));
+    $plain = str_replace(search: ['*', '_', '`', "'", '&'], replace: ['', '', '', '', ' and '], subject: $plain);
+    $plain = trim($plain, characters: " \t:#");
+    $collapsed = preg_replace(pattern: '/\s+/', replacement: ' ', subject: $plain);
+    return is_string($collapsed) ? $collapsed : $plain;
+}
+
+/**
+ * Which guidance group a label names: 'dont' for "Don't(s)" / "Do not" /
+ * "Never" / "Avoid", 'do' for "Do(s)" / "Always" / "Ensure" / "Prefer", and
+ * '' when the text is not a bare label. The vocabulary mirrors
+ * Preflight\is_dont() / is_do(); a prohibition wins over an affirmation, so
+ * "Do not" is a Don't. Only a bare label matches: "Do keep it simple" is an
+ * item, not a label.
+ */
+function label_group(string $text): string
+{
+    $key = label_key($text);
+    if (preg_match('/^(?:donts?|do nots?|never|avoid)$/', $key) === 1) {
+        return 'dont';
+    }
+    if (preg_match('/^(?:dos?|always|ensure|prefer)$/', $key) === 1) {
+        return 'do';
+    }
+    return '';
+}
+
+/**
+ * Classify one list item: a prohibition or an affirmation by its own opening
+ * words, otherwise the group it sits under ('' when there is none).
+ */
+function item_group(string $text, string $group): string
+{
+    if (Preflight\is_dont($text)) {
+        return 'dont';
+    }
+    if (Preflight\is_do($text)) {
+        return 'do';
+    }
+    return $group;
+}
+
+/**
+ * Split the guidance sections into grouped Do items, Don't items and the
+ * remaining prose, regardless of the order they appear in the source. Items
+ * are safe inline HTML ready for an <li>; `rest` is rendered HTML; `found`
+ * says whether any guidance section exists at all.
+ *
+ * A section whose title is a bare group label ("Do's", "Don'ts") counts only
+ * as a second-level heading: a document titled `# Don't` is a name, not a
+ * guidance section. Combined titles ("Do's and Don'ts", "Guidelines") match at
+ * either level.
+ *
+ * Grouping: a section titled "Don'ts" or "Do's", a level-3+ subheading
+ * (`### Don'ts`), a bare label line (`**Do**`, `Don't:`) or a bare label
+ * bullet (`- **Do**` above nested items) sets the current group for the
+ * bullets that follow; a subheading that is not a label ends it. A bullet
+ * that itself opens with Do/Always/… or Don't/Never/Avoid keeps that reading
+ * regardless of the group. Neutral bullets outside any group, and prose, go
+ * to `rest`; consumed labels and subheadings do not.
+ *
+ * @param list<string> $titles
+ * @return array{dos: list<string>, donts: list<string>, rest: string, found: bool}
  */
 function guidance(string $md, array $titles): array
 {
-    $body = raw_section($md, $titles);
+    $sections = array_values(array_filter(
+        raw_sections($md, $titles),
+        static fn(array $section): bool => $section['level'] === 2 || label_group($section['title']) === '',
+    ));
     $dos = [];
     $donts = [];
     $rest = '';
     $m = [];
-    foreach (explode(separator: "\n", string: $body) as $line) {
-        if (preg_match('/^(?:[-*]|\d+[.)])\s+(.*)$/', trim($line), $m) === 1) {
-            $text = trim($m[1]);
-            if (Preflight\is_dont($text)) {
+    foreach ($sections as $section) {
+        $group = label_group($section['title']);
+        foreach (explode(separator: "\n", string: $section['body']) as $line) {
+            $trimmed = trim($line);
+            $is_heading = preg_match('/^#{3,6}\s+(.*)$/', $trimmed, $m) === 1;
+            $is_item = !$is_heading && preg_match('/^(?:[-*]|\d+[.)])\s+(.*)$/', $trimmed, $m) === 1;
+            $text = $is_heading || $is_item ? trim($m[1]) : $trimmed;
+
+            $label = $text === '' ? '' : label_group($text);
+            if ($label !== '') {
+                $group = $label;
+                continue;
+            }
+            if ($is_heading) {
+                $group = '';
+                $rest .= $line . "\n";
+                continue;
+            }
+            $kind = $is_item ? item_group($text, $group) : '';
+            if ($kind === 'dont') {
                 $donts[] = inline($text);
                 continue;
             }
-            if (Preflight\is_do($text)) {
+            if ($kind === 'do') {
                 $dos[] = inline($text);
                 continue;
             }
+            $rest .= $line . "\n";
         }
-        $rest .= $line . "\n";
     }
     return [
         'dos' => $dos,
         'donts' => $donts,
         'rest' => trim($rest) === '' ? '' : to_html($rest),
+        'found' => $sections !== [],
     ];
 }
 

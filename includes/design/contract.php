@@ -78,7 +78,8 @@ function inspect(string $content): array
 {
     $all_tokens = Tokens\extract($content);
     $sources = token_sources($content, $all_tokens);
-    $readiness = readiness($all_tokens, $sources);
+    $parsed = Markdown\guidance($content, guidance_titles());
+    $readiness = readiness($all_tokens, $sources, guidance_source($parsed));
 
     return [
         'tokens' => [
@@ -89,7 +90,7 @@ function inspect(string $content): array
             'components' => $all_tokens['components'],
         ],
         'dials' => Tokens\dials($all_tokens),
-        'guidance' => guidance($content),
+        'guidance' => plain_guidance($parsed),
         'token_sources' => $sources,
         'readiness' => $readiness,
         // Anti-slop rules this design waives, so the agent knows what is
@@ -99,8 +100,8 @@ function inspect(string $content): array
 }
 
 /**
- * Semantic activation gate. Missing optional craft tokens stay warnings so
- * imported real-world DESIGN.md files remain usable.
+ * Semantic activation gate. Missing optional craft tokens and missing Do/Don't
+ * guidance stay warnings so imported real-world DESIGN.md files remain usable.
  *
  * @param array{
  *   colors: array<string, string>,
@@ -111,12 +112,13 @@ function inspect(string $content): array
  *   dials: array<string, string>
  * } $tokens
  * @param array{colors: string, typography: string, spacing: string, rounded: string, components: string, dials: string} $sources
+ * @param string $guidance_source One of guidance_source()'s values.
  * @return array{ready: bool, sync_ready: bool, errors: list<string>, warnings: list<string>}
  */
-function readiness(array $tokens, array $sources): array
+function readiness(array $tokens, array $sources, string $guidance_source): array
 {
     $errors = required_token_errors($tokens);
-    $warnings = readiness_warnings($sources);
+    $warnings = readiness_warnings($sources, $guidance_source);
     $ready = $errors === [];
     return [
         'ready' => $ready,
@@ -172,9 +174,10 @@ function required_token_errors(array $tokens): array
 
 /**
  * @param array{colors: string, typography: string, spacing: string, rounded: string, components: string, dials: string} $sources
+ * @param string $guidance_source One of guidance_source()'s values.
  * @return list<string>
  */
-function readiness_warnings(array $sources): array
+function readiness_warnings(array $sources, string $guidance_source): array
 {
     $warnings = [];
 
@@ -205,8 +208,43 @@ function readiness_warnings(array $sources): array
     if ($sources['dials'] === 'missing') {
         $warnings[] = __('No compositional dials are declared; defaults will be used.', domain: 'novamira');
     }
+    $guidance_warning = guidance_warning($guidance_source);
+    if ($guidance_warning !== '') {
+        $warnings[] = $guidance_warning;
+    }
 
     return $warnings;
+}
+
+/** The readiness warning for a guidance_source() value, or '' when items were recognised. */
+function guidance_warning(string $guidance_source): string
+{
+    return match ($guidance_source) {
+        'missing' => __(
+            "No Do's and Don'ts section was found; design checks will only enforce tokens and the universal rules.",
+            domain: 'novamira',
+        ),
+        'empty' => __(
+            "A guidance section was found but no Do/Don't items were recognised, so design checks will only enforce tokens and the universal rules. Group bullets under Do's / Don'ts labels or start each one with a prefix such as Do, Always, Ensure, Prefer, Don't, Do not, Never or Avoid.",
+            domain: 'novamira',
+        ),
+        default => '',
+    };
+}
+
+/**
+ * Whether the document's Do/Don't guidance is usable: 'explicit' when at least
+ * one item was recognised, 'empty' when a guidance section exists but none of
+ * its lines read as a Do or a Don't, 'missing' when there is no such section.
+ *
+ * @param array{dos: list<string>, donts: list<string>, rest: string, found: bool} $parsed
+ */
+function guidance_source(array $parsed): string
+{
+    if (!$parsed['found']) {
+        return 'missing';
+    }
+    return $parsed['dos'] === [] && $parsed['donts'] === [] ? 'empty' : 'explicit';
 }
 
 /**
@@ -262,23 +300,44 @@ function has_top_level_key(string $content, string $wanted): bool
 }
 
 /**
+ * Section titles that hold Do/Don't guidance. Compared by label key, so
+ * "Do’s & Don'ts", "Dos and Donts" and "do's and don'ts" all match; a
+ * standalone "Do's" or "Don'ts" section is read as that group.
+ *
+ * @return list<string>
+ */
+function guidance_titles(): array
+{
+    return [
+        "do's and don'ts",
+        "don'ts and do's",
+        "do and don't",
+        "do's",
+        "don'ts",
+        'do',
+        "don't",
+        'guidelines',
+        'principles',
+        'rules',
+    ];
+}
+
+/**
  * Plain-text Do/Don't guidance for machine consumers.
  *
  * @return array{dos: list<string>, donts: list<string>}
  */
 function guidance(string $content): array
 {
-    $parsed = Markdown\guidance($content, [
-        "do's and don'ts",
-        "dos and don'ts",
-        "do's & don'ts",
-        "dos & don'ts",
-        "do and don't",
-        'guidelines',
-        'principles',
-        'rules',
-    ]);
+    return plain_guidance(Markdown\guidance($content, guidance_titles()));
+}
 
+/**
+ * @param array{dos: list<string>, donts: list<string>, rest: string, found: bool} $parsed
+ * @return array{dos: list<string>, donts: list<string>}
+ */
+function plain_guidance(array $parsed): array
+{
     return [
         'dos' => plain_items($parsed['dos']),
         'donts' => plain_items($parsed['donts']),

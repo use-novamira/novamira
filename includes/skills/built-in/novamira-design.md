@@ -461,6 +461,16 @@ Shapes, Components, Do's and Don'ts). Be exact — name fonts and hex values,
 never categories. Colors must include `bg`, `ink`, and `accent`; typography must
 include both `heading` and `body`. These five roles are the activation minimum.
 
+Guidance is read from the body only; there is no `guidance` front-matter key.
+Under `## Do's and Don'ts`, write every item as a bullet and either group the
+bullets under `### Do's` / `### Don'ts` subheadings (or `**Do**` / `**Don't**`
+label lines), or start each bullet with Do, Always, Ensure or Prefer (a Do) or
+Don't, Never or Avoid (a Don't). A bullet that opens with one of those words
+keeps that reading even inside the other group. Numbered items (`1.`) are
+accepted as well, and plain `Do:` / `Don't:` label lines work like the bold
+ones. Bullets that fit neither are not guidance items, and readiness warns
+when none are recognised.
+
 `dials` are three 0-1 knobs for how layouts should feel: `variance` (symmetry →
 asymmetry), `density` (airy → packed), `motion` (static → kinetic). Honor them
 when composing — high `variance` means asymmetric, offset structure and the
@@ -501,4 +511,14 @@ dials:
   density: 0.3
   motion: 0.2
 ---
+```
+
+```markdown
+## Do's and Don'ts
+
+### Do's
+- Use the accent for one action per view.
+
+### Don'ts
+- Never stack shadows to fake depth.
 ```

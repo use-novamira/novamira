@@ -54,6 +54,16 @@ function rules(mixed $r): array
     ));
 }
 
+/** @return list<string> the readiness warnings about Do/Don't guidance */
+function guidance_warnings(mixed $r): array
+{
+    $warnings = is_wp_error($r) ? [] : $r['readiness']['warnings'] ?? [];
+    return array_values(array_filter(
+        $warnings,
+        static fn(string $warning): bool => str_contains($warning, "Do's and Don'ts section") || str_contains($warning, "no Do/Don't items"),
+    ));
+}
+
 function severity_of(mixed $r, string $rule): string
 {
     foreach ((is_wp_error($r) ? [] : $r['violations'] ?? []) as $v) {
@@ -135,6 +145,11 @@ check(
     && ($r['readiness']['ready'] ?? true) === false,
     is_wp_error($r) ? $r->get_error_message() : json_encode($r['readiness'] ?? null),
 );
+check(
+    'save-design warns that the draft has no guidance section',
+    count(guidance_warnings($r)) === 1 && str_contains(guidance_warnings($r)[0], 'No Do\'s and Don\'ts section'),
+    json_encode(is_wp_error($r) ? $r->get_error_message() : $r['readiness']['warnings'] ?? null),
+);
 $r = ab('novamira/activate-design', ['slug' => 'smoke-incomplete']);
 check(
     'activate-design rejects an incomplete draft',
@@ -156,6 +171,11 @@ check(
     && abs(($r['dials']['variance'] ?? 0.0) - 0.5) < 0.001,
     is_wp_error($r) ? $r->get_error_message() : json_encode($r['readiness'] ?? null),
 );
+check(
+    'save-design smoke-viola carries no guidance warning: its Do item was recognised',
+    !is_wp_error($r) && guidance_warnings($r) === [],
+    json_encode(is_wp_error($r) ? $r->get_error_message() : $r['readiness']['warnings'] ?? null),
+);
 
 // Verify the persisted state, not the claim.
 $act = ab('novamira/get-active-design', []);
@@ -164,8 +184,9 @@ check(
     !is_wp_error($act)
     && ($act['slug'] ?? '') === 'smoke-viola'
     && ($act['active'] ?? false) === true
-    && ($act['guidance']['dos'][0] ?? '') === 'Do keep the purple accent everywhere.',
-    json_encode(['slug' => $act['slug'] ?? null, 'guidance' => $act['guidance'] ?? null]),
+    && ($act['guidance']['dos'][0] ?? '') === 'Do keep the purple accent everywhere.'
+    && guidance_warnings($act) === [],
+    json_encode(['slug' => $act['slug'] ?? null, 'guidance' => $act['guidance'] ?? null, 'warnings' => $act['readiness']['warnings'] ?? null]),
 );
 
 // Updating through the ability writes a native WordPress revision for the design CPT.
@@ -184,6 +205,29 @@ check(
 $r = ab('novamira/check-design', ['output' => $out_purple_inter . ' <p>testo — con em-dash</p>']);
 $hard = array_values(array_filter(is_wp_error($r) ? [] : $r['violations'], static fn(array $v): bool => in_array($v['rule'], ['ai-purple', 'inter-font', 'em-dash'], true)));
 check('declared purple + Inter + em-dash: 0 hard violations, ok=true', !is_wp_error($r) && $r['ok'] === true && $hard === [], json_encode(rules($r)));
+
+// activate-design reports the readiness of the design it activates, warnings included.
+$design_noguide = "---\ncolors:\n  ground: \"#f4f2ec\"\n  ink: \"#141a16\"\n  accent: \"#1e5c40\"\ntypography:\n  heading:\n    fontFamily: \"Cabinet Grotesk, sans-serif\"\n  body:\n    fontFamily: \"General Sans, sans-serif\"\nspacing:\n  md: 18px\nrounded:\n  md: 4px\ncomponents:\n  buttons: Square and solid\ndials:\n  variance: 0.3\n  density: 0.4\n  motion: 0.1\n---\n\n# No Guide\n\n## Overview\nReady, but without a Do's and Don'ts section.\n";
+ab('novamira/save-design', ['slug' => 'smoke-noguide', 'content' => $design_noguide, 'activate' => false]);
+$r = ab('novamira/activate-design', ['slug' => 'smoke-noguide']);
+check(
+    'activate-design returns readiness and warns that the activated design has no guidance section',
+    !is_wp_error($r)
+    && ($r['activated'] ?? false) === true
+    && ($r['readiness']['ready'] ?? false) === true
+    && count(guidance_warnings($r)) === 1
+    && str_contains(guidance_warnings($r)[0], 'No Do\'s and Don\'ts section'),
+    is_wp_error($r) ? $r->get_error_message() : json_encode($r),
+);
+$r = ab('novamira/activate-design', ['slug' => 'smoke-viola']);
+check(
+    'activate-design smoke-viola carries readiness with no guidance warning',
+    !is_wp_error($r)
+    && ($r['activated'] ?? false) === true
+    && is_array($r['readiness']['warnings'] ?? null)
+    && guidance_warnings($r) === [],
+    is_wp_error($r) ? $r->get_error_message() : json_encode($r),
+);
 
 // ---------- 5. A new direction does not inherit ----------
 $design_forest = "---\ncolors:\n  ground: \"#f4f2ec\"\n  ink: \"#141a16\"\n  accent: \"#1e5c40\"\ntypography:\n  heading:\n    fontFamily: \"Cabinet Grotesk, sans-serif\"\n  body:\n    fontFamily: \"General Sans, sans-serif\"\nspacing:\n  md: 18px\nrounded:\n  md: 4px\ncomponents:\n  buttons: Square and solid\ndials:\n  variance: 0.3\n  density: 0.4\n  motion: 0.1\n---\n\n# Forest\n\n## Overview\nNew direction: no purple, no Inter.\n";
@@ -289,7 +333,7 @@ check(
 );
 
 // ---------- Cleanup ----------
-foreach (['smoke-incomplete', 'smoke-viola', 'smoke-forest', 'smoke-ghisa', 'smoke-history'] as $slug) {
+foreach (['smoke-incomplete', 'smoke-viola', 'smoke-noguide', 'smoke-forest', 'smoke-ghisa', 'smoke-history'] as $slug) {
     ab('novamira/delete-design', ['slug' => $slug]);
 }
 update_option('novamira_active_design', $prev_active);

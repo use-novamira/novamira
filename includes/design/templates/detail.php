@@ -43,16 +43,7 @@ $philosophy = Markdown\section($design['content'], [
     'about',
     'introduction',
 ]);
-$guidance = Markdown\guidance($design['content'], [
-    "do's and don'ts",
-    "dos and don'ts",
-    "do's & don'ts",
-    "dos & don'ts",
-    "do and don't",
-    'guidelines',
-    'principles',
-    'rules',
-]);
+$guidance = Markdown\guidance($design['content'], Contract\guidance_titles());
 $has_guidance = $guidance['dos'] !== [] || $guidance['donts'] !== [] || $guidance['rest'] !== '';
 $vars_style = Tokens\css_vars_string($tokens);
 $accent = Tokens\css_vars($tokens)['--nd-accent'] ?? '';

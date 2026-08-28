@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 namespace Novamira\Design\Preflight;
 
+use Novamira\Design\Contract;
 use Novamira\Design\Tokens;
 
 if (!defined('ABSPATH')) {
@@ -740,55 +741,33 @@ function warm_role(?array $hsl): string
 }
 
 /**
- * Whether a Do/Don't list line reads as a "Don't" (a prohibition). The single
- * source of truth for the Do/Don't split: the anti-slop pass uses it to collect
- * the active design's Don'ts, and the admin renderer styles the line by it. Kept
- * here, in the validator, so the anti-slop rules stay self-contained.
+ * Whether a Do/Don't list line reads as a "Don't" (a prohibition) by its own
+ * opening words. A per-item prefix classifier: Markdown\guidance() applies it
+ * to each bullet (where it overrides the surrounding Do/Don't group) and the
+ * admin renderer styles a line by it. Grouping by label or subheading, and
+ * the collection of a design's Don'ts, happen in Markdown\guidance().
  */
 function is_dont(string $text): bool
 {
-    return preg_match('/^[*_`\s]*(don[\'’]?t|do not|never|avoid)\b/i', $text) === 1;
+    return preg_match('/^[*_`\s]*(don\'?t|do not|never|avoid)\b/i', Tokens\normalize_apostrophes($text)) === 1;
 }
 
 /** Whether a Do/Don't list line reads as a "Do" (an instruction / affirmation). */
 function is_do(string $text): bool
 {
-    return preg_match('/^[*_`\s]*(do|always|ensure|prefer)\b/i', $text) === 1;
+    return preg_match('/^[*_`\s]*(do|always|ensure|prefer)\b/i', Tokens\normalize_apostrophes($text)) === 1;
 }
 
 /**
- * Pull the "Don't" guidance bullets from a DESIGN.md, using the shared `is_dont()`
- * classifier so Do's and Don'ts stay a single source of truth.
+ * The "Don't" guidance items of a DESIGN.md, as plain text. Delegates to the
+ * contract's guidance parser so the anti-slop pass enforces exactly the Don'ts
+ * the abilities report: one parser, one Do/Don't split.
  *
  * @return list<string>
  */
 function extract_donts(string $md): array
 {
-    $normalized = Tokens\normalize_md($md);
-
-    $capturing = false;
-    $items = [];
-    $m = [];
-    foreach (explode(separator: "\n", string: $normalized) as $line) {
-        if (preg_match('/^#{1,3}\s+(.*)$/', $line, $m) === 1) {
-            if ($capturing) {
-                break;
-            }
-            $title = strtolower(trim($m[1]));
-            $capturing =
-                str_contains($title, 'don') || in_array($title, ['guidelines', 'principles', 'rules'], strict: true);
-            continue;
-        }
-        if (!$capturing || preg_match('/^(?:[-*]|\d+[.)])\s+(.*)$/', trim($line), $m) !== 1) {
-            continue;
-        }
-        $text = trim($m[1]);
-        if ($text === '' || !is_dont($text)) {
-            continue;
-        }
-        $items[] = $text;
-    }
-    return $items;
+    return Contract\guidance($md)['donts'];
 }
 
 /**

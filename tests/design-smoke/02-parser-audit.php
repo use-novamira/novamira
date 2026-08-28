@@ -91,6 +91,93 @@ check('guidance: bold/numbered Do classified', count($g['dos']) === 2, json_enco
 check('guidance: bold/numbered Dont classified', count($g['donts']) === 2, json_encode($g['donts']));
 check('extract_donts sees bold numbered items', Preflight\context($dd)['donts'] !== [], json_encode(Preflight\context($dd)['donts']));
 
+// ---------- 11b. Guidance grouped by label or subheading, apostrophes, parity ----------
+$labelled = "---\nname: L\n---\n# L\n\n## Do's and Don'ts\n\n**Do**\n- Use the sand palette for backgrounds\n- Keep body text at 18px\n\n**Don't**\n- Mix serif and sans in the same block\n";
+$lg = Contract\guidance($labelled);
+check(
+    'guidance: bold labels group neutral bullets',
+    $lg['dos'] === ['Use the sand palette for backgrounds', 'Keep body text at 18px']
+    && $lg['donts'] === ['Mix serif and sans in the same block'],
+    json_encode($lg),
+);
+check(
+    'guidance: consumed labels do not leak into the prose remainder',
+    Novamira\Design\Markdown\guidance($labelled, Contract\guidance_titles())['rest'] === '',
+    json_encode(Novamira\Design\Markdown\guidance($labelled, Contract\guidance_titles())['rest']),
+);
+
+$subgrouped = "---\nname: S\n---\n# S\n\n## Do's and Don'ts\n\n### Do's\n- Use the sand palette\n1. Keep body text at 18px\n\n### Don'ts\n- Mix serif and sans\n2) Stack shadows\n";
+$sg = Contract\guidance($subgrouped);
+check(
+    'guidance: ### Do\'s / ### Don\'ts subheadings group neutral bullets and numbered items',
+    $sg['dos'] === ['Use the sand palette', 'Keep body text at 18px'] && $sg['donts'] === ['Mix serif and sans', 'Stack shadows'],
+    json_encode($sg),
+);
+
+$typographic = "---\nname: T\n---\n# T\n\n## Do\u{2019}s and Don\u{2019}ts\n- Don\u{2019}t use gradients\n- Do keep contrast high\n";
+$tg = Contract\guidance($typographic);
+check(
+    'guidance: typographic apostrophes in the heading and the items',
+    $tg['dos'] === ['Do keep contrast high'] && $tg['donts'] === ["Don\u{2019}t use gradients"],
+    json_encode($tg),
+);
+
+$overridden = "---\nname: O\n---\n# O\n\n## Do's and Don'ts\n\n**Do**\n- Never stack shadows\n- Use one accent per view\n\n**Don't:**\n- Always keep contrast high\n- Mix serif and sans\n";
+$og = Contract\guidance($overridden);
+check(
+    'guidance: an item\'s own Never/Always wording overrides its group',
+    $og['dos'] === ['Use one accent per view', 'Always keep contrast high']
+    && $og['donts'] === ['Never stack shadows', 'Mix serif and sans'],
+    json_encode($og),
+);
+
+foreach (['bold numbered' => $dd, 'labelled' => $labelled, 'subgrouped' => $subgrouped, 'typographic' => $typographic, 'overridden' => $overridden] as $form => $doc) {
+    check(
+        "extract_donts equals the contract's donts ($form)",
+        Preflight\extract_donts($doc) === Contract\guidance($doc)['donts'],
+        json_encode(['extract_donts' => Preflight\extract_donts($doc), 'contract' => Contract\guidance($doc)['donts']]),
+    );
+}
+
+$guidance_warnings = static fn(array $inspection): array => array_values(array_filter(
+    $inspection['readiness']['warnings'],
+    static fn(string $warning): bool => str_contains($warning, "Do's and Don'ts section") || str_contains($warning, "no Do/Don't items"),
+));
+$ready_front = "---\nname: R\ncolors:\n  bg: '#f7f7f2'\n  ink: '#171a18'\n  accent: '#0f6b4f'\ntypography:\n  heading: Fraunces\n  body: Karla\n---\n# R\n\n";
+$no_section = Contract\inspect($ready_front . "## Overview\nNo guidance section.\n");
+check(
+    'readiness warns when no guidance section exists, without touching ready/sync_ready',
+    count($guidance_warnings($no_section)) === 1
+    && str_contains($guidance_warnings($no_section)[0], 'No Do\'s and Don\'ts section')
+    && $no_section['readiness']['ready']
+    && $no_section['readiness']['sync_ready'],
+    json_encode($no_section['readiness']),
+);
+$no_items = Contract\inspect($ready_front . "## Do's and Don'ts\n- Sand palette for backgrounds\n- Body text at 18px\n");
+check(
+    'readiness warns when the guidance section has no recognised items, without touching ready/sync_ready',
+    count($guidance_warnings($no_items)) === 1
+    && str_contains($guidance_warnings($no_items)[0], 'no Do/Don\'t items were recognised')
+    && $no_items['guidance'] === ['dos' => [], 'donts' => []]
+    && $no_items['readiness']['ready']
+    && $no_items['readiness']['sync_ready'],
+    json_encode(['guidance' => $no_items['guidance'], 'readiness' => $no_items['readiness']]),
+);
+$titled_dont = "---\nname: Dont\n---\n# Don't\n- An introductory bullet under the document title\n\n## Overview\nx\n";
+check(
+    'a document titled "Don\'t" is not a guidance section; a "## Don\'ts" section is',
+    !Novamira\Design\Markdown\guidance($titled_dont, Contract\guidance_titles())['found']
+    && count($guidance_warnings(Contract\inspect($titled_dont))) === 1
+    && str_contains($guidance_warnings(Contract\inspect($titled_dont))[0], 'No Do\'s and Don\'ts section')
+    && Contract\guidance($titled_dont . "\n## Don'ts\n- Use gradients\n")['donts'] === ['Use gradients'],
+    json_encode(['titled' => Contract\guidance($titled_dont), 'sectioned' => Contract\guidance($titled_dont . "\n## Don'ts\n- Use gradients\n")]),
+);
+check(
+    'readiness has no guidance warning once items are recognised',
+    $guidance_warnings(Contract\inspect($ready_front . "## Do's and Don'ts\n\n**Do**\n- Use the sand palette\n")) === [],
+    json_encode(Contract\inspect($ready_front . "## Do's and Don'ts\n\n**Do**\n- Use the sand palette\n")['readiness']['warnings']),
+);
+
 // ---------- 12. Canonical contract and provenance ----------
 $canonical = "---\nname: Contract\ncolors:\n  bg: '#f7f7f2'\n  ink: '#171a18'\n  accent: '#0f6b4f'\ntypography:\n  heading: Cabinet Grotesk 700\n  body: General Sans 400\nspacing:\n  md: 16px\nrounded:\n  md: 8px\ncomponents:\n  buttons: Solid accent\ndials:\n  variance: 0.55\n  density: 0.3\n  motion: 0.2\n---\n# Contract\n\n## Do's and Don'ts\n- Do use the accent consistently.\n- Don't add shadows without hierarchy.\n";
 $contract = Contract\inspect($canonical);
