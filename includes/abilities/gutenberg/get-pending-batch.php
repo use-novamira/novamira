@@ -36,7 +36,7 @@ wp_register_ability('novamira/gutenberg-get-pending-batch', [
         'show_in_rest' => true,
         'mcp' => ['public' => true],
         'annotations' => [
-            'instructions' => 'Use this to inspect one batch without loading full block_spec payloads. During finalization, prefer streaming finalizer_runtime.sse_url with curl -N, or polling finalizer_runtime.poll_url with curl, until the batch is finalized, failed, or conflicted. Item status prepared means canonical content is staged but not live. If finalizer_runtime.online becomes false, the user closed or lost the Block Editor Queue page; ask them to reopen finalizer_runtime.dashboard_url and keep it open before treating queued changes as live.',
+            'instructions' => 'Use this to inspect one batch without loading full block_spec payloads. During finalization, prefer streaming finalizer_runtime.sse_url with curl -N, or polling finalizer_runtime.poll_url with curl, until the batch is finalized, failed, or conflicted. Item status prepared means canonical content is staged but not live. If finalizer_runtime.online becomes false, the user closed or lost the Block Editor Queue page; ask them to reopen finalizer_runtime.dashboard_url and keep it open before treating queued changes as live. Each item also exposes serialization_runtime (iframe or fallback) and serialization_runtime_reason: an editor_frame_inaccessible error or a fallback runtime means the hidden block editor could not be used, which is an environment problem on the finalizing browser or site rather than a block-spec problem, so do not rewrite the block spec in response.',
             'readonly' => true,
             'destructive' => false,
             'idempotent' => true,

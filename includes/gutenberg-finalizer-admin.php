@@ -15,6 +15,31 @@ function boot_gutenberg_finalizer_admin(): void
 {
     add_action('admin_menu', __NAMESPACE__ . '\\register_gutenberg_finalizer_menu', priority: 60);
     add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\enqueue_gutenberg_finalizer_assets');
+    add_filter(
+        'wp_client_side_media_processing_enabled',
+        __NAMESPACE__ . '\\disable_gutenberg_finalizer_editor_client_side_media_processing',
+    );
+}
+
+/**
+ * The hidden finalizer editor never uploads or transcodes media, so it does not need client-side
+ * media processing. When core enables that feature on a block editor screen it also sends a
+ * document isolation header, and that header would place the hidden editor in its own agent
+ * cluster, separate from the Queue page that embeds it, even though both documents share an origin.
+ * The Queue could then no longer read the editor runtime directly. This only removes the core
+ * trigger: other isolation causes (sandbox/CSP headers, host redirects) are still covered by the
+ * postMessage serializer bridge.
+ *
+ * @param mixed $enabled The incoming filter value.
+ * @return mixed False for the hidden finalizer editor request, the incoming value otherwise.
+ */
+function disable_gutenberg_finalizer_editor_client_side_media_processing(mixed $enabled): mixed
+{
+    if (is_gutenberg_finalizer_editor_request()) {
+        return false;
+    }
+
+    return $enabled;
 }
 
 function gutenberg_finalizer_page_slug(): string
@@ -875,6 +900,9 @@ function gutenberg_finalizer_script(): string
                             responseError.message || 'The hidden editor iframe serializer bridge failed.'
                         );
                         error.code = responseError.code || 'iframe_bridge_exception';
+                        // The iframe was reachable and answered; this is a serializer error, not an
+                        // unreachable frame.
+                        error.bridgeResponded = true;
                         error.missingBlockRefs = Array.isArray( responseError.missingBlockRefs )
                             ? responseError.missingBlockRefs
                             : [];
@@ -1048,15 +1076,61 @@ function gutenberg_finalizer_script(): string
 
             const errorMessage = ( error, fallback ) => error && error.message ? error.message : fallback;
 
+            const errorCode = ( error, fallback ) => error && error.code ? String( error.code ) : fallback;
+
+            const consolePrefix = '[Novamira Block Editor Queue]';
+
+            const warn = ( message ) => {
+                if ( window.console && typeof window.console.warn === 'function' ) {
+                    window.console.warn( `${ consolePrefix } ${ message }` );
+                }
+            };
+
+            const logError = ( message, error ) => {
+                if ( window.console && typeof window.console.error === 'function' ) {
+                    window.console.error( `${ consolePrefix } ${ message }`, error );
+                }
+            };
+
+            const bridgeResponded = ( error ) => !! error && error.bridgeResponded === true;
+
+            // The direct iframe read never reached the editor runtime and the serializer bridge never
+            // answered (unavailable, timed out, or the frame never navigated), so nothing came back
+            // from the hidden editor at all. This is an environment problem (isolation headers,
+            // sandboxing, redirects), not a block-spec problem, so it is reported as one runtime
+            // failure instead of per-block registration rows. unserializedRefs lists the block types
+            // that could not be serialized as a result (the ones the page-local runtime lacks, or every
+            // required type when that runtime is unavailable); localRuntimeNote explains the latter.
+            const frameInaccessibleError = ( serializationRuntimeReason, unserializedRefs, localRuntimeNote = '' ) => {
+                const names = uniqueBlockNames( unserializedRefs );
+                const error = new Error(
+                    'The hidden block editor iframe could not be used, so canonical content was not written. '
+                    + 'This is an environment problem on the finalizing browser or site, not a block-spec problem. '
+                    + ( names.length
+                        ? `Block types that could not be serialized: ${ names.join( ', ' ) }. `
+                        : '' )
+                    + ( localRuntimeNote !== '' ? `${ localRuntimeNote } ` : '' )
+                    + `Direct access: ${ serializationRuntimeReason }`
+                );
+                error.code = 'editor_frame_inaccessible';
+                error.category = 'runtime';
+                error.missingBlockRefs = unserializedRefs;
+                return error;
+            };
+
             const serializeJob = async ( job ) => {
                 const blocks = job.blocks || [];
                 const refs = collectBlockRefs( blocks );
                 let frameError = null;
                 let bridgeError = null;
+                // True once the direct read returned a usable block API: any later tier-1 error is a
+                // serializer error from a reachable frame, not a frame-access problem.
+                let frameReached = false;
 
                 try {
                     await navigateEditorFrame( job.editor_url || '' );
                     const blocksApi = await waitForEditorBlocksApi();
+                    frameReached = true;
                     await waitForBlockRegistrations( blocksApi, refs );
                     const result = await serializeWithBlocksApi( blocksApi, blocks );
                     return {
@@ -1067,6 +1141,12 @@ function gutenberg_finalizer_script(): string
                 } catch ( error ) {
                     frameError = error;
                 }
+
+                warn(
+                    `Direct access to the hidden editor iframe failed [${ errorCode( frameError, 'js_exception' ) }]: `
+                    + `${ errorMessage( frameError, 'Direct iframe access was unavailable.' ) } `
+                    + 'Trying the same-origin postMessage serializer bridge.'
+                );
 
                 try {
                     const result = await serializeThroughEditorFrame( blocks );
@@ -1089,9 +1169,30 @@ function gutenberg_finalizer_script(): string
                 const bridgeReason = errorMessage( bridgeError, 'The iframe serializer bridge was unavailable.' );
                 const serializationRuntimeReason = `${ frameReason } Bridge: ${ bridgeReason } `
                     + editorFrameDiagnosticSummary();
+
+                warn(
+                    `The hidden editor serializer bridge failed [${ errorCode( bridgeError, 'js_exception' ) }]: `
+                    + `${ bridgeReason } Trying the local block runtime of this page (core blocks only). `
+                    + editorFrameDiagnosticSummary()
+                );
+
+                // The hidden editor is only "inaccessible" when nothing came back from it: the direct
+                // read never reached its runtime and the bridge never answered. If the bridge did
+                // answer, or the direct read got hold of the runtime, the error it produced is a
+                // genuine serializer error and must be preserved as-is.
+                const editorFrameUnusable = ! frameReached && ! bridgeResponded( bridgeError );
+                const editorReportedError = bridgeResponded( bridgeError ) ? bridgeError : ( frameReached ? frameError : null );
+
                 const fallbackApi = localBlocksApi();
                 if ( ! fallbackApi ) {
-                    const error = bridgeError || frameError || new Error( 'No block serialization runtime is available.' );
+                    warn( 'The local block runtime of this page is unavailable. No serialization runtime is left.' );
+                    const error = editorFrameUnusable
+                        ? frameInaccessibleError(
+                            serializationRuntimeReason,
+                            refs,
+                            'The block runtime of this page is unavailable as well.'
+                        )
+                        : ( editorReportedError || new Error( 'No block serialization runtime is available.' ) );
                     error.serializationRuntime = 'fallback';
                     error.serializationRuntimeReason = serializationRuntimeReason;
                     throw error;
@@ -1099,9 +1200,24 @@ function gutenberg_finalizer_script(): string
 
                 const missingRefs = refs.filter( ( ref ) => ! fallbackApi.getBlockType( ref.name ) );
                 if ( missingRefs.length ) {
-                    const registrationError = bridgeError && bridgeError.code === 'missing_block_registration'
-                        ? bridgeError
-                        : missingRegistrationError( missingRefs );
+                    const missingNames = uniqueBlockNames( missingRefs ).join( ', ' );
+                    let registrationError;
+                    if ( editorFrameUnusable ) {
+                        // The missing types on this page are a symptom of the unusable iframe, not
+                        // of the block spec.
+                        registrationError = frameInaccessibleError( serializationRuntimeReason, missingRefs );
+                        warn(
+                            `The local block runtime of this page lacks block types the hidden editor could not be asked about: ${ missingNames }. `
+                            + 'Attributing the failure to the inaccessible editor iframe.'
+                        );
+                    } else {
+                        registrationError = editorReportedError || missingRegistrationError( missingRefs );
+                        warn(
+                            `The local block runtime of this page cannot serialize block types (${ missingNames }); `
+                            + `keeping the hidden editor's own error [${ errorCode( registrationError, 'js_exception' ) }]: `
+                            + errorMessage( registrationError, 'Block serialization failed.' )
+                        );
+                    }
                     registrationError.serializationRuntime = 'fallback';
                     registrationError.serializationRuntimeReason = serializationRuntimeReason;
                     throw registrationError;
@@ -1110,6 +1226,7 @@ function gutenberg_finalizer_script(): string
                 fallbackWarning = 'The hidden block editor iframe and its serializer bridge could not be used, so blocks '
                     + 'were serialized with the block runtime of this page. Only blocks registered on this page are '
                     + `supported. Reason: ${ serializationRuntimeReason }`;
+                warn( `Serializing with the local block runtime of this page. Reason: ${ serializationRuntimeReason }` );
 
                 const result = await serializeWithBlocksApi( fallbackApi, blocks );
                 return {
@@ -1142,6 +1259,20 @@ function gutenberg_finalizer_script(): string
                 method: 'POST',
             } );
 
+            const batchErrorMessage = ( batch, fallback ) => {
+                const lastError = batch && typeof batch.last_error === 'string' ? batch.last_error.trim() : '';
+                return lastError !== '' ? lastError : fallback;
+            };
+
+            // The notice element only receives textContent, so the batch error is rendered as
+            // plain text and never interpreted as markup.
+            const reportBatchFailure = ( batch, fallbackMessage, error = null ) => {
+                const message = batchErrorMessage( batch, fallbackMessage );
+                setProgress( 'Something needs attention. Return to the agent.' );
+                setNotice( 'error', message );
+                logError( `Batch failed: ${ message }`, error );
+            };
+
             const finalNotice = ( batch ) => {
                 if ( batch && batch.status === 'finalized' ) {
                     if ( fallbackWarning ) {
@@ -1153,8 +1284,7 @@ function gutenberg_finalizer_script(): string
                     return;
                 }
 
-                setProgress( 'Something needs attention. Return to the agent.' );
-                setNotice( 'error', 'Something needs attention. Return to the agent.' );
+                reportBatchFailure( batch, 'Something needs attention. Return to the agent.' );
             };
 
             const processBatch = async ( batchId, initialClaim = null ) => {
@@ -1204,15 +1334,15 @@ function gutenberg_finalizer_script(): string
                         try {
                             const result = await serializeJob( job );
                             if ( result.errors.length ) {
-                                await failCurrentItem(
+                                const validationMessage = 'JS validation failed; canonical content was not written.';
+                                const failed = await failCurrentItem(
                                     item.item_id,
                                     result.errors,
-                                    'JS validation failed; canonical content was not written.',
+                                    validationMessage,
                                     result.serializationRuntime,
                                     result.serializationRuntimeReason
                                 );
-                                setProgress( 'Something needs attention. Return to the agent.' );
-                                setNotice( 'error', 'Something needs attention. Return to the agent.' );
+                                reportBatchFailure( failed && failed.batch, validationMessage, result.errors );
                                 break;
                             }
 
@@ -1233,39 +1363,54 @@ function gutenberg_finalizer_script(): string
                                 break;
                             }
                         } catch ( error ) {
+                            const isFrameInaccessible = error && error.code === 'editor_frame_inaccessible';
                             const isMissingRegistration = error && error.code === 'missing_block_registration';
-                            const errorItems = isMissingRegistration && Array.isArray( error.missingBlockRefs )
-                                ? error.missingBlockRefs.map( ( ref ) => ( {
+                            let errorItems;
+                            let failureMessage;
+                            if ( isFrameInaccessible ) {
+                                // One runtime row: the block names are a symptom, not N registration failures.
+                                errorItems = [ {
+                                    block_name: '',
+                                    path: '',
+                                    category: 'runtime',
+                                    code: 'editor_frame_inaccessible',
+                                    message: error.message,
+                                } ];
+                                failureMessage = error.message;
+                            } else if ( isMissingRegistration && Array.isArray( error.missingBlockRefs ) ) {
+                                errorItems = error.missingBlockRefs.map( ( ref ) => ( {
                                     block_name: ref.name || '',
                                     path: ref.path || '',
                                     category: 'registration',
                                     code: 'missing_block_registration',
                                     message: `Block "${ ref.name || '(missing name)' }" was not registered in the block editor runtime.`,
-                                } ) )
-                                : [ {
+                                } ) );
+                                failureMessage = 'One or more Gutenberg blocks were not registered in the block editor runtime; canonical content was not written.';
+                            } else {
+                                errorItems = [ {
                                     block_name: '',
                                     path: '',
-                                    category: 'serialization',
+                                    category: ( error && error.category ) || 'serialization',
                                     code: ( error && error.code ) || 'js_exception',
                                     message: error && error.message ? error.message : String( error ),
                                 } ];
-                            await failCurrentItem(
+                                failureMessage = 'The browser block serializer threw an exception.';
+                            }
+                            const failed = await failCurrentItem(
                                 item.item_id,
                                 errorItems,
-                                isMissingRegistration
-                                    ? 'One or more Gutenberg blocks were not registered in the block editor runtime; canonical content was not written.'
-                                    : 'The browser block serializer threw an exception.',
+                                failureMessage,
                                 error && error.serializationRuntime ? error.serializationRuntime : '',
                                 error && error.serializationRuntimeReason ? error.serializationRuntimeReason : ''
                             );
-                            setProgress( 'Something needs attention. Return to the agent.' );
-                            setNotice( 'error', 'Something needs attention. Return to the agent.' );
+                            reportBatchFailure( failed && failed.batch, failureMessage, error );
                             break;
                         }
                     }
                 } catch ( error ) {
                     setNotice( 'error', 'The queue stopped. Return to the agent.' );
                     setProgress( 'Something needs attention. Return to the agent.' );
+                    logError( 'The queue stopped.', error );
                     return false;
                 } finally {
                     isRunning = false;
