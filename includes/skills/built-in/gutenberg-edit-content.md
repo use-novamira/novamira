@@ -57,6 +57,12 @@ own editor JavaScript, so never hand-write a block's HTML.
   instead of reproducing its output. To discover the available block names and
   their attributes, query the registry, e.g. via `execute-php`:
   `WP_Block_Type_Registry::get_instance()->get_all_registered()`.
+- Builder-owned blocks (`divi/*`, and any namespace a site adds through
+  the `novamira_gutenberg_builder_block_namespaces` filter) are
+  rejected by both write paths: those builders register their blocks only
+  inside their own runtime, not in the block editor, so the queue cannot
+  serialize them. Write that content with the builder's dedicated abilities;
+  if the site has none, tell the user instead of falling back to raw HTML.
 - Use `core/html` only for a small fragment with no registered-block
   equivalent, and keep it minimal. Never wrap whole sections or the entire post
   in `core/html` or a classic/freeform block: raw-HTML blocks are not visually

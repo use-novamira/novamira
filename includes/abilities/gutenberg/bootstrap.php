@@ -128,6 +128,24 @@ const FINALIZER_RUNTIME_STALE_SECONDS = 45;
 
 const FINALIZER_RUNTIME_TTL_SECONDS = 120;
 
+/** Upper bound of a compacted validation row message, hint included. */
+const VALIDATION_MESSAGE_MAX_LENGTH = 300;
+
+/**
+ * Upper bound of a batch's last_error. The finalizer's own failure message is
+ * kept up to BATCH_ERROR_MESSAGE_MIN_LENGTH characters; builder hints take the
+ * remaining room, whole hints only, so the error cannot grow with the number
+ * of failing blocks or builders.
+ */
+const BATCH_ERROR_MAX_LENGTH = 1000;
+
+const BATCH_ERROR_MESSAGE_MIN_LENGTH = 300;
+
+/** Builder labels from builder_block_namespaces() are cut to this length. */
+const BUILDER_LABEL_MAX_LENGTH = 40;
+
+const BUILDER_NAMESPACE_MAX_LENGTH = 64;
+
 add_action('init', __NAMESPACE__ . '\\register_storage');
 add_action('init', __NAMESPACE__ . '\\schedule_cleanup');
 add_action('novamira_gutenberg_cleanup', __NAMESPACE__ . '\\cleanup_queue');
@@ -785,6 +803,131 @@ function validate_dynamic_only_blocks(array $blocks): ?WP_Error
         }
 
         $inner_error = validate_dynamic_only_blocks(block_inner_specs($block));
+        if ($inner_error !== null) {
+            return $inner_error;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Block namespaces owned by page builders that register their block types only
+ * inside their own builder runtime, never in the block editor. The hidden block
+ * editor the Block Editor Queue drives cannot serialize such blocks, so their
+ * content must be written through the builder's dedicated abilities instead.
+ *
+ * Divi is the only namespace listed by default. Sites and plugins can add or
+ * remove entries through the `novamira_gutenberg_builder_block_namespaces`
+ * filter. Keys are block namespaces (the part of the block name before the
+ * slash), values are the builder's display label used in error messages.
+ *
+ * @return array<string, string>
+ */
+function builder_block_namespaces(): array
+{
+    /** @var mixed $namespaces */
+    $namespaces = apply_filters('novamira_gutenberg_builder_block_namespaces', value: [
+        'divi' => 'Divi',
+    ]);
+    if (!is_array($namespaces)) {
+        return [];
+    }
+
+    $filtered = [];
+    /** @var mixed $label */
+    foreach ($namespaces as $namespace => $label) {
+        if (!is_string($namespace)) {
+            continue;
+        }
+        $namespace = trim($namespace);
+        if (
+            strlen($namespace) > BUILDER_NAMESPACE_MAX_LENGTH
+            || preg_match(pattern: '/^[a-z][a-z0-9-]*$/', subject: $namespace) !== 1
+        ) {
+            continue;
+        }
+        $filtered[$namespace] = builder_label($label, $namespace);
+    }
+
+    return $filtered;
+}
+
+/**
+ * Plain, bounded builder label: markup stripped, whitespace collapsed, cut to
+ * BUILDER_LABEL_MAX_LENGTH. Falls back to the namespace unless the label is a
+ * string that still contains a letter or digit after sanitizing.
+ */
+function builder_label(mixed $label, string $namespace): string
+{
+    if (!is_string($label)) {
+        return $namespace;
+    }
+
+    $label = trim(preg_replace(pattern: '/\s+/u', replacement: ' ', subject: strip_tags($label)) ?? '');
+    $label = trim(mb_substr($label, start: 0, length: BUILDER_LABEL_MAX_LENGTH));
+
+    return preg_match(pattern: '/[\p{L}\p{N}]/u', subject: $label) === 1 ? $label : $namespace;
+}
+
+function block_namespace(string $name): string
+{
+    $separator = strpos($name, needle: '/');
+
+    return $separator === false ? '' : substr($name, offset: 0, length: $separator);
+}
+
+/**
+ * Builder label for a block name whose namespace belongs to a builder-owned
+ * runtime, or null when the block can be finalized by the Block Editor Queue.
+ */
+function builder_owning_block(string $name): ?string
+{
+    $namespace = block_namespace($name);
+    if ($namespace === '') {
+        return null;
+    }
+
+    return builder_block_namespaces()[$namespace] ?? null;
+}
+
+/**
+ * Rejects block specs whose namespace belongs to a builder-owned runtime (see
+ * builder_block_namespaces()). Walks innerBlocks with the same path grammar as
+ * normalize_block() so the error can cite the offending block's position.
+ *
+ * @param list<array<string, mixed>> $blocks
+ */
+function validate_builder_owned_blocks(array $blocks, string $path = 'block_spec'): ?WP_Error
+{
+    $index = 0;
+    foreach ($blocks as $block) {
+        $block_path = sprintf('%s[%s]', $path, (string) $index);
+        ++$index;
+
+        $name = is_string($block['name'] ?? null) ? $block['name'] : '';
+        $builder = builder_owning_block($name);
+        if ($builder !== null) {
+            return new WP_Error(
+                'gutenberg_builder_owned_block',
+                sprintf(
+                    'Block "%1$s" at %2$s is %4$s %3$s builder block. %3$s registers its blocks only inside its own builder, not in the block editor, so the Block Editor Queue cannot serialize it. Write %3$s content through the dedicated %3$s abilities instead of the Gutenberg abilities; if no %3$s abilities are available on this site, tell the user instead of falling back to raw post content.',
+                    $name,
+                    $block_path,
+                    $builder,
+                    preg_match('/^[aeiou]/i', $builder) === 1 ? 'an' : 'a',
+                ),
+                [
+                    'status' => 422,
+                    'block_name' => $name,
+                    'path' => $block_path,
+                    'namespace' => block_namespace($name),
+                    'builder' => $builder,
+                ],
+            );
+        }
+
+        $inner_error = validate_builder_owned_blocks(block_inner_specs($block), $block_path . '.innerBlocks');
         if ($inner_error !== null) {
             return $inner_error;
         }
@@ -1651,7 +1794,7 @@ function compact_validation_message(mixed $value): string
     $message = is_scalar($value) ? (string) $value : 'Unknown validation error.';
     $message = preg_replace(pattern: '/\s+/', replacement: ' ', subject: $message) ?? $message;
 
-    return mb_substr(trim($message), start: 0, length: 300);
+    return mb_substr(trim($message), start: 0, length: VALIDATION_MESSAGE_MAX_LENGTH);
 }
 
 /**
@@ -1660,16 +1803,136 @@ function compact_validation_message(mixed $value): string
  */
 function compact_validation_error_row(array $row, int $target_id, string $target_title, int $suppressed_count): array
 {
+    $block_name = is_scalar($row['block_name'] ?? null) ? (string) $row['block_name'] : '';
+    $code = is_scalar($row['code'] ?? null) ? (string) $row['code'] : 'block_validation_failed';
+    $message = compact_validation_message($row['message'] ?? null);
+    if ($code === 'missing_block_registration') {
+        $message = append_builder_registration_hints(
+            $message,
+            [builder_registration_hint($block_name)],
+            VALIDATION_MESSAGE_MAX_LENGTH,
+        );
+    }
+
     return [
         'target_id' => $target_id,
         'target_title' => $target_title,
-        'block_name' => is_scalar($row['block_name'] ?? null) ? (string) $row['block_name'] : '',
+        'block_name' => $block_name,
         'path' => is_scalar($row['path'] ?? null) ? (string) $row['path'] : '',
         'category' => is_scalar($row['category'] ?? null) ? (string) $row['category'] : 'validation',
-        'code' => is_scalar($row['code'] ?? null) ? (string) $row['code'] : 'block_validation_failed',
-        'message' => compact_validation_message($row['message'] ?? null),
+        'code' => $code,
+        'message' => $message,
         'suppressed_count' => $suppressed_count,
     ];
+}
+
+/**
+ * Short pointer appended to finalizer failures caused by a builder-owned block
+ * (see builder_block_namespaces()): the block is missing from the block editor
+ * by design, so retrying the queue cannot help.
+ */
+function builder_registration_hint(string $block_name): string
+{
+    $builder = builder_owning_block($block_name);
+    if ($builder === null) {
+        return '';
+    }
+
+    return sprintf(
+        '%1$s/* blocks are registered only inside the %2$s builder runtime and cannot be finalized by the Block Editor Queue; use the dedicated %2$s abilities.',
+        block_namespace($block_name),
+        $builder,
+    );
+}
+
+/**
+ * Batch-level hints for the builder-owned blocks among the validation rows,
+ * one per builder, in the order the rows name them. Takes the raw
+ * (unsliced) rows so a builder block reported after the compacted ones still
+ * yields its pointer.
+ *
+ * @param list<array<string, mixed>> $rows
+ * @return list<string>
+ */
+function builder_registration_hints(array $rows): array
+{
+    $hints = [];
+    foreach ($rows as $row) {
+        if (($row['code'] ?? null) !== 'missing_block_registration') {
+            continue;
+        }
+        $hint = builder_registration_hint(is_scalar($row['block_name'] ?? null) ? (string) $row['block_name'] : '');
+        if ($hint !== '' && !in_array($hint, $hints, strict: true)) {
+            $hints[] = $hint;
+        }
+    }
+
+    return $hints;
+}
+
+/**
+ * Appends the deduplicated $hints to $message as one generated suffix
+ * (implode(' ', $hints), preceded by a space when the message is not empty)
+ * and bounds the result to $max_length: the message keeps at least
+ * $min_message_length characters, then hints are added in order while they
+ * fit whole; a hint that does not fit is dropped, never cut. Composing an
+ * already composed message yields the same string: the only text ever removed
+ * is the generated suffix of the first n hints, either as the whole message or
+ * anchored at its end after a space.
+ *
+ * @param list<string> $hints
+ */
+function append_builder_registration_hints(
+    string $message,
+    array $hints,
+    int $max_length,
+    int $min_message_length = 0,
+): string {
+    $hints = array_values(array_unique(array_filter($hints, static fn(string $hint): bool => $hint !== '')));
+
+    $base = trim($message);
+    for ($count = count($hints); $count >= 1; --$count) {
+        $generated = implode(' ', array_slice($hints, offset: 0, length: $count));
+        if ($base === $generated) {
+            $base = '';
+            break;
+        }
+        if (str_ends_with($base, ' ' . $generated)) {
+            $base = trim(mb_substr($base, start: 0, length: mb_strlen($base) - mb_strlen($generated) - 1));
+            break;
+        }
+    }
+
+    $joined = implode(' ', $hints);
+    $reserved = $joined === '' ? 0 : mb_strlen($joined) + ($base === '' ? 0 : 1);
+    $room = max($min_message_length, $max_length - $reserved);
+    $composed = trim(mb_substr($base, start: 0, length: $room));
+    foreach ($hints as $hint) {
+        $separator = $composed === '' ? '' : ' ';
+        if ((mb_strlen($composed) + mb_strlen($separator) + mb_strlen($hint)) > $max_length) {
+            break;
+        }
+        $composed .= $separator . $hint;
+    }
+
+    return $composed;
+}
+
+/**
+ * The batch last_error for a failed item: the finalizer's message followed by
+ * one pointer per builder-owned block among the raw validation rows, bounded
+ * to BATCH_ERROR_MAX_LENGTH.
+ *
+ * @param list<array<string, mixed>> $raw_rows
+ */
+function batch_failure_message(string $message, array $raw_rows): string
+{
+    return append_builder_registration_hints(
+        $message,
+        builder_registration_hints($raw_rows),
+        BATCH_ERROR_MAX_LENGTH,
+        BATCH_ERROR_MESSAGE_MIN_LENGTH,
+    );
 }
 
 /**
@@ -1868,13 +2131,14 @@ function fail_item(
         );
     }
 
+    $raw_rows = raw_validation_error_rows($errors);
     set_status($item->ID, STATUS_FAILED);
     clear_lease($item->ID);
-    update_post_meta($item->ID, META_VALIDATION_ERRORS, compact_validation_errors($errors, $item));
+    update_post_meta($item->ID, META_VALIDATION_ERRORS, compact_validation_errors($raw_rows, $item));
     store_serialization_runtime($item->ID, $serialization_runtime, $serialization_runtime_reason);
     mark_batch_failed(
         $item->post_parent,
-        $message !== '' ? $message : 'One or more Gutenberg items failed validation.',
+        batch_failure_message($message !== '' ? $message : 'One or more Gutenberg items failed validation.', $raw_rows),
     );
 
     $batch = find_batch($item->post_parent);
@@ -1923,7 +2187,7 @@ function mark_batch_failed(int $batch_id, string $message): void
 
     set_status($batch->ID, STATUS_FAILED);
     clear_lease($batch->ID);
-    update_post_meta($batch->ID, META_LAST_ERROR, $message);
+    update_post_meta($batch->ID, META_LAST_ERROR, mb_substr($message, start: 0, length: BATCH_ERROR_MAX_LENGTH));
 }
 
 /** @return array<string, mixed>|WP_Error */

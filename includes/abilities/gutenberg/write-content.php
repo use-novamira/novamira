@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/gutenberg-write-content', [
     'label' => __('Write Gutenberg Content', domain: 'novamira'),
     'description' => __(
-        'Directly writes Gutenberg post_content only when every supplied block is a registered Novamira-owned dynamic-only block. Native/static Gutenberg blocks require browser JS finalization; queue them with gutenberg-add-pending-change, then call gutenberg-enable-batch-finalization and send the finalization link to the user.',
+        'Directly writes Gutenberg post_content only when every supplied block is a registered Novamira-owned dynamic-only block. Native/static Gutenberg blocks require browser JS finalization; queue them with gutenberg-add-pending-change, then call gutenberg-enable-batch-finalization and send the finalization link to the user. Builder-owned block namespaces (for example divi/*) are rejected: write that content with the builder\'s dedicated abilities.',
         domain: 'novamira',
     ),
     'category' => 'gutenberg',
@@ -99,6 +99,12 @@ function gutenberg_write_content(array $input): array|WP_Error
     $blocks = normalize_blocks($input['block_spec'] ?? null);
     if (is_wp_error($blocks)) {
         return $blocks;
+    }
+
+    // Before the dynamic-only gate: a builder-owned block must not be pointed at the queue.
+    $builder_error = validate_builder_owned_blocks($blocks);
+    if ($builder_error instanceof WP_Error) {
+        return $builder_error;
     }
 
     $dynamic_error = validate_dynamic_only_blocks($blocks);
