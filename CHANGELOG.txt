@@ -1,3 +1,5 @@
+Unreleased
+* Fix: WP-CLI abilities are now exposed only when the server can execute WP-CLI. AI agents that request them by name on unsupported servers receive the reason they are unavailable.
 * Fix: DESIGN.md Do's and Don'ts are now read when the bullets are grouped under Do / Don't labels or subheadings, or use typographic apostrophes, instead of only when each bullet itself starts with Do or Don't. The design pre-flight now enforces the same Don't list the design abilities report, and readiness warns when a design has no recognised Do/Don't guidance.
 * Fix: Novamira Visual no longer lists the bundled MCP Adapter's scoped system abilities as backend tools, while continuing to hide abilities from the standalone MCP Adapter.
 * Fix: The generic MCP execute-ability tool now declares its `parameters` argument as an open object (`additionalProperties: true`, empty `properties`), so strict MCP clients such as ChatGPT connectors can pass ability arguments instead of rejecting the call with "Invalid connector tool arguments."

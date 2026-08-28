@@ -9,6 +9,52 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
+/** @return array{available: bool, reason: string} */
+function novamira_wp_cli_status(): array
+{
+    /** @var array{available: bool, reason: string}|null $status */
+    static $status = null;
+    if ($status !== null) {
+        return $status;
+    }
+
+    if (!function_exists('proc_open') || !function_exists('exec')) {
+        return $status = [
+            'available' => false,
+            'reason' => __('PHP process execution is disabled by the server configuration.', domain: 'novamira'),
+        ];
+    }
+
+    // Keep the large runner lazy: ordinary WordPress requests do not need to parse it.
+    require_once __DIR__ . '/run-wp-cli.php';
+    if (novamira_find_wp_cli_command() === null) {
+        return $status = [
+            'available' => false,
+            'reason' => __('WP-CLI was not found on this server.', domain: 'novamira'),
+        ];
+    }
+
+    return $status = ['available' => true, 'reason' => ''];
+}
+
+function novamira_wp_cli_unavailable_message(string $ability_name): ?string
+{
+    if (!in_array($ability_name, ['novamira/run-wp-cli', 'novamira/get-wp-cli-job'], strict: true)) {
+        return null;
+    }
+    $status = novamira_wp_cli_status();
+    if ($status['available']) {
+        return null;
+    }
+
+    return sprintf(
+        /* translators: 1: ability name, 2: reason WP-CLI is unavailable */
+        __("Ability '%1\$s' is unavailable: %2\$s", domain: 'novamira'),
+        $ability_name,
+        $status['reason'],
+    );
+}
+
 /**
  * Load the Ability execution REST shim only when this WordPress version supports Abilities.
  */
@@ -214,5 +260,7 @@ function novamira_register_builtin_abilities(): void
     require_once $dir . 'list-directory.php';
     require_once $dir . 'discover-abilities.php';
     require_once $dir . 'agent-context.php';
-    require_once $dir . 'run-wp-cli.php';
+    if (novamira_wp_cli_status()['available']) {
+        novamira_register_wp_cli_abilities();
+    }
 }

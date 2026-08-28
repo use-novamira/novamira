@@ -32,6 +32,12 @@ if (!function_exists('wp_register_ability')) {
         return null;
     }
 }
+if (!function_exists('wp_has_ability')) {
+    function wp_has_ability(string $name): bool
+    {
+        return isset($GLOBALS['novamira_test_registered_abilities'][$name]);
+    }
+}
 // The suite shares one apply_filters stub across test files; whichever file loads first defines it.
 // The shared stubs all pass the value through, so the filter override itself is asserted in an
 // isolated process where this dispatching stub is guaranteed to be the active one.
@@ -51,7 +57,9 @@ use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/../../includes/abilities/bootstrap.php';
 require_once __DIR__ . '/../../includes/abilities/run-wp-cli.php';
+novamira_register_wp_cli_abilities();
 
 final class WpCliDiscoveryTest extends TestCase
 {
@@ -178,6 +186,11 @@ final class WpCliDiscoveryTest extends TestCase
         );
     }
 
+    public function testConfiguredWpCliIsAvailableForAbilityRegistration(): void
+    {
+        self::assertTrue(novamira_wp_cli_status()['available']);
+    }
+
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function testFilterReplacesTheResolvedInvocation(): void
@@ -202,6 +215,34 @@ final class WpCliDiscoveryTest extends TestCase
         ];
 
         self::assertNull(novamira_find_wp_cli_command());
+        self::assertFalse(novamira_wp_cli_status()['available']);
+        self::assertSame(
+            "Ability 'novamira/run-wp-cli' is unavailable: WP-CLI was not found on this server.",
+            novamira_wp_cli_unavailable_message('novamira/run-wp-cli'),
+        );
+        self::assertNull(novamira_wp_cli_unavailable_message('novamira/read-file'));
+
+        require_once dirname(__DIR__, levels: 2) . '/includes/helpers.php';
+        $enriched = novamira_enrich_unavailable_wp_cli_error(
+            ['success' => false, 'error' => "Ability 'novamira/run-wp-cli' not found"],
+            ['ability_name' => 'novamira/run-wp-cli'],
+        );
+        self::assertSame(
+            "Ability 'novamira/run-wp-cli' is unavailable: WP-CLI was not found on this server.",
+            $enriched['error'],
+        );
+
+        require_once dirname(__DIR__, levels: 2) . '/includes/admin-page.php';
+        $groups = novamira_append_unavailable_wp_cli_rows([]);
+        $names = array_column($groups['novamira'], 'name');
+        sort($names);
+        self::assertSame(['novamira/get-wp-cli-job', 'novamira/run-wp-cli'], $names);
+        foreach ($groups['novamira'] as $row) {
+            self::assertSame('Unavailable', $row['status']);
+            self::assertSame('WP-CLI was not found on this server.', $row['description']);
+            self::assertTrue($row['disabled']);
+            self::assertFalse($row['individually_manageable']);
+        }
         self::assertSame(
             [
                 '/opt/novamira-test/php',

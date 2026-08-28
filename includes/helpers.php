@@ -888,10 +888,37 @@ function novamira_apply_ability_policy_rule(WP_Ability $ability, array $rules): 
 }
 
 /**
+ * Explain why an unregistered WP-CLI ability is unavailable when an agent requests it by name.
+ *
+ * @param mixed $result The raw tool result.
+ * @param mixed $args   The tool arguments; carries ability_name for the ability meta-tools.
+ * @return mixed
+ */
+function novamira_enrich_unavailable_wp_cli_error(mixed $result, mixed $args): mixed
+{
+    if (!is_array($result) || ($result['success'] ?? null) !== false) {
+        return $result;
+    }
+
+    $name = is_array($args) && is_string($args['ability_name'] ?? null) ? $args['ability_name'] : '';
+    if ($name === '' || ($result['error'] ?? null) !== "Ability '{$name}' not found") {
+        return $result;
+    }
+
+    $message = function_exists('novamira_wp_cli_unavailable_message')
+        ? novamira_wp_cli_unavailable_message($name)
+        : null;
+    if ($message !== null) {
+        $result['error'] = $message;
+    }
+
+    return $result;
+}
+
+/**
  * Turn the MCP adapter's generic "ability not found" result into a clear "switched off" message
  * when the requested ability is one an admin disabled in the Abilities screen. A disabled ability is
- * unregistered, so the adapter cannot otherwise tell it apart from one that was never installed —
- * which leaves an agent following a skill that calls it with a misleading "not found".
+ * unregistered, so the adapter cannot otherwise tell it apart from one that was never installed.
  *
  * Filters mcp_adapter_tool_call_result (the execute-ability / get-ability-info result).
  *

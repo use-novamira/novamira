@@ -38,6 +38,7 @@ function novamira_collect_ability_hub_rows(): array
 
     $groups = novamira_append_feature_ability_rows($groups, $seen);
     $groups = novamira_append_disabled_ability_rows($groups, $rules, $seen);
+    $groups = novamira_append_unavailable_wp_cli_rows($groups);
 
     foreach ($groups as $source => $rows) {
         usort($rows, static fn(array $a, array $b): int => [$a['name']] <=> [$b['name']]);
@@ -189,6 +190,52 @@ function novamira_append_disabled_ability_rows(array $groups, array $rules, arra
             'manage_url' => '',
         ];
     }
+
+    return $groups;
+}
+
+/**
+ * Keep WP-CLI visible to administrators when this server cannot expose its abilities to agents.
+ *
+ * @param array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>> $groups
+ * @return array<string, list<array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manage_url: string}>>
+ */
+function novamira_append_unavailable_wp_cli_rows(array $groups): array
+{
+    if (!function_exists('novamira_wp_cli_status')) {
+        return $groups;
+    }
+    $status = novamira_wp_cli_status();
+    if ($status['available']) {
+        return $groups;
+    }
+
+    $labels = [
+        'novamira/run-wp-cli' => __('Run WP-CLI Command', domain: 'novamira'),
+        'novamira/get-wp-cli-job' => __('Get WP-CLI Job Status', domain: 'novamira'),
+    ];
+    $source = 'novamira';
+    $rows = array_values(array_filter(
+        $groups[$source] ?? [],
+        static fn(array $row): bool => !array_key_exists($row['name'], $labels),
+    ));
+    foreach ($labels as $name => $label) {
+        $rows[] = [
+            'name' => $name,
+            'label' => $label,
+            'description' => $status['reason'],
+            'category' => __('Code Execution', domain: 'novamira'),
+            'mcp' => __('Not exposed', domain: 'novamira'),
+            'mcp_type' => '',
+            'status' => __('Unavailable', domain: 'novamira'),
+            'disabled' => true,
+            'individually_manageable' => false,
+            'managed_by_feature' => false,
+            'infrastructure' => false,
+            'manage_url' => '',
+        ];
+    }
+    $groups[$source] = $rows;
 
     return $groups;
 }

@@ -29,150 +29,166 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
-wp_register_ability('novamira/run-wp-cli', [
-    'label' => __('Run WP-CLI Command', domain: 'novamira'),
-    'description' => __(
-        'Runs a WP-CLI command on the server. Can be run synchronously (default) or asynchronously in the background.',
-        domain: 'novamira',
-    ),
-    'category' => 'code-execution',
-    'input_schema' => [
-        'type' => 'object',
-        'properties' => [
-            'args' => [
-                'type' => 'array',
-                'description' => 'Arguments to pass to wp (e.g. ["plugin", "list", "--format=json"]).',
-                'items' => [
+function novamira_register_wp_cli_abilities(): void
+{
+    if (!wp_has_ability('novamira/run-wp-cli')) {
+        novamira_register_run_wp_cli_ability();
+    }
+    if (!wp_has_ability('novamira/get-wp-cli-job')) {
+        novamira_register_get_wp_cli_job_ability();
+    }
+}
+
+function novamira_register_run_wp_cli_ability(): void
+{
+    wp_register_ability('novamira/run-wp-cli', [
+        'label' => __('Run WP-CLI Command', domain: 'novamira'),
+        'description' => __(
+            'Runs a WP-CLI command on the server. Can be run synchronously (default) or asynchronously in the background.',
+            domain: 'novamira',
+        ),
+        'category' => 'code-execution',
+        'input_schema' => [
+            'type' => 'object',
+            'properties' => [
+                'args' => [
+                    'type' => 'array',
+                    'description' => 'Arguments to pass to wp (e.g. ["plugin", "list", "--format=json"]).',
+                    'items' => [
+                        'type' => 'string',
+                    ],
+                    'minItems' => 1,
+                ],
+                'async' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether to run the command asynchronously in the background.',
+                    'default' => false,
+                ],
+            ],
+            'required' => ['args'],
+            'additionalProperties' => false,
+        ],
+        'output_schema' => [
+            'type' => 'object',
+            'properties' => [
+                'success' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether the command started successfully (or completed successfully for synchronous run).',
+                ],
+                'exit_code' => [
+                    'type' => 'integer',
+                    'description' => 'Exit status code of the process (null if async).',
+                ],
+                'stdout' => [
+                    'type' => 'string',
+                    'description' => 'Captured standard output (empty if async).',
+                ],
+                'stderr' => [
+                    'type' => 'string',
+                    'description' => 'Captured standard error (empty if async).',
+                ],
+                'job_id' => [
+                    'type' => 'string',
+                    'description' => 'The generated background job ID. Absent for a synchronous run.',
+                ],
+                'pid' => [
+                    'type' => 'integer',
+                    'description' =>
+                        'PID of the background process. Absent for a synchronous run, and on Windows, '
+                            . 'where a detached job reports no PID; track the job through job_id instead.',
+                ],
+            ],
+            'required' => ['success'],
+        ],
+        'execute_callback' => 'novamira_run_wp_cli',
+        'permission_callback' => 'novamira_permission_callback',
+        'meta' => [
+            'show_in_rest' => true,
+            'mcp' => ['public' => true],
+            'annotations' => [
+                'readonly' => false,
+                'destructive' => true,
+                'idempotent' => false,
+            ],
+        ],
+    ]);
+}
+
+function novamira_register_get_wp_cli_job_ability(): void
+{
+    wp_register_ability('novamira/get-wp-cli-job', [
+        'label' => __('Get WP-CLI Job Status', domain: 'novamira'),
+        'description' => __('Checks the status of an asynchronous background WP-CLI job.', domain: 'novamira'),
+        'category' => 'code-execution',
+        'input_schema' => [
+            'type' => 'object',
+            'properties' => [
+                'job_id' => [
+                    'type' => 'string',
+                    'description' => 'The ID of the background job to check.',
+                    'minLength' => 1,
+                ],
+                'offset' => [
+                    'type' => 'integer',
+                    'description' => 'Byte offset to start reading from the output log.',
+                    'default' => 0,
+                    'minimum' => 0,
+                ],
+                'limit' => [
+                    'type' => 'integer',
+                    'description' => 'Maximum bytes of the log output to return. Use -1 for the entire file.',
+                    'default' => 1_048_576,
+                ],
+            ],
+            'required' => ['job_id'],
+            'additionalProperties' => false,
+        ],
+        'output_schema' => [
+            'type' => 'object',
+            'properties' => [
+                'success' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether the job was found.',
+                ],
+                'job_id' => [
                     'type' => 'string',
                 ],
-                'minItems' => 1,
+                'status' => [
+                    'type' => 'string',
+                    'description' => 'Job status: "running", "completed", or "not_found".',
+                ],
+                'exit_code' => [
+                    'type' => 'integer',
+                    'description' => 'Exit code of the process (null if running or not found).',
+                ],
+                'stdout' => [
+                    'type' => 'string',
+                    'description' => 'Captured stdout and stderr output log.',
+                ],
+                'bytes_read' => [
+                    'type' => 'integer',
+                    'description' => 'Number of bytes read from log file.',
+                ],
+                'truncated' => [
+                    'type' => 'boolean',
+                    'description' => 'Whether the log output was truncated due to limit.',
+                ],
             ],
-            'async' => [
-                'type' => 'boolean',
-                'description' => 'Whether to run the command asynchronously in the background.',
-                'default' => false,
+            'required' => ['success', 'job_id', 'status'],
+        ],
+        'execute_callback' => 'novamira_get_wp_cli_job',
+        'permission_callback' => 'novamira_permission_callback',
+        'meta' => [
+            'show_in_rest' => true,
+            'mcp' => ['public' => true],
+            'annotations' => [
+                'readonly' => true,
+                'destructive' => false,
+                'idempotent' => true,
             ],
         ],
-        'required' => ['args'],
-        'additionalProperties' => false,
-    ],
-    'output_schema' => [
-        'type' => 'object',
-        'properties' => [
-            'success' => [
-                'type' => 'boolean',
-                'description' => 'Whether the command started successfully (or completed successfully for synchronous run).',
-            ],
-            'exit_code' => [
-                'type' => 'integer',
-                'description' => 'Exit status code of the process (null if async).',
-            ],
-            'stdout' => [
-                'type' => 'string',
-                'description' => 'Captured standard output (empty if async).',
-            ],
-            'stderr' => [
-                'type' => 'string',
-                'description' => 'Captured standard error (empty if async).',
-            ],
-            'job_id' => [
-                'type' => 'string',
-                'description' => 'The generated background job ID. Absent for a synchronous run.',
-            ],
-            'pid' => [
-                'type' => 'integer',
-                'description' =>
-                    'PID of the background process. Absent for a synchronous run, and on Windows, '
-                        . 'where a detached job reports no PID; track the job through job_id instead.',
-            ],
-        ],
-        'required' => ['success'],
-    ],
-    'execute_callback' => 'novamira_run_wp_cli',
-    'permission_callback' => 'novamira_permission_callback',
-    'meta' => [
-        'show_in_rest' => true,
-        'mcp' => ['public' => true],
-        'annotations' => [
-            'readonly' => false,
-            'destructive' => true,
-            'idempotent' => false,
-        ],
-    ],
-]);
-
-wp_register_ability('novamira/get-wp-cli-job', [
-    'label' => __('Get WP-CLI Job Status', domain: 'novamira'),
-    'description' => __('Checks the status of an asynchronous background WP-CLI job.', domain: 'novamira'),
-    'category' => 'code-execution',
-    'input_schema' => [
-        'type' => 'object',
-        'properties' => [
-            'job_id' => [
-                'type' => 'string',
-                'description' => 'The ID of the background job to check.',
-                'minLength' => 1,
-            ],
-            'offset' => [
-                'type' => 'integer',
-                'description' => 'Byte offset to start reading from the output log.',
-                'default' => 0,
-                'minimum' => 0,
-            ],
-            'limit' => [
-                'type' => 'integer',
-                'description' => 'Maximum bytes of the log output to return. Use -1 for the entire file.',
-                'default' => 1_048_576,
-            ],
-        ],
-        'required' => ['job_id'],
-        'additionalProperties' => false,
-    ],
-    'output_schema' => [
-        'type' => 'object',
-        'properties' => [
-            'success' => [
-                'type' => 'boolean',
-                'description' => 'Whether the job was found.',
-            ],
-            'job_id' => [
-                'type' => 'string',
-            ],
-            'status' => [
-                'type' => 'string',
-                'description' => 'Job status: "running", "completed", or "not_found".',
-            ],
-            'exit_code' => [
-                'type' => 'integer',
-                'description' => 'Exit code of the process (null if running or not found).',
-            ],
-            'stdout' => [
-                'type' => 'string',
-                'description' => 'Captured stdout and stderr output log.',
-            ],
-            'bytes_read' => [
-                'type' => 'integer',
-                'description' => 'Number of bytes read from log file.',
-            ],
-            'truncated' => [
-                'type' => 'boolean',
-                'description' => 'Whether the log output was truncated due to limit.',
-            ],
-        ],
-        'required' => ['success', 'job_id', 'status'],
-    ],
-    'execute_callback' => 'novamira_get_wp_cli_job',
-    'permission_callback' => 'novamira_permission_callback',
-    'meta' => [
-        'show_in_rest' => true,
-        'mcp' => ['public' => true],
-        'annotations' => [
-            'readonly' => true,
-            'destructive' => false,
-            'idempotent' => true,
-        ],
-    ],
-]);
+    ]);
+}
 
 /**
  * Execute WP-CLI command.

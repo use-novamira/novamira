@@ -958,6 +958,12 @@ if ($novamira_adapter_initialized) {
 }
 add_filter(
     'novamira_mcp_adapter_tool_call_result',
+    callback: 'novamira_enrich_unavailable_wp_cli_error',
+    priority: 5,
+    accepted_args: 2,
+);
+add_filter(
+    'novamira_mcp_adapter_tool_call_result',
     callback: 'novamira_enrich_disabled_ability_error',
     priority: 10,
     accepted_args: 2,
