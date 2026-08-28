@@ -688,8 +688,15 @@ function novamira_oauth_codex_desktop_steps(string $mcp_name, string $mcp_url): 
             'body' => __('In ChatGPT Desktop, open Settings > Plugins > MCP.', domain: 'novamira'),
         ],
         [
-            'title' => __('Add a server name', domain: 'novamira'),
-            'body' => __('Select Add server, choose Streamable HTTP, and use this name:', domain: 'novamira'),
+            'title' => __('Choose Streamable HTTP', domain: 'novamira'),
+            'body' => __(
+                'Select Add server. The transport defaults to stdio; change it to Streamable HTTP for this OAuth connection.',
+                domain: 'novamira',
+            ),
+        ],
+        [
+            'title' => __('Enter the server name', domain: 'novamira'),
+            'body' => __('Use this name:', domain: 'novamira'),
             'copy' => $mcp_name,
         ],
         [
