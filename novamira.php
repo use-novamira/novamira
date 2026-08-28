@@ -867,7 +867,7 @@ function novamira_discover_public_abilities(string $type): array
 }
 
 if ($novamira_adapter_initialized) {
-    // The `mcp-adapter/execute-ability` dispatcher wraps every ability return in
+    // The `novamira-mcp-adapter/execute-ability` dispatcher wraps every ability return in
     // `{ success: true, data: <inner> }`. When the inner value is itself
     // `{ success: false, error: "..." }` the outer `success: true` masks a real
     // logical failure, and agents that check the top-level flag — a very

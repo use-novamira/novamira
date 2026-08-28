@@ -22,6 +22,11 @@ if (!defined('ABSPATH')) {
 \add_action('wp_ajax_novamira_visual_safe_backend_tools_discover', __NAMESPACE__ . '\ajax_discover');
 \add_action('wp_ajax_novamira_visual_safe_backend_tools_call', __NAMESPACE__ . '\ajax_call');
 
+const SYSTEM_ABILITY_PREFIXES = [
+    'novamira-mcp-adapter/',
+    'mcp-adapter/',
+];
+
 function register_routes(): void
 {
     \register_rest_route('novamira/v1', route: '/visual-safe-backend-tools/discover', args: [
@@ -296,7 +301,13 @@ function is_public_backend_tool(\WP_Ability $ability): bool
         return false;
     }
 
-    return !str_starts_with($ability->get_name(), 'mcp-adapter/');
+    foreach (SYSTEM_ABILITY_PREFIXES as $prefix) {
+        if (str_starts_with($ability->get_name(), $prefix)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 function get_backend_tool(string $name): \WP_Ability|\WP_Error
