@@ -21,9 +21,12 @@
     --nm-bg: #fff;
     --nm-bg-hover: #fafafa;
     --nm-bg-rail: #f4f4f5;
-    --nm-parent-alt: #f6f7f7;
-    --nm-parent-hover: #f0f0f1;
-    --nm-row-alt: #f6f7f7;
+    --nm-provider-bg: #e9eaec;
+    --nm-provider-hover: #dcdcde;
+    --nm-category-bg: #f6f7f7;
+    --nm-category-alt: #f0f0f1;
+    --nm-category-hover: #e5e5e7;
+    --nm-row-alt: #fafafa;
     --nm-row-hover: #f0f0f1;
     --nm-border: #c3c4c7;
     --nm-border-soft: #e4e4e7;
@@ -117,6 +120,7 @@
     justify-content: space-between;
     padding: var(--nm-space-4) var(--nm-space-6);
     border-bottom: 1px solid var(--nm-border-soft);
+    background: var(--nm-provider-bg);
     cursor: pointer;
     user-select: none;
     list-style: none;
@@ -127,11 +131,7 @@
 }
 
 .novamira-hub-header:hover {
-    background: var(--nm-parent-hover);
-}
-
-.novamira-hub-section:nth-of-type(even) > .novamira-hub-header {
-    background: var(--nm-parent-alt);
+    background: var(--nm-provider-hover);
 }
 
 .novamira-hub-header:focus-visible {
@@ -188,7 +188,7 @@
     align-items: center;
     justify-content: space-between;
     padding: var(--nm-space-2) var(--nm-space-6);
-    background: var(--nm-bg);
+    background: var(--nm-category-bg);
     cursor: pointer;
     user-select: none;
     list-style: none;
@@ -199,11 +199,15 @@
 }
 
 .novamira-hub-subheader:hover {
-    background: var(--nm-parent-hover);
+    background: var(--nm-category-hover);
 }
 
 .novamira-hub-subsection:nth-of-type(even) > .novamira-hub-subheader {
-    background: var(--nm-parent-alt);
+    background: var(--nm-category-alt);
+}
+
+.novamira-hub-subsection:nth-of-type(even) > .novamira-hub-subheader:hover {
+    background: var(--nm-category-hover);
 }
 
 .novamira-hub-subheader:focus-visible {
@@ -329,6 +333,12 @@
     transition: background var(--nm-transition);
 }
 
+/* Make the category hierarchy visible without changing the row surface: the
+ * category keeps the parent alignment, while its abilities begin one step in. */
+.novamira-hub-subsection > .novamira-hub-rows > .novamira-hub-row {
+    padding-inline-start: calc(var(--nm-space-6) + var(--nm-space-4));
+}
+
 /* Only an expanded row needs its controls pinned to the top, next to the slug;
  * collapsed rows (the common case) keep everything vertically centered. */
 .novamira-hub-row:has(.novamira-hub-main[open]) {
@@ -343,12 +353,8 @@
     background: var(--nm-row-alt);
 }
 
-.novamira-hub-row:hover {
+.novamira-hub-rows > .novamira-hub-row:hover {
     background: var(--nm-row-hover);
-}
-
-.novamira-hub-row.is-off .novamira-hub-main .slug {
-    color: var(--nm-muted-3);
 }
 
 /* While an AJAX toggle is in flight, dim the row and block further clicks. */

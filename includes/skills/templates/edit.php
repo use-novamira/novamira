@@ -27,6 +27,7 @@ $enable_prompt = true;
 $enable_agentic = true;
 $enabled = true;
 $post_id = 0;
+$validation_issues = [];
 
 if (!$is_new) {
     /** @var mixed $maybe_post */
@@ -44,6 +45,7 @@ if (!$is_new) {
     $enable_prompt = boolval(get_post_meta($post_id, Cpt\META_ENABLE_PROMPT, single: true));
     $enable_agentic = boolval(get_post_meta($post_id, Cpt\META_ENABLE_AGENTIC, single: true));
     $enabled = $post->post_status === 'publish';
+    $validation_issues = Admin\validation_issues($post)['issues'];
 }
 
 $list_url = admin_url('admin.php?page=' . Admin\PAGE_SLUG);
@@ -63,6 +65,20 @@ $heading_title = match (true) {
         <a href="<?php echo esc_url($list_url); ?>">← <?php esc_html_e('Skills', domain: 'novamira'); ?></a>
         / <?php echo esc_html($heading_title); ?>
     </h1>
+
+    <?php if ($validation_issues !== []): ?>
+        <div class="notice notice-error inline novamira-skills-edit-validation">
+            <p><strong><?php esc_html_e('This skill needs attention:', domain: 'novamira'); ?></strong></p>
+            <ul>
+                <?php foreach ($validation_issues as $validation_issue): ?>
+                    <li>
+                        <strong><?php echo esc_html($validation_issue['label']); ?>:</strong>
+                        <?php echo esc_html($validation_issue['guidance']); ?>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
 
     <form method="post" action="<?php echo esc_url($action_url); ?>">
         <?php wp_nonce_field($nonce_action); ?>

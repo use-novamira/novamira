@@ -16,6 +16,7 @@
     justify-content: space-between;
     padding: 16px 24px;
     border-bottom: 1px solid #e4e4e7;
+    background: #e9eaec;
 }
 
 .novamira-sandbox-header h2 {
@@ -53,17 +54,17 @@
     border-bottom: none;
 }
 
-.novamira-sandbox-row:hover {
+.novamira-sandbox-row:nth-child(even) {
     background: #fafafa;
+}
+
+.novamira-sandbox-row:hover {
+    background: #f0f0f1;
 }
 
 .novamira-sandbox-row:focus-visible {
     outline: 2px solid #2271b1;
     outline-offset: -2px;
-}
-
-.novamira-sandbox-row.is-disabled .slug {
-    color: #a1a1aa;
 }
 
 .novamira-sandbox-row.is-suspended {

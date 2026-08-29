@@ -30,6 +30,65 @@ function current_user_can_manage(): bool
 }
 
 /**
+ * Return the problems that make a user skill incomplete or ambiguous. Both the
+ * list and edit views use this result so their warnings cannot drift apart.
+ *
+ * @return array{issues: list<array{label: string, guidance: string}>, critical: bool}
+ */
+function validation_issues(\WP_Post $post): array
+{
+    $issues = [];
+    $missing_description = trim($post->post_excerpt) === '';
+    $missing_body = trim($post->post_content) === '';
+    $external_conflict = $post->post_name !== '' ? Sources\exists_in_external_source($post->post_name) : null;
+    $display_name = $post->post_name !== '' ? $post->post_name : $post->post_title;
+
+    if ($missing_description) {
+        $issues[] = [
+            'label' => __('Missing description', domain: 'novamira'),
+            'guidance' => __(
+                'Add a description below that explains when the AI should use this skill.',
+                domain: 'novamira',
+            ),
+        ];
+    }
+    if ($missing_body) {
+        $issues[] = [
+            'label' => __('Missing body', domain: 'novamira'),
+            'guidance' => sprintf(
+                /* translators: %s: skill name */
+                __(
+                    'Add the instructions the AI should follow in the Body field below, or ask your AI: “Complete the body of the Novamira skill "%s".”',
+                    domain: 'novamira',
+                ),
+                $display_name,
+            ),
+        ];
+    }
+    if ($post->post_name === '') {
+        $issues[] = [
+            'label' => __('Malformed title', domain: 'novamira'),
+            'guidance' => __('Enter a lowercase, dash-separated title and save the skill.', domain: 'novamira'),
+        ];
+    }
+    if ($external_conflict !== null) {
+        $issues[] = [
+            'label' => sprintf(
+                /* translators: %s = source label */
+                __('Conflicts with %s', domain: 'novamira'),
+                $external_conflict,
+            ),
+            'guidance' => __('Choose a different title and save the skill.', domain: 'novamira'),
+        ];
+    }
+
+    return [
+        'issues' => $issues,
+        'critical' => $missing_description || $missing_body || $external_conflict !== null,
+    ];
+}
+
+/**
  * Skills lives as a submenu under the Novamira top-level menu registered
  * in `novamira.php`. The parent slug `novamira-connect` is the canonical
  * Configuration page. Its position in the Novamira submenu is set by the

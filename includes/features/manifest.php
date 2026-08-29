@@ -42,7 +42,7 @@ function core_manifest(): array
             'provider' => 'Novamira',
             'label' => __('Novamira Design', domain: 'novamira'),
             'description' => __(
-                'Saved design directions, visual-work guidance, and the abilities agents use to manage and validate designs.',
+                'One saved design system your AI follows on every page it builds, so the site stays consistent and looks deliberate rather than generic.',
                 domain: 'novamira',
             ),
             'default_active' => true,
@@ -66,7 +66,7 @@ function core_manifest(): array
             'provider' => 'Novamira',
             'label' => __('Novamira Chat', domain: 'novamira'),
             'description' => __(
-                'The AI agent workbench inside WordPress, including its menu, assets, sessions, and REST API.',
+                'An AI agent inside your WordPress dashboard: describe a change in plain language, review its plan, and approve it to apply the change.',
                 domain: 'novamira',
             ),
             'default_active' => true,

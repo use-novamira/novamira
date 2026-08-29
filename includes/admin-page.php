@@ -664,6 +664,10 @@ function novamira_render_sandbox_row(string $sandbox_dir, string $file, string $
     $file_status = novamira_get_sandbox_file_status($path, $sandbox_status);
     $display_name = $file;
     $ext = strtolower(pathinfo($display_name, PATHINFO_EXTENSION));
+    $row_classes = ['novamira-sandbox-row', 'novamira-list-row', 'is-' . $file_status];
+    if ($file_status === 'disabled') {
+        $row_classes[] = 'is-off';
+    }
 
     $delete_url = wp_nonce_url(
         $base_url . '&action=delete&file=' . urlencode($file),
@@ -671,7 +675,7 @@ function novamira_render_sandbox_row(string $sandbox_dir, string $file, string $
     );
     ?>
     <div
-        class="<?php echo esc_attr('novamira-sandbox-row novamira-list-row is-' . $file_status); ?>"
+        class="<?php echo esc_attr(implode(' ', $row_classes)); ?>"
         tabindex="0"
         aria-label="<?php echo
             esc_attr(sprintf(

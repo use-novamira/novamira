@@ -273,18 +273,8 @@
     color: #a1a1aa;
 }
 
-/* External-source sections are managed by Novamira features and
-   specializations rather than by individual skill controls. */
-.novamira-admin-list-section--external .novamira-admin-list-list {
-    background: #fafafa;
-}
-
 .novamira-admin-list-row.is-external {
     cursor: default;
-}
-
-.novamira-admin-list-row.is-external:hover {
-    background: #fafafa;
 }
 
 .novamira-admin-list-row:has(.novamira-admin-list-main[open]) {
@@ -370,19 +360,19 @@
 }
 
 .novamira-admin-list-warning {
-    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 20px;
+    gap: 4px;
+    min-height: 20px;
+    padding: 1px 7px;
     border-radius: 3px;
     background: #fef3c7;
     color: #92400e;
     font-size: 11px;
     font-weight: 500;
     line-height: 1.4;
-    cursor: help;
+    white-space: nowrap;
 }
 
 .novamira-admin-list-warning.is-critical {
@@ -390,38 +380,13 @@
     color: #b32d2e;
 }
 
-.novamira-admin-list-warning:focus-visible {
-    outline: 2px solid #2271b1;
-    outline-offset: 2px;
+.novamira-skills-edit-validation {
+    margin: 16px 0;
 }
 
-.novamira-admin-list-warning::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    z-index: 100;
-    top: calc(100% + 4px);
-    left: 0;
-    width: max-content;
-    max-width: min(440px, calc(100vw - 96px));
-    padding: 6px 9px;
-    border-radius: 4px;
-    background: #1d2327;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 400;
-    line-height: 1.4;
-    white-space: normal;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.novamira-admin-list-warning:hover::after,
-.novamira-admin-list-warning:focus-visible::after,
-.novamira-admin-list-main:focus-visible .novamira-admin-list-warning::after {
-    opacity: 1;
-    visibility: visible;
+.novamira-skills-edit-validation ul {
+    margin: 0 0 10px 20px;
+    list-style: disc;
 }
 
 /* Trash subsection — visually subdued. */

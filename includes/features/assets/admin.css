@@ -88,6 +88,12 @@
     color: #92400e;
 }
 
+.novamira-list-inline-state.is-experimental {
+    color: #8a6116;
+    font-size: 12px;
+    font-weight: 500;
+}
+
 @media (max-width: 782px) {
     .novamira-features .novamira-admin-list-row {
         grid-template-columns: minmax(0, 1fr) auto;

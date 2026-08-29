@@ -102,6 +102,7 @@
     justify-content: space-between;
     padding: 16px 24px;
     border-bottom: 1px solid #e4e4e7;
+    background: #e9eaec;
 }
 
 .novamira-admin-list-header h2 {
@@ -139,8 +140,12 @@
     border-bottom: none;
 }
 
-.novamira-admin-list-row:hover {
+.novamira-admin-list-list > .novamira-admin-list-row:nth-child(even) {
     background: #fafafa;
+}
+
+.novamira-admin-list-list > .novamira-admin-list-row:hover {
+    background: #f0f0f1;
 }
 
 .novamira-admin-list-toggle {
@@ -241,6 +246,35 @@
     content: "—";
     margin-right: 6px;
     color: #d4d4d8;
+}
+
+/* Disabled rows stay operable, but their content recedes consistently across
+ * Features, Skills, Abilities, and Sandbox. Actions and state labels retain
+ * their normal contrast so re-enabling never looks unavailable. */
+.novamira-list-row.is-off .slug {
+    color: #8c8f94;
+}
+
+.novamira-list-row.is-off .novamira-list-inline-state:not(.is-warning, .is-critical, .is-experimental) {
+    color: #8c8f94;
+}
+
+.novamira-list-row.is-off .desc,
+.novamira-list-row.is-off .desc-full,
+.novamira-list-row.is-off .novamira-feature-details,
+.novamira-list-row.is-off .novamira-admin-list-detail,
+.novamira-list-row.is-off .novamira-admin-list-detail p {
+    color: #a7aaad;
+}
+
+.novamira-list-row.is-unavailable .slug,
+.novamira-list-row.is-unavailable .desc,
+.novamira-list-row.is-unavailable .desc-full {
+    color: #a7aaad;
+}
+
+.novamira-list-row.is-unavailable .novamira-list-inline-state:not(.is-warning, .is-critical, .is-experimental) {
+    color: #a7aaad;
 }
 
 .novamira-admin-list-pills {

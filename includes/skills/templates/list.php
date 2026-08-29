@@ -174,39 +174,18 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
         <div class="novamira-admin-list-list" data-novamira-skills-list>
             <?php foreach ($user_posts as $post):
                 $slug = $post->post_name;
-                $malformed_title = $slug === '';
                 $enabled = $post->post_status === 'publish';
                 $description = trim($post->post_excerpt);
-                $missing_description = $description === '';
-                $missing_body = trim($post->post_content) === '';
-                $external_conflict = $slug !== '' ? Sources\exists_in_external_source($slug) : null;
-                $warnings = [];
-                if ($missing_description) {
-                    $warnings[] = __('Missing description', domain: 'novamira');
-                }
-                if ($missing_body) {
-                    $warnings[] = __('Missing body', domain: 'novamira');
-                }
-                if ($malformed_title) {
-                    $warnings[] = __('Malformed title', domain: 'novamira');
-                }
-                if ($external_conflict !== null) {
-                    $warnings[] = sprintf(
-                        /* translators: %s = source label */
-                        __('Conflicts with %s', domain: 'novamira'),
-                        $external_conflict,
-                    );
-                }
+                $validation = Admin\validation_issues($post);
+                $warnings = array_map(static fn(array $issue): string => $issue['label'], $validation['issues']);
                 $has_warning = $warnings !== [];
-                $critical_warning = $missing_description || $missing_body || $external_conflict !== null;
+                $critical_warning = $validation['critical'];
                 $edit_url = add_query_arg([
                     'page' => Admin\PAGE_SLUG,
                     'skill' => $post->ID,
                 ], admin_url('admin.php'));
                 $row_classes = ['novamira-admin-list-row', 'novamira-list-row', 'is-user-skill'];
-                if ($enabled) {
-                    $row_classes[] = 'is-on';
-                }
+                $row_classes[] = $enabled ? 'is-on' : 'is-off';
                 if ($has_warning) {
                     $row_classes[] = 'has-warn';
                 }
@@ -230,9 +209,9 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                         <span
                             class="novamira-admin-list-warning<?php echo $critical_warning ? ' is-critical' : ''; ?>"
                             role="note"
-                            aria-label="<?php echo esc_attr(implode(' · ', $warnings)); ?>"
-                            data-tooltip="<?php echo esc_attr(implode(' · ', $warnings)); ?>"
-                        ><span aria-hidden="true">⚠</span></span>
+                        ><span aria-hidden="true">⚠</span><span><?php echo
+                            esc_html(implode(' · ', $warnings))
+                        ; ?></span></span>
                     <?php endif; ?>
                 </a>
                 <div class="novamira-admin-list-actions novamira-list-actions novamira-list-progressive-actions">
@@ -461,10 +440,10 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                         <span
                             class="novamira-admin-list-warning is-critical"
                             role="note"
-                            tabindex="0"
-                            aria-label="<?php esc_attr_e('Missing description', domain: 'novamira'); ?>"
-                            data-tooltip="<?php esc_attr_e('Missing description', domain: 'novamira'); ?>"
-                        ><span aria-hidden="true">⚠</span></span>
+                        ><span aria-hidden="true">⚠</span><span><?php esc_html_e(
+                            'Missing description',
+                            domain: 'novamira',
+                        ); ?></span></span>
                     </div>
                 <?php endif; ?>
                 <div class="novamira-admin-list-actions novamira-list-actions novamira-list-progressive-actions">

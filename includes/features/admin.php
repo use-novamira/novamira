@@ -35,11 +35,12 @@ function enqueue_assets(string $hook): void
 
     $admin_list_path = dirname(__DIR__) . '/assets/admin-list.css';
     $features_admin_path = __DIR__ . '/assets/admin.css';
-    $admin_list_version = is_file($admin_list_path)
-        ? NOVAMIRA_VERSION . '-' . (string) filemtime($admin_list_path)
+    $debug_assets = defined('WP_DEBUG') && constant('WP_DEBUG') === true;
+    $admin_list_version = $debug_assets && is_file($admin_list_path)
+        ? (string) filemtime($admin_list_path)
         : NOVAMIRA_VERSION;
-    $features_admin_version = is_file($features_admin_path)
-        ? NOVAMIRA_VERSION . '-' . (string) filemtime($features_admin_path)
+    $features_admin_version = $debug_assets && is_file($features_admin_path)
+        ? (string) filemtime($features_admin_path)
         : NOVAMIRA_VERSION;
 
     wp_enqueue_style(
@@ -284,7 +285,10 @@ function render_feature_state(?string $disabledLabel, ?array $dependencyWarning)
 function render_feature_maturity(Features\Definition $feature): void
 {
     if ($feature->experimental) { ?>
-        <span class="novamira-list-inline-state">— <?php esc_html_e('Experimental', domain: 'novamira'); ?></span>
+        <span class="novamira-list-inline-state is-experimental">(<?php esc_html_e(
+            'Experimental',
+            domain: 'novamira',
+        ); ?>)</span>
         <?php }
 }
 
