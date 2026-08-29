@@ -58,11 +58,17 @@ add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Check\\registe
 add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Get\\register', priority: 999);
 add_action('wp_abilities_api_init', __NAMESPACE__ . '\\Abilities\\Delete\\register', priority: 999);
 
-/** @param list<string> $lines @return list<string> */
+/**
+ * Append the design-authority lines (see includes/design-authority.php): the
+ * `novamira-design` skill directive at the `design` level (the default on
+ * every site with the feature on, with or without an active design), the
+ * builder-owned-design line at the `ask`, `hybrid`, and `builder` levels a
+ * specialization declares, and nothing only when the feature is off.
+ *
+ * @param list<string> $lines
+ * @return list<string>
+ */
 function add_building_context(array $lines): array
 {
-    $lines[] = '';
-    $lines[] = 'Before any visual work (building or restyling a page, template, section, or component), load the `novamira-design` skill and follow it.';
-
-    return $lines;
+    return array_values(array_merge($lines, novamira_design_building_context_lines()));
 }

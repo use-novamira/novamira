@@ -234,6 +234,7 @@ add_action('network_admin_notices', callback: 'novamira_render_mcp_dependency_no
 add_action('rest_api_init', callback: 'novamira_register_missing_mcp_endpoint', priority: 999);
 
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/design-authority.php';
 require_once __DIR__ . '/includes/features/bootstrap.php';
 require_once __DIR__ . '/includes/admin-notices.php';
 require_once __DIR__ . '/includes/abilities/bootstrap.php';

@@ -28,7 +28,7 @@ function register(): void
     wp_register_ability('novamira/check-design', [
         'label' => __('Check Design (Pre-flight)', domain: 'novamira'),
         'description' => __(
-            'Pre-flight a candidate page (its HTML/CSS or visible text) against the active design\'s tokens and Don\'t rules plus universal anti-slop checks (em-dash, AI-purple, Inter, filler copy, off-palette fonts/colors). Call before finalizing any visual output and fix every "fail" before shipping.',
+            'Pre-flight a candidate page (its HTML/CSS or visible text) against the active design\'s tokens and Don\'t rules plus universal anti-slop checks (em-dash, AI-purple, Inter, filler copy, off-palette fonts/colors). Call before finalizing any visual output and fix every "fail" before shipping. `authority` says who owns the design: at `design` fix every violation; at `ask` the page builder named in `builder` has its own design system, so ask the user once which one is authoritative and, until they answer, treat token and Don\'t violations as advisory while builder values lead; at `hybrid` the builder stays the source of truth for everything it defines, so the universal checks still apply but token and Don\'t violations matter only for the gaps this design fills or when the user asked to apply it; at `builder` only the universal checks apply. `authoritative` is true only for `design`; `builder` is the page builder\'s label or null.',
             domain: 'novamira',
         ),
         'category' => Abilities\CATEGORY,
@@ -51,6 +51,9 @@ function register(): void
             'properties' => [
                 'ok' => ['type' => 'boolean'],
                 'active' => ['type' => 'boolean'],
+                'authority' => ['type' => 'string', 'enum' => ['design', 'ask', 'hybrid', 'builder']],
+                'authoritative' => ['type' => 'boolean'],
+                'builder' => ['type' => ['string', 'null']],
                 'slug' => ['type' => 'string'],
                 'violations' => [
                     'type' => 'array',
@@ -67,7 +70,7 @@ function register(): void
                 'checked' => ['type' => 'array', 'items' => ['type' => 'string']],
                 'not_checked' => ['type' => 'array', 'items' => ['type' => 'string']],
             ],
-            'required' => ['ok', 'violations'],
+            'required' => ['ok', 'authority', 'authoritative', 'builder', 'violations'],
         ],
         'execute_callback' => static function (array $input): array|WP_Error {
             $output = stripcslashes((string) ($input['output'] ?? ''));
@@ -94,14 +97,19 @@ function register(): void
                 break;
             }
 
-            return [
-                'ok' => $ok,
-                'active' => $ctx['has_active'],
-                'slug' => $ctx['has_active'] ? $slug : '',
-                'violations' => $violations,
-                'checked' => Preflight\MECHANIZED,
-                'not_checked' => Preflight\STRUCTURAL_NOT_CHECKED,
-            ];
+            return array_merge(
+                [
+                    'ok' => $ok,
+                    'active' => $ctx['has_active'],
+                ],
+                Abilities\authority_fields(),
+                [
+                    'slug' => $ctx['has_active'] ? $slug : '',
+                    'violations' => $violations,
+                    'checked' => Preflight\MECHANIZED,
+                    'not_checked' => Preflight\STRUCTURAL_NOT_CHECKED,
+                ],
+            );
         },
         'permission_callback' => 'novamira_permission_callback',
         'meta' => [

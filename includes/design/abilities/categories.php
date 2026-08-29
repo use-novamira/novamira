@@ -30,3 +30,30 @@ function register_category(): void
         // Already registered — fine.
     }
 }
+
+/**
+ * Design-authority fields shared by the design abilities: the authority level
+ * (`design`, `ask`, `hybrid`, or `builder`; see
+ * novamira_design_resolve_authority()), the compatibility boolean that is
+ * true only at the `design` level, and the label of the page builder that
+ * owns the design system, or null when none was declared.
+ *
+ * @return array{authority: string, authoritative: bool, builder: ?string}
+ */
+function authority_fields(): array
+{
+    $resolved = novamira_design_resolve_authority();
+    $authority = $resolved['level'];
+    if ($authority === 'none') {
+        // The design abilities exist only while the feature is on, so the
+        // resolver's feature-off level cannot reach an agent; report the
+        // default rather than an internal value.
+        $authority = 'design';
+    }
+
+    return [
+        'authority' => $authority,
+        'authoritative' => $authority === 'design',
+        'builder' => $resolved['builder'],
+    ];
+}

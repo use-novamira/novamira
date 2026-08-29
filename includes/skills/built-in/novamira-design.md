@@ -1,11 +1,13 @@
 ---
 name: novamira-design
-description: The taste brain for any visual work. Load before building or restyling any page, template, or component, or when capturing a site's existing design direction: establishes and honors the site's one saved, distinctive design direction, which a realization skill then turns into native output.
+description: The taste brain for visual work. Load it when the site's instructions ask for it, when a Novamira design is active and the authority that `novamira/get-active-design` reports is `design`, `hybrid`, or `ask`, or when the user asks to capture or apply a Novamira design. Establishes and honors the site's one saved, distinctive design direction, which a realization skill then turns into native output.
 ---
 
 # Design System
 
-Use this before any visual build (page, template, section, restyle).
+Use this before a visual build (page, template, section, restyle). On a site
+whose page builder has its own design system, read **When a page builder owns
+the design system** first and follow the `authority` level reported there.
 
 The goal is a **beautiful, distinctive, on-brand** site. Not-slop is the floor,
 not the finish line: avoiding the generic AI look (Inter, purple gradients,
@@ -39,7 +41,54 @@ beauty"). The active design gives you the direction; your taste does the rest.
    synthesize a DESIGN.md from that existing look and `save-design` (`activate:
    true`), then build within it. Propose a brand-new direction only when there is
    genuinely no coherent look to match, or the user explicitly wants a fresh
-   identity. Either way, do not build on the generic default.
+   identity. Either way, do not build on the generic default. If the site's
+   instructions report that a page builder owns the design system, follow the
+   reported level first (see **When a page builder owns the design system**).
+
+## When a page builder owns the design system
+
+Some page builders keep the site's design in their own stores: theme styles,
+global variables, palettes, global classes, components. Whether such a builder
+or the Novamira design leads is a per-site decision that the site's own
+specialization declares; the free plugin does not guess it. The environment
+context states the decision when a page builder owns the design system, and
+`novamira/get-active-design` reports it through `authority` (with the
+builder's label in `builder`). Follow the reported level; do not pick one
+yourself:
+
+- **`design`** — the Novamira design leads: follow the rest of this skill.
+  This is the default on every site, builder or not. If the site runs a page
+  builder, still materialize each token in the builder's own stores before you
+  reference it (see below).
+- **`ask`** — the builder has its own design system and a Novamira design is
+  active. Before visual work, **ask the user once** whether the builder's design
+  system or the Novamira design is authoritative, then follow that choice for
+  the session. Until Novamira is chosen, use existing builder values and do not
+  add Novamira tokens. If it is chosen, **materialize each token in the builder
+  before referencing it** (see below).
+- **`hybrid`** — the builder's stores stay the source of truth for everything
+  they already define. Consult the active design **only to fill gaps the
+  builder has no value for** (a role the builder has no color for, a type scale
+  it never set), or when the user **explicitly asks to apply it**. Materialize
+  each token in the builder before referencing it — through the builder's sync
+  ability where installed, otherwise its variables, palette, and class
+  abilities. Where a DESIGN.md value and an existing builder value conflict and
+  the user has not decided, the **builder value wins**; list the conflicts and
+  let the user settle them.
+- **`builder`** — the builder alone is the source of truth. Build from its
+  tokens, following the builder's realization skill. **Do not create or
+  activate a DESIGN.md** unless the user asks for a Novamira design.
+
+On every level other than `design`, `authoritative` is false: do not treat the
+DESIGN.md as the site's single source of truth. On any site that runs a page
+builder, never reference a design token that is not materialized in the builder
+— a token that exists only in the DESIGN.md is invisible to the builder and
+produces unstyled or off-brand output.
+
+**To materialize a token** is to create or reuse it as a native builder
+variable, palette colour, global/theme style, or class, and reference that
+entry. Never paste literals or DESIGN.md names into content, never create a
+parallel token layer next to the builder's own.
 
 **Scope and matching (two defaults that prevent the two common failures):**
 
@@ -107,8 +156,10 @@ writing site globals must take the proven, surface-correct path. Use the
 dedicated sync ability where it is installed; where it is not, do not hand-roll
 writes to the site's globals.
 
-End state either way: **one active DESIGN.md**. Do not skip it and build on the
-generic default.
+End state either way, when the Novamira design is the site's design authority:
+**one active DESIGN.md** rather than a build on the generic default. Where a
+page builder owns the design system, the end state is the builder's own stores
+carrying the direction (see **When a page builder owns the design system**).
 
 ## The Surface and Its Ceiling
 
@@ -164,7 +215,7 @@ thing that protects the result.
 - Treat the **Do's and Don'ts** as hard constraints, not suggestions.
 - If you make a new committed choice (e.g. an accent for a component), fold it
   into the DESIGN.md and call `novamira/save-design` again so the active design
-  stays the single source of truth.
+  keeps the full record of the direction.
 
 ## Compose for Beauty (the ceiling)
 
