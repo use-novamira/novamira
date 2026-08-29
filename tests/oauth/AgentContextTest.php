@@ -126,6 +126,7 @@ final class AgentContextTest extends TestCase
     public function testAgentContextIsReadonlyRestVisibleAndCompatibilityConsistent(): void
     {
         $registration = $GLOBALS['novamira_test_registered_abilities']['novamira/agent-context'];
+        self::assertSame('context', $registration['category']);
         self::assertTrue($registration['meta']['show_in_rest']);
         self::assertSame(
             ['readonly' => true, 'destructive' => false, 'idempotent' => true],

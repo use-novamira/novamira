@@ -212,6 +212,14 @@ function novamira_register_ability_categories(): void
         'description' => __('Abilities that execute code on the WordPress server.', domain: 'novamira'),
     ]);
 
+    wp_register_ability_category('context', [
+        'label' => __('Context', domain: 'novamira'),
+        'description' => __(
+            'Read-only site guidance, environment, and skill summaries for agents.',
+            domain: 'novamira',
+        ),
+    ]);
+
     wp_register_ability_category('filesystem', [
         'label' => __('Filesystem', domain: 'novamira'),
         'description' => __('Server filesystem operations.', domain: 'novamira'),
