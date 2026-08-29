@@ -199,6 +199,19 @@ function novamira_create_sandbox_disabled_marker(string $path): bool
 }
 
 /**
+ * Remove a disabled marker without touching the sandbox PHP source.
+ */
+function novamira_remove_sandbox_disabled_marker(string $path): bool
+{
+    $marker = novamira_sandbox_disabled_marker_path($path);
+    if (!is_file($marker)) {
+        return true;
+    }
+
+    return unlink($marker);
+}
+
+/**
  * Identify files maintained by Novamira rather than user-authored sandbox files.
  */
 function novamira_is_sandbox_internal_file_name(string $filename): bool

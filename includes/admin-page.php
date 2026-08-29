@@ -501,8 +501,8 @@ function novamira_run_sandbox_action(string $action, string $file, string $path)
 {
     return match ($action) {
         'delete' => novamira_delete_sandbox_file($path),
-        'disable' => str_ends_with($file, '.php') ? novamira_disable_file(['path' => $path]) : false,
-        'enable' => str_ends_with($file, '.php') ? novamira_enable_file(['path' => $path]) : false,
+        'disable' => str_ends_with($file, '.php') ? novamira_create_sandbox_disabled_marker($path) : false,
+        'enable' => str_ends_with($file, '.php') ? novamira_remove_sandbox_disabled_marker($path) : false,
         'exit_safe_mode' => $file === '.crashed' && unlink($path),
         default => false,
     };
