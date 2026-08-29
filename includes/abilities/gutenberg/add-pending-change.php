@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/gutenberg-add-pending-change', [
     'label' => __('Add Gutenberg Pending Change', domain: 'novamira'),
     'description' => __(
-        'Adds one replace-content target change to a draft Gutenberg pending batch, or auto-creates a draft batch when batch_id is omitted. Static/native blocks are finalized in a hidden editor iframe so registered third-party blocks can be serialized by their editor JavaScript. Queued changes are not live until gutenberg-enable-batch-finalization marks the batch ready and an open Block Editor Queue page completes it.',
+        'Adds one replace-content target change to a draft Gutenberg pending batch, or auto-creates a draft batch when batch_id is omitted. Static/native blocks are finalized in a hidden editor iframe so registered third-party blocks can be serialized by their editor JavaScript. Builder-owned block namespaces (for example divi/*) are rejected: write that content with the builder\'s dedicated abilities. Queued changes are not live until gutenberg-enable-batch-finalization marks the batch ready and an open Block Editor Queue page completes it.',
         domain: 'novamira',
     ),
     'category' => 'gutenberg',
@@ -118,6 +118,11 @@ function gutenberg_add_pending_change(array $input): array|WP_Error
     $blocks = gutenberg_add_pending_blocks($input);
     if (is_wp_error($blocks)) {
         return $blocks;
+    }
+
+    $builder_error = validate_builder_owned_blocks($blocks);
+    if ($builder_error instanceof WP_Error) {
+        return $builder_error;
     }
 
     if (($input['allow_raw_html'] ?? false) !== true && blocks_are_raw_html_only($blocks)) {

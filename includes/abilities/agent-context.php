@@ -15,7 +15,7 @@ wp_register_ability('novamira/agent-context', [
         'Return transport-neutral Novamira site guidance, environment, and skill summaries.',
         domain: 'novamira',
     ),
-    'category' => 'code-execution',
+    'category' => 'context',
     'output_schema' => [
         'type' => 'object',
         'properties' => [
