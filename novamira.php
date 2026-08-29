@@ -561,11 +561,20 @@ add_action('wp_ajax_novamira_toggle_ability', callback: 'novamira_handle_ability
 
 // Admin page stylesheets — card layouts matching Skills.
 add_action('admin_enqueue_scripts', static function (string $hook): void {
+    if (in_array($hook, ['novamira_page_novamira-abilities', 'novamira_page_novamira-sandbox'], strict: true)) {
+        wp_enqueue_style(
+            'novamira-admin-list',
+            (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/admin-list.css',
+            [],
+            NOVAMIRA_VERSION,
+        );
+    }
+
     if ($hook === 'novamira_page_novamira-abilities') {
         wp_enqueue_style(
             'novamira-hub-admin',
             (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/hub.css',
-            [],
+            ['novamira-admin-list'],
             NOVAMIRA_VERSION,
         );
         wp_enqueue_script(
@@ -581,7 +590,7 @@ add_action('admin_enqueue_scripts', static function (string $hook): void {
         wp_enqueue_style(
             'novamira-sandbox-admin',
             (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/sandbox.css',
-            [],
+            ['novamira-admin-list'],
             NOVAMIRA_VERSION,
         );
     }

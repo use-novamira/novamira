@@ -91,17 +91,26 @@ function enqueue_assets(string $hook): void
     if ($hook !== 'novamira_page_' . PAGE_SLUG) {
         return;
     }
+    $admin_list_path = dirname(__DIR__) . '/assets/admin-list.css';
+    $skills_admin_path = __DIR__ . '/assets/admin.css';
+    $debug_assets = defined('WP_DEBUG') && constant('WP_DEBUG') === true;
+    $admin_list_version = $debug_assets && is_file($admin_list_path)
+        ? (string) filemtime($admin_list_path)
+        : NOVAMIRA_VERSION;
+    $skills_admin_version = $debug_assets && is_file($skills_admin_path)
+        ? (string) filemtime($skills_admin_path)
+        : NOVAMIRA_VERSION;
     wp_enqueue_style(
         'novamira-admin-list',
         (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/admin-list.css',
         [],
-        NOVAMIRA_VERSION,
+        $admin_list_version,
     );
     wp_enqueue_style(
         'novamira-skills-admin',
         (string) NOVAMIRA_PLUGIN_URL . 'includes/skills/assets/admin.css',
         ['novamira-admin-list'],
-        NOVAMIRA_VERSION,
+        $skills_admin_version,
     );
 
     // CodeMirror with markdown syntax highlighting on the body textarea.

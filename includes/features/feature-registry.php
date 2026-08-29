@@ -89,7 +89,18 @@ final class FeatureRegistry
 
     public function owner_of_ability(string $name, string $category = ''): ?string
     {
-        return $this->abilityOwners[$name] ?? $this->abilityCategoryOwners[$category] ?? null;
+        $explicitOwner = $this->abilityOwners[$name] ?? null;
+        if ($explicitOwner !== null) {
+            return $explicitOwner;
+        }
+
+        // Category ownership groups Novamira's dynamically registered abilities. Other plugins may legitimately
+        // use the same category, but their own namespaced abilities remain independently manageable.
+        if (!str_starts_with($name, 'novamira/')) {
+            return null;
+        }
+
+        return $this->abilityCategoryOwners[$category] ?? null;
     }
 
     /** @return list<string> */

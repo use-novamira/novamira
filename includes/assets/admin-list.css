@@ -1,0 +1,331 @@
+/* Shared compact-list pattern for Novamira admin screens. */
+.novamira-list-layout {
+    width: auto;
+    max-width: 1440px;
+}
+
+.novamira-list-inline-state {
+    flex: none;
+    color: #646970;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.novamira-list-inline-state.is-critical {
+    color: #b32d2e;
+}
+
+.novamira-list-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    min-height: 28px;
+}
+
+.novamira-list-actions form {
+    display: inline;
+    margin: 0;
+}
+
+.novamira-list-actions .action-btn {
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 4px;
+    outline: none;
+    background: transparent;
+    box-shadow: none;
+    color: #52525b;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.4;
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+}
+
+.novamira-list-actions .action-btn:hover,
+.novamira-list-actions .action-btn:focus {
+    background: #f4f4f5;
+    color: #1d2327;
+}
+
+.novamira-list-actions .action-btn:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 1px;
+}
+
+.novamira-list-actions .action-btn--danger {
+    color: #b32d2e;
+}
+
+.novamira-list-actions .action-btn--danger:hover,
+.novamira-list-actions .action-btn--danger:focus {
+    background: #fef2f2;
+    color: #b32d2e;
+}
+
+.novamira-list-progressive-actions {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 80ms linear;
+}
+
+.novamira-list-row:hover .novamira-list-progressive-actions,
+.novamira-list-row:focus-within .novamira-list-progressive-actions {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+@media (max-width: 782px) {
+    .novamira-list-progressive-actions {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+}
+
+.novamira-admin-list-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 6px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+    margin-bottom: 20px;
+}
+
+.novamira-admin-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e4e4e7;
+}
+
+.novamira-admin-list-header h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1d2327;
+    letter-spacing: -0.01em;
+}
+
+.novamira-admin-list-header h2 .count {
+    color: #71717a;
+    font-weight: 400;
+    font-size: 13px;
+    margin-left: 8px;
+}
+
+.novamira-admin-list-list {
+    display: block;
+}
+
+.novamira-admin-list-row {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) minmax(160px, auto) auto;
+    align-items: center;
+    gap: 12px;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 4px 24px;
+    border-bottom: 1px solid #f4f4f5;
+    transition: background 0.1s;
+}
+
+.novamira-admin-list-row:last-child {
+    border-bottom: none;
+}
+
+.novamira-admin-list-row:hover {
+    background: #fafafa;
+}
+
+.novamira-admin-list-toggle {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+.novamira-admin-list-check {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1.5px solid #d4d4d8;
+    border-radius: 50%;
+    outline: none;
+    background: #fff;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.novamira-admin-list-check:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.novamira-admin-list-check:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.novamira-admin-list-check:hover {
+    border-color: #71717a;
+}
+
+.novamira-admin-list-row.is-on .novamira-admin-list-check {
+    background: #1d2327;
+    border-color: #1d2327;
+}
+
+.novamira-admin-list-row.is-on .novamira-admin-list-check::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 3px;
+    width: 6px;
+    height: 3px;
+    border-left: 1.5px solid #fff;
+    border-bottom: 1.5px solid #fff;
+    transform: rotate(-45deg);
+}
+
+.novamira-admin-list-main {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+}
+
+.novamira-admin-list-main:focus {
+    outline: none;
+}
+
+.novamira-admin-list-main:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: -2px;
+    border-radius: 4px;
+}
+
+.novamira-admin-list-main .slug {
+    flex: 0 0 auto;
+    color: #1d2327;
+    font-family: ui-monospace, "DM Mono", "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: color 0.12s;
+}
+
+.novamira-admin-list-main:hover .slug {
+    color: #2271b1;
+}
+
+.novamira-admin-list-main .desc {
+    min-width: 0;
+    overflow: hidden;
+    color: #71717a;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.novamira-admin-list-main .desc::before {
+    content: "—";
+    margin-right: 6px;
+    color: #d4d4d8;
+}
+
+.novamira-admin-list-pills {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+}
+
+.novamira-admin-list-pills .pill {
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #f4f4f5;
+    color: #52525b;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+.novamira-admin-list-pills .pill.status.is-enabled {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.novamira-admin-list-pills .pill.status.is-disabled {
+    background: #e4e4e7;
+    color: #3f3f46;
+    font-weight: 600;
+}
+
+.novamira-admin-list-pills .pill.warn {
+    background: #fef3c7;
+    color: #92400e;
+    cursor: help;
+}
+
+.novamira-admin-list-pills .pill.warn.is-critical {
+    background: #fee2e2;
+    color: #b32d2e;
+}
+
+.novamira-admin-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.novamira-admin-list-actions form {
+    display: inline;
+    margin: 0;
+}
+
+.novamira-admin-list-actions .action-btn {
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 4px;
+    outline: none;
+    background: transparent;
+    box-shadow: none;
+    color: #52525b;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.4;
+    text-decoration: none;
+    transition: background 0.12s, color 0.12s;
+}
+
+.novamira-admin-list-actions .action-btn:focus {
+    outline: none;
+    background: #f4f4f5;
+    box-shadow: none;
+    color: #1d2327;
+}
+
+.novamira-admin-list-actions .action-btn:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 1px;
+}
+
+.novamira-admin-list-actions .action-btn:hover {
+    background: #f4f4f5;
+    color: #1d2327;
+}
+
+.novamira-admin-list-actions .action-btn--danger:hover,
+.novamira-admin-list-actions .action-btn--danger:focus {
+    background: #fee2e2;
+    color: #b91c1c;
+}

@@ -70,100 +70,37 @@
             });
     });
 
-    // "Select all" in a provider/category header toggles every row checkbox
-    // within that section. Kept separate from the <details> open/close: clicking
-    // the checkbox must not expand or collapse the section.
+    // The management link lives inside a <summary>; following it must not also
+    // expand or collapse that section.
     hub.addEventListener('click', function (event) {
-        if (event.target instanceof HTMLElement && event.target.closest('.novamira-hub-select-all')) {
+        if (!(event.target instanceof HTMLElement)) {
+            return;
+        }
+        if (event.target.closest('.novamira-hub-group-actions')) {
             event.stopPropagation();
         }
     });
-
-    hub.addEventListener('change', function (event) {
-        var input = event.target;
-        if (!(input instanceof HTMLInputElement)) {
-            return;
-        }
-
-        // A header "select all" sets every row checkbox in its section...
-        if (input.classList.contains('novamira-hub-select-all-input')) {
-            var section = input.closest('.novamira-hub-section, .novamira-hub-subsection');
-            if (section) {
-                section.querySelectorAll('.novamira-hub-row input[type="checkbox"]').forEach(function (box) {
-                    box.checked = input.checked;
-                });
-            }
-            syncSelectAllStates();
-            return;
-        }
-
-        // ...and a single row checkbox feeds back into its headers.
-        if (input.closest('.novamira-hub-row')) {
-            syncSelectAllStates();
-        }
-    });
-
-    // Reflect each section's selection in its header checkbox: checked when all
-    // rows are selected, indeterminate when only some, unchecked when none.
-    function syncSelectAllStates() {
-        hub.querySelectorAll('.novamira-hub-select-all-input').forEach(function (selectAll) {
-            var section = selectAll.closest('.novamira-hub-section, .novamira-hub-subsection');
-            if (!section) {
-                return;
-            }
-            var boxes = section.querySelectorAll('.novamira-hub-row input[type="checkbox"]');
-            var checked = 0;
-            boxes.forEach(function (box) {
-                if (box.checked) {
-                    checked++;
-                }
-            });
-            selectAll.checked = checked > 0 && checked === boxes.length;
-            selectAll.indeterminate = checked > 0 && checked < boxes.length;
-        });
-    }
-
-    // One confirmation before a bulk *disable*, however many rows are selected
-    // (one group or all of them) — the bulk form submits once, so this is a
-    // single prompt, never one per row. Enabling needs no confirmation.
-    var bulkForm = document.getElementById('novamira-abilities-bulk');
-    if (bulkForm) {
-        bulkForm.addEventListener('submit', function (event) {
-            if (selectedBulkAction() !== 'disable') {
-                return;
-            }
-            var count = hub.querySelectorAll('.novamira-hub-row input[type="checkbox"]:checked').length;
-            if (count === 0) {
-                return;
-            }
-            var template = hub.getAttribute('data-confirm-disable') || 'Disable the %d selected abilities?';
-            if (!window.confirm(template.replace('%d', String(count)))) {
-                event.preventDefault();
-            }
-        });
-    }
-
-    // Mirror the server's choice between the top and bottom bulk selectors.
-    function selectedBulkAction() {
-        var top = document.getElementById('novamira-bulk-action-selector-top');
-        var bottom = document.getElementById('novamira-bulk-action-selector-bottom');
-        var topValue = top ? top.value : '-1';
-        if (topValue !== '-1' && topValue !== '') {
-            return topValue;
-        }
-        return bottom ? bottom.value : '-1';
-    }
 
     function applyToggle(row, button, data) {
         var disabled = data.disabled === true;
         row.classList.toggle('is-off', disabled);
         row.classList.toggle('is-on', !disabled);
 
-        var pill = row.querySelector('.pill.status');
-        if (pill && typeof data.status === 'string') {
-            pill.classList.toggle('is-disabled', disabled);
-            pill.classList.toggle('is-enabled', !disabled);
-            pill.textContent = data.status;
+        var state = row.querySelector('.novamira-list-inline-state');
+        if (disabled && typeof data.status === 'string') {
+            if (!state) {
+                var slug = row.querySelector('.novamira-hub-main .slug');
+                if (slug) {
+                    state = document.createElement('span');
+                    state.className = 'novamira-list-inline-state';
+                    slug.insertAdjacentElement('afterend', state);
+                }
+            }
+            if (state) {
+                state.textContent = '— ' + data.status;
+            }
+        } else if (state) {
+            state.remove();
         }
         if (typeof data.button === 'string') {
             button.textContent = data.button;

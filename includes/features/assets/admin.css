@@ -1,37 +1,96 @@
 .novamira-features .novamira-admin-list-section {
-    max-width: 1100px;
     margin-top: 24px;
 }
 
 .novamira-features .novamira-admin-list-row {
-    grid-template-columns: 28px minmax(0, 1fr) minmax(160px, auto);
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     min-height: 52px;
     height: auto;
+    padding-block: 12px;
 }
 
-.novamira-features .novamira-admin-list-main .slug {
+.novamira-feature-main {
+    min-width: 0;
+}
+
+.novamira-feature-main > summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 28px;
+    min-width: 0;
+    cursor: pointer;
+    list-style: none;
+}
+
+.novamira-feature-main > summary::-webkit-details-marker {
+    display: none;
+}
+
+.novamira-feature-main > summary:focus {
+    outline: none;
+}
+
+.novamira-feature-main > summary:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 3px;
+    border-radius: 2px;
+}
+
+.novamira-feature-main .slug {
     font-family: inherit;
     font-size: 14px;
     font-weight: 600;
+    color: #1d2327;
 }
 
-.novamira-features .novamira-admin-list-pills {
-    flex-wrap: wrap;
+.novamira-feature-summary-copy {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
 }
 
-.novamira-features .novamira-admin-list-pills .pill.has-blocker {
-    background: #fef3c7;
+.novamira-feature-main > summary:hover .slug {
+    color: #2271b1;
+}
+
+.novamira-feature-details-action {
+    padding: 4px 10px;
+    border-radius: 4px;
+    color: #52525b;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.novamira-feature-main > summary:hover .novamira-feature-details-action,
+.novamira-feature-main > summary:focus .novamira-feature-details-action {
+    background: #f4f4f5;
+    color: #1d2327;
+}
+
+.novamira-feature-details {
+    max-width: 900px;
+    padding: 6px 18px 2px 0;
+    color: #646970;
+    font-size: 13px;
+}
+
+.novamira-feature-details p {
+    margin: 0 0 6px;
+}
+
+.novamira-feature-warning,
+.novamira-list-inline-state.is-warning {
     color: #92400e;
 }
 
 @media (max-width: 782px) {
     .novamira-features .novamira-admin-list-row {
-        grid-template-columns: 28px minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr) auto;
         padding: 10px 16px;
-    }
-
-    .novamira-features .novamira-admin-list-pills {
-        grid-column: 2;
-        justify-content: flex-start;
     }
 }

@@ -27,6 +27,8 @@ final class Definition
 
     public string $description;
 
+    public bool $experimental;
+
     public bool $toggleable;
 
     public bool $visible;
@@ -57,7 +59,7 @@ final class Definition
 
     /**
      * @param array{kind: 'feature'|'specialization', provider: string, label: string, description: string} $identity
-     * @param array{toggleable: bool, visible: bool, default_active: bool, boot: ?string, deactivate: ?string} $behavior
+     * @param array{experimental: bool, toggleable: bool, visible: bool, default_active: bool, boot: ?string, deactivate: ?string} $behavior
      * @param list<string> $dependencies
      * @param array{owned_skills: list<string>, shared_skills: list<string>, abilities: list<string>, ability_categories: list<string>} $assets
      */
@@ -68,6 +70,7 @@ final class Definition
         $this->provider = $identity['provider'];
         $this->label = $identity['label'];
         $this->description = $identity['description'];
+        $this->experimental = $behavior['experimental'];
         $this->toggleable = $behavior['toggleable'];
         $this->visible = $behavior['visible'];
         $this->defaultActive = $behavior['default_active'];

@@ -33,17 +33,26 @@ function enqueue_assets(string $hook): void
         return;
     }
 
+    $admin_list_path = dirname(__DIR__) . '/assets/admin-list.css';
+    $features_admin_path = __DIR__ . '/assets/admin.css';
+    $admin_list_version = is_file($admin_list_path)
+        ? NOVAMIRA_VERSION . '-' . (string) filemtime($admin_list_path)
+        : NOVAMIRA_VERSION;
+    $features_admin_version = is_file($features_admin_path)
+        ? NOVAMIRA_VERSION . '-' . (string) filemtime($features_admin_path)
+        : NOVAMIRA_VERSION;
+
     wp_enqueue_style(
         'novamira-admin-list',
         (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/admin-list.css',
         [],
-        NOVAMIRA_VERSION,
+        $admin_list_version,
     );
     wp_enqueue_style(
         'novamira-features-admin',
         (string) NOVAMIRA_PLUGIN_URL . 'includes/features/assets/admin.css',
         ['novamira-admin-list'],
-        NOVAMIRA_VERSION,
+        $features_admin_version,
     );
 }
 
@@ -129,7 +138,7 @@ function render_page(): void
 
     \novamira_render_admin_header();
     ?>
-    <div class="wrap novamira-features">
+    <div class="wrap novamira-features novamira-list-layout">
         <h1><?php esc_html_e('Features', domain: 'novamira'); ?></h1>
         <p class="description"><?php esc_html_e(
             'Enable or disable complete Novamira components. Skills and abilities owned by a feature follow its state automatically; stored content and preferences are preserved.',
@@ -200,127 +209,140 @@ function render_row(string $id, Features\Definition $feature, Features\Manager $
     $inactive_dependencies = $manager->inactive_dependencies($id);
     $impact = $active ? $manager->preview_deactivation($id) : $manager->preview_activation($id);
     $off_reason = $active ? null : specialization_off_reason($feature, $manager, $inactive_dependencies);
-    $skills = $feature->skills;
-    $abilities = feature_ability_names($id, $manager);
+    $disabled_label = $active ? null : __('— Disabled', domain: 'novamira');
+    $dependency_warning = feature_dependency_warning($feature, $manager, $inactive_dependencies, $off_reason);
     $changed_features = array_values(array_filter(
         $impact->features,
         static fn(string $featureId): bool => $manager->is_active($featureId) !== $impact->active,
     ));
-    $affected_abilities = feature_ability_names_for($changed_features, $manager);
     $affected_features = count(array_filter(
         $changed_features,
         static fn(string $featureId): bool => $featureId !== $id,
     ));
-    $confirm = feature_confirmation(
-        $active ? 'disable' : 'enable',
-        $feature->label,
-        $affected_features,
-        count($impact->skills),
-        count($affected_abilities),
-    );
+    $confirm = feature_confirmation($active ? 'disable' : 'enable', $feature->label, $affected_features);
     ?>
-    <article id="<?php echo esc_attr(sanitize_html_class($id)); ?>" class="novamira-admin-list-row<?php echo
-        $active ? ' is-on' : ''
-    ; ?>">
-        <form
-            method="post"
-            class="novamira-admin-list-toggle"
-            title="<?php echo
-                $active ? esc_attr__('Disable', domain: 'novamira') : esc_attr__('Enable', domain: 'novamira')
-            ; ?>"
-            <?php if ($impact->applied): ?>onsubmit="return confirm('<?php echo esc_js($confirm); ?>');"<?php endif; ?>
-        >
-            <?php wp_nonce_field('novamira_set_feature'); ?>
-            <input type="hidden" name="novamira_feature_action" value="set" />
-            <input type="hidden" name="feature_id" value="<?php echo esc_attr($id); ?>" />
-            <input type="hidden" name="active" value="<?php echo $active ? '0' : '1'; ?>" />
-            <button type="submit" class="novamira-admin-list-check" <?php disabled(!$impact->applied); ?> aria-label="<?php echo
-                $active
-                    ? esc_attr__('Click to disable', domain: 'novamira')
-                    : esc_attr__('Click to enable', domain: 'novamira')
-            ; ?>"></button>
-        </form>
-        <div class="novamira-admin-list-main">
-            <span class="slug"><?php echo esc_html($feature->label); ?></span>
-            <span class="desc"><?php echo esc_html($feature->description); ?></span>
-        </div>
-        <div class="novamira-admin-list-pills">
-            <?php if ($skills !== []): ?>
-                <span class="pill"><?php printf(
-                    esc_html(_n(single: '%d skill', plural: '%d skills', number: count($skills), domain: 'novamira')),
-                    count($skills),
-                ); ?></span>
-            <?php endif; ?>
-            <?php if ($abilities !== []): ?>
-                <span class="pill"><?php printf(
-                    esc_html(_n(
-                        single: '%d ability',
-                        plural: '%d abilities',
-                        number: count($abilities),
-                        domain: 'novamira',
-                    )),
-                    count($abilities),
-                ); ?></span>
-            <?php endif; ?>
-            <?php if ($inactive_dependencies !== [] && $feature->kind !== 'specialization'): ?>
-                <span class="pill has-blocker" title="<?php echo
-                    esc_attr(implode(', ', array_map(
-                        static fn(string $dependency): string => (
-                            $manager->definition($dependency)->label ?? $dependency
-                        ),
-                        $inactive_dependencies,
-                    )))
-                ; ?>"><?php esc_html_e('Inactive dependency', domain: 'novamira'); ?></span>
-            <?php endif; ?>
-            <?php if ($off_reason !== null): ?>
-                <span class="pill has-blocker" title="<?php echo esc_attr($off_reason['title']); ?>"><?php echo
-                    esc_html($off_reason['label'])
-                ; ?></span>
-            <?php endif; ?>
+    <article id="<?php echo
+        esc_attr(sanitize_html_class($id))
+    ; ?>" class="novamira-admin-list-row novamira-list-row<?php echo $active ? ' is-on' : ' is-off'; ?>">
+        <?php render_feature_main($feature, $disabled_label, $dependency_warning); ?>
+        <div class="novamira-admin-list-actions novamira-list-actions novamira-list-progressive-actions">
+            <form
+                method="post"
+                <?php if ($impact->applied): ?>onsubmit="return confirm('<?php echo
+                    esc_js($confirm)
+                ; ?>');"<?php endif; ?>
+            >
+                <?php wp_nonce_field('novamira_set_feature'); ?>
+                <input type="hidden" name="novamira_feature_action" value="set" />
+                <input type="hidden" name="feature_id" value="<?php echo esc_attr($id); ?>" />
+                <input type="hidden" name="active" value="<?php echo $active ? '0' : '1'; ?>" />
+                <button type="submit" class="action-btn" <?php disabled(!$impact->applied); ?>><?php echo
+                    $active ? esc_html__('Disable', domain: 'novamira') : esc_html__('Enable', domain: 'novamira')
+                ; ?></button>
+            </form>
         </div>
     </article>
     <?php
 }
 
+/**
+ * @param array{label: string, details: string}|null $dependencyWarning
+ */
+function render_feature_main(Features\Definition $feature, ?string $disabledLabel, ?array $dependencyWarning): void
+{ ?>
+    <details class="novamira-feature-main">
+        <summary>
+            <span class="novamira-feature-summary-copy">
+                <span class="slug"><?php echo esc_html($feature->label); ?></span>
+                <?php render_feature_maturity($feature); ?>
+                <?php render_feature_state($disabledLabel, $dependencyWarning); ?>
+            </span>
+            <span class="novamira-feature-details-action novamira-list-progressive-actions">
+                <?php esc_html_e('Details', domain: 'novamira'); ?>
+            </span>
+        </summary>
+        <div class="novamira-feature-details">
+            <p><?php echo esc_html($feature->description); ?></p>
+            <?php render_feature_warning($dependencyWarning); ?>
+        </div>
+    </details>
+    <?php }
+
+/** @param array{label: string, details: string}|null $dependencyWarning */
+function render_feature_state(?string $disabledLabel, ?array $dependencyWarning): void
+{
+    if ($disabledLabel !== null) { ?>
+        <span class="novamira-list-inline-state"><?php echo esc_html($disabledLabel); ?></span>
+        <?php }
+    if ($dependencyWarning !== null) { ?>
+        <span class="novamira-list-inline-state is-warning">— <?php echo
+            esc_html($dependencyWarning['label'])
+        ; ?></span>
+        <?php }
+}
+
+function render_feature_maturity(Features\Definition $feature): void
+{
+    if ($feature->experimental) { ?>
+        <span class="novamira-list-inline-state">— <?php esc_html_e('Experimental', domain: 'novamira'); ?></span>
+        <?php }
+}
+
+/** @param array{label: string, details: string}|null $dependencyWarning */
+function render_feature_warning(?array $dependencyWarning): void
+{
+    if ($dependencyWarning === null) {
+        return;
+    }
+    ?>
+    <p class="novamira-feature-warning"><?php echo esc_html($dependencyWarning['details']); ?></p>
+    <?php
+}
+
+/**
+ * @param list<string> $inactiveDependencies
+ * @param array{label: string, title: string}|null $offReason
+ * @return array{label: string, details: string}|null
+ */
+function feature_dependency_warning(
+    Features\Definition $feature,
+    Features\Manager $manager,
+    array $inactiveDependencies,
+    ?array $offReason,
+): ?array {
+    if ($inactiveDependencies === []) {
+        return null;
+    }
+    if ($feature->kind === 'specialization') {
+        return $offReason === null ? null : ['label' => $offReason['label'], 'details' => $offReason['title']];
+    }
+    $labels = array_map(
+        static fn(string $dependency): string => $manager->definition($dependency)->label ?? $dependency,
+        $inactiveDependencies,
+    );
+
+    return [
+        'label' => __('Inactive dependency', domain: 'novamira'),
+        'details' => sprintf(
+            /* translators: %s: comma-separated feature labels */
+            __('Requires: %s.', domain: 'novamira'),
+            implode(', ', $labels),
+        ),
+    ];
+}
+
 /** @param 'enable'|'disable' $action */
-function feature_confirmation(
-    string $action,
-    string $label,
-    int $affectedFeatures,
-    int $affectedSkills,
-    int $affectedAbilities,
-): string {
-    $skills = sprintf(
-        _n(single: '%d skill', plural: '%d skills', number: $affectedSkills, domain: 'novamira'),
-        $affectedSkills,
-    );
-    $abilities = sprintf(
-        _n(single: '%d ability', plural: '%d abilities', number: $affectedAbilities, domain: 'novamira'),
-        $affectedAbilities,
-    );
+function feature_confirmation(string $action, string $label, int $affectedFeatures): string
+{
     if ($action === 'disable' && $affectedFeatures === 0) {
         return sprintf(
-            /* translators: 1: feature label, 2: skill count label, 3: ability count label */
-            __(
-                'Disable %1$s? This will remove %2$s and %3$s from AI agents. Settings and stored data will be preserved.',
-                domain: 'novamira',
-            ),
+            /* translators: %s: feature label */
+            __('Disable %s? Settings and stored data will be preserved.', domain: 'novamira'),
             $label,
-            $skills,
-            $abilities,
         );
     }
     if ($action === 'enable' && $affectedFeatures === 0) {
-        return sprintf(
-            /* translators: 1: feature label, 2: skill count label, 3: ability count label */
-            __(
-                'Enable %1$s? This will expose %2$s and %3$s to AI agents when AI Abilities are on.',
-                domain: 'novamira',
-            ),
-            $label,
-            $skills,
-            $abilities,
-        );
+        return sprintf(/* translators: %s: feature label */ __('Enable %s?', domain: 'novamira'), $label);
     }
 
     $relatedFeatures = $action === 'disable'
@@ -345,89 +367,20 @@ function feature_confirmation(
 
     return $action === 'disable'
         ? sprintf(
-            /* translators: 1: feature label, 2: dependent feature count label, 3: skill count label, 4: ability count label */
+            /* translators: 1: feature label, 2: dependent feature count label */
             __(
-                'Disable %1$s? This will also deactivate %2$s and remove %3$s and %4$s from AI agents. Settings and stored data will be preserved.',
+                'Disable %1$s? This will also deactivate %2$s. Settings and stored data will be preserved.',
                 domain: 'novamira',
             ),
             $label,
             $relatedFeatures,
-            $skills,
-            $abilities,
         )
         : sprintf(
-            /* translators: 1: feature label, 2: required feature count label, 3: skill count label, 4: ability count label */
-            __(
-                'Enable %1$s? This will also activate %2$s and expose %3$s and %4$s to AI agents when AI Abilities are on.',
-                domain: 'novamira',
-            ),
+            /* translators: 1: feature label, 2: required feature count label */
+            __('Enable %1$s? This will also activate %2$s.', domain: 'novamira'),
             $label,
             $relatedFeatures,
-            $skills,
-            $abilities,
         );
-}
-
-/** @return list<string> */
-function feature_ability_names(string $featureId, Features\Manager $manager): array
-{
-    return feature_ability_catalog($manager)[$featureId] ?? [];
-}
-
-/**
- * @param list<string> $featureIds
- * @return list<string>
- */
-function feature_ability_names_for(array $featureIds, Features\Manager $manager): array
-{
-    $catalog = feature_ability_catalog($manager);
-    $result = [];
-    foreach ($featureIds as $featureId) {
-        foreach ($catalog[$featureId] ?? [] as $ability) {
-            $result[$ability] = true;
-        }
-    }
-
-    return array_keys($result);
-}
-
-/**
- * Build the page's ability inventory once. Explicit ability ownership remains
- * available even when a feature does not boot; category ownership adds dynamic
- * Pro and third-party abilities without duplicating their names in a manifest.
- *
- * @return array<string, list<string>>
- */
-function feature_ability_catalog(Features\Manager $manager): array
-{
-    /** @var array<int, array<string, list<string>>> $cache */
-    static $cache = [];
-    $managerId = spl_object_id($manager);
-    if (array_key_exists($managerId, $cache)) {
-        return $cache[$managerId];
-    }
-
-    $indexed = [];
-    foreach ($manager->definitions() as $featureId => $feature) {
-        $indexed[$featureId] = array_fill_keys(keys: $feature->abilities, value: true);
-    }
-    if (function_exists('wp_get_abilities')) {
-        foreach (wp_get_abilities() as $ability) {
-            $feature = $manager->feature_for_ability($ability->get_name(), $ability->get_category());
-            if ($feature === null) {
-                continue;
-            }
-            $indexed[$feature->id][$ability->get_name()] = true;
-        }
-    }
-
-    $catalog = [];
-    foreach ($indexed as $featureId => $abilities) {
-        $catalog[$featureId] = array_keys($abilities);
-    }
-    $cache[$managerId] = $catalog;
-
-    return $catalog;
 }
 
 /**

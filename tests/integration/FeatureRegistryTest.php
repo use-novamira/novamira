@@ -23,9 +23,6 @@ final class FeatureRegistryTest extends TestCase
             ];
             $preview = $features->preview_deactivation('novamira-pro/elementor');
             $disabled = $features->deactivate('novamira-pro/elementor');
-            $featureRules = ['novamira-pro/elementor-build' => ['disabled' => false]];
-            $categoryRules = ['novamira/elementor-runtime' => ['disabled' => false]];
-            $standaloneRules = ['third-party/custom' => ['disabled' => false]];
             $afterDisable = [
                 'parent' => $features->is_active('novamira-pro/elementor'),
                 'child' => $features->is_active('novamira-pro/elementor-addon'),
@@ -60,6 +57,10 @@ final class FeatureRegistryTest extends TestCase
                     'adapter_ability' => $features->feature_for_ability('novamira-mcp-adapter/execute-ability')->id,
                     'design_prompt' => $features->feature_for_ability('novamira/skill-prompt-novamira-design')->id,
                     'category_ability' => $features->feature_for_ability('novamira/elementor-runtime', 'elementor')->id,
+                    'external_category_ability' => $features->feature_for_ability(
+                        'woocommerce/order-add-note',
+                        'woocommerce',
+                    )?->id,
                     'standalone' => $features->feature_for_ability('third-party/custom')?->id,
                 ],
                 'infrastructure' => [
@@ -68,30 +69,19 @@ final class FeatureRegistryTest extends TestCase
                     'active' => $features->is_active('novamira/infrastructure'),
                     'disable_applied' => $infrastructureTransition->applied,
                 ],
+                'experimental' => [
+                    'visual' => $features->definition('novamira/visual')->experimental,
+                    'elementor' => $features->definition('novamira-pro/elementor')->experimental,
+                ],
                 'queue_owner' => $features->feature_for_ability('novamira/gutenberg-add-pending-change')->id,
                 'ability_management' => [
                     'feature_owned' => novamira_ability_can_be_managed_individually('novamira-pro/elementor-build'),
                     'category_owned' => novamira_ability_can_be_managed_individually('novamira/elementor-runtime'),
                     'standalone' => novamira_ability_can_be_managed_individually('third-party/custom'),
-                    'feature_rule' => novamira_apply_ability_hub_bulk_action_to_rules(
-                        $featureRules,
-                        'novamira-pro/elementor-build',
-                        'disable',
-                    ),
-                    'category_rule' => novamira_apply_ability_hub_bulk_action_to_rules(
-                        $categoryRules,
-                        'novamira/elementor-runtime',
-                        'disable',
-                    ),
-                    'standalone_rule' => novamira_apply_ability_hub_bulk_action_to_rules(
-                        $standaloneRules,
-                        'third-party/custom',
-                        'disable',
-                    ),
                 ],
                 'confirmations' => [
-                    'singular' => \Novamira\Features\Admin\feature_confirmation('disable', 'Chat', 0, 1, 1),
-                    'cascade' => \Novamira\Features\Admin\feature_confirmation('enable', 'Elementor Addon', 1, 2, 7),
+                    'singular' => \Novamira\Features\Admin\feature_confirmation('disable', 'Chat', 0),
+                    'cascade' => \Novamira\Features\Admin\feature_confirmation('enable', 'Elementor Addon', 1),
                 ],
                 'errors' => $features->errors(),
                 'filter_calls' => $GLOBALS['feature_filter_calls'],
@@ -118,6 +108,7 @@ final class FeatureRegistryTest extends TestCase
             'adapter_ability' => 'novamira/infrastructure',
             'design_prompt' => 'novamira/design',
             'category_ability' => 'novamira-pro/elementor',
+            'external_category_ability' => null,
             'standalone' => null,
         ], $result['owners']);
         self::assertSame([
@@ -126,21 +117,19 @@ final class FeatureRegistryTest extends TestCase
             'active' => true,
             'disable_applied' => false,
         ], $result['infrastructure']);
+        self::assertSame(['visual' => true, 'elementor' => false], $result['experimental']);
         self::assertSame('novamira/block-editor-queue', $result['queue_owner']);
         self::assertSame([
             'feature_owned' => false,
             'category_owned' => false,
             'standalone' => true,
-            'feature_rule' => ['novamira-pro/elementor-build' => ['disabled' => false]],
-            'category_rule' => ['novamira/elementor-runtime' => ['disabled' => false]],
-            'standalone_rule' => ['third-party/custom' => ['disabled' => true]],
         ], $result['ability_management']);
         self::assertSame(
-            'Disable Chat? This will remove 1 skill and 1 ability from AI agents. Settings and stored data will be preserved.',
+            'Disable Chat? Settings and stored data will be preserved.',
             $result['confirmations']['singular'],
         );
         self::assertSame(
-            'Enable Elementor Addon? This will also activate 1 required feature and expose 2 skills and 7 abilities to AI agents when AI Abilities are on.',
+            'Enable Elementor Addon? This will also activate 1 required feature.',
             $result['confirmations']['cascade'],
         );
         self::assertSame([], $result['errors']);
@@ -161,6 +150,120 @@ final class FeatureRegistryTest extends TestCase
 
         self::assertSame(['elementor', 'addon'], $result['booted']);
         self::assertSame(['addon', 'elementor'], $result['deactivated']);
+    }
+
+    public function testAbilityHubReactivatesLegacyRuleAndExplainsSpecializationOwnership(): void
+    {
+        $result = $this->runRegistryScript(<<<'PHP'
+            $legacyRules = [
+                'novamira-pro/elementor-build' => ['disabled' => true],
+                'novamira/elementor-runtime' => ['disabled' => true],
+                'third-party/custom' => ['disabled' => true],
+            ];
+            $row = novamira_build_registered_ability_row(
+                new WP_Ability('novamira-pro/elementor-build'),
+                $legacyRules,
+            );
+            novamira_apply_ability_policy_rule(
+                new WP_Ability('novamira/elementor-runtime', 'elementor'),
+                $legacyRules,
+            );
+            novamira_apply_ability_policy_rule(new WP_Ability('third-party/custom'), $legacyRules);
+            $infrastructureRow = novamira_build_registered_ability_row(
+                new WP_Ability('novamira/agent-context'),
+                $legacyRules,
+            );
+            $standaloneRow = novamira_build_registered_ability_row(
+                new WP_Ability('third-party/custom'),
+                $legacyRules,
+            );
+            $enabledStandaloneRow = novamira_build_registered_ability_row(
+                new WP_Ability('third-party/custom'),
+                [],
+            );
+            $officialWooCommerceRow = novamira_build_registered_ability_row(
+                new WP_Ability('woocommerce/order-add-note', 'woocommerce'),
+                $legacyRules,
+            );
+            ob_start();
+            novamira_render_ability_hub_row($row);
+            $html = (string) ob_get_clean();
+            ob_start();
+            novamira_render_ability_rows([$infrastructureRow, $standaloneRow]);
+            $mixedHtml = (string) ob_get_clean();
+            ob_start();
+            novamira_render_ability_group_action('Code Execution', [$infrastructureRow, $standaloneRow], 'category');
+            $categoryActionHtml = (string) ob_get_clean();
+            ob_start();
+            novamira_render_ability_group_action(
+                'Admin Access',
+                [$infrastructureRow, $enabledStandaloneRow],
+                'category',
+            );
+            $disableCategoryActionHtml = (string) ob_get_clean();
+            ob_start();
+            novamira_render_ability_managed_owner_meta([$row]);
+            novamira_render_ability_group_action('Advanced Custom Fields', [$row], 'category');
+            $managedCategoryHtml = (string) ob_get_clean();
+            ob_start();
+            novamira_render_ability_group_action('third-party', [$standaloneRow], 'provider');
+            $providerActionHtml = (string) ob_get_clean();
+            echo json_encode([
+                'status' => $row['status'],
+                'individually_manageable' => $row['individually_manageable'],
+                'manager_kind' => $row['manager_kind'],
+                'official_woocommerce' => [
+                    'individually_manageable' => $officialWooCommerceRow['individually_manageable'],
+                    'managed_by_feature' => $officialWooCommerceRow['managed_by_feature'],
+                    'manager_label' => $officialWooCommerceRow['manager_label'],
+                ],
+                'unregistered' => $GLOBALS['unregistered'],
+                'html' => $html,
+                'mixed_html' => $mixedHtml,
+                'category_action_html' => $categoryActionHtml,
+                'disable_category_action_html' => $disableCategoryActionHtml,
+                'managed_category_html' => $managedCategoryHtml,
+                'provider_action_html' => $providerActionHtml,
+                'group_action_labels' => [
+                    novamira_ability_group_action_label('disable', 'category'),
+                    novamira_ability_group_action_label('enable', 'configurable'),
+                    novamira_ability_group_action_label('disable', 'provider'),
+                ],
+            ]);
+            PHP);
+
+        self::assertSame('Enabled', $result['status']);
+        self::assertFalse($result['individually_manageable']);
+        self::assertSame('specialization', $result['manager_kind']);
+        self::assertSame([
+            'individually_manageable' => true,
+            'managed_by_feature' => false,
+            'manager_label' => '',
+        ], $result['official_woocommerce']);
+        self::assertSame(['third-party/custom'], $result['unregistered']);
+        self::assertStringNotContainsString('Managed together', $result['html']);
+        self::assertStringNotContainsString('title="This ability', $result['html']);
+        self::assertStringContainsString('cannot be selected individually', $result['managed_category_html']);
+        self::assertStringNotContainsString('Managed by Elementor', $result['html']);
+        self::assertStringNotContainsString('Manage in Features', $result['html']);
+        self::assertStringNotContainsString('type="checkbox"', $result['html']);
+        self::assertStringContainsString('agent-context', $result['mixed_html']);
+        self::assertStringContainsString('Required by Novamira', $result['mixed_html']);
+        self::assertStringNotContainsString('type="checkbox"', $result['mixed_html']);
+        self::assertStringContainsString('Enable configurable abilities', $result['category_action_html']);
+        self::assertStringContainsString('Disable 1 ability in Admin Access?', $result['disable_category_action_html']);
+        self::assertStringNotContainsString('configurable ability in', $result['disable_category_action_html']);
+        self::assertStringContainsString('name="ability_names[]"', $result['category_action_html']);
+        self::assertStringNotContainsString('novamira/agent-context', $result['category_action_html']);
+        self::assertStringContainsString('Managed by Novamira Pro', $result['managed_category_html']);
+        self::assertStringContainsString('Manage in Features', $result['managed_category_html']);
+        self::assertStringContainsString('data-tooltip=', $result['managed_category_html']);
+        self::assertStringNotContainsString('Disable category', $result['managed_category_html']);
+        self::assertStringContainsString('Enable all abilities', $result['provider_action_html']);
+        self::assertSame(
+            ['Disable category', 'Enable configurable abilities', 'Disable all abilities'],
+            $result['group_action_labels'],
+        );
     }
 
     public function testInvalidDefinitionCannotBeActivated(): void
@@ -245,6 +348,7 @@ final class FeatureRegistryTest extends TestCase
             $GLOBALS['feature_filter_calls'] = 0;
             $GLOBALS['booted'] = [];
             $GLOBALS['deactivated'] = [];
+            $GLOBALS['unregistered'] = [];
             $GLOBALS['update_calls'] = 0;
             $GLOBALS['include_invalid_feature'] = __INCLUDE_INVALID__;
             $GLOBALS['blog_id'] = 1;
@@ -252,12 +356,27 @@ final class FeatureRegistryTest extends TestCase
             class WP_Ability {
                 public function __construct(private string $name, private string $category = '') {}
                 public function get_name(): string { return $this->name; }
+                public function get_label(): string { return $this->name; }
+                public function get_description(): string { return ''; }
                 public function get_category(): string { return $this->category; }
+                public function get_meta(): array { return ['mcp' => ['public' => true]]; }
             }
 
             function __(string $text, string $domain = 'default'): string { return $text; }
             function _n(string $single, string $plural, int $number, string $domain = 'default'): string {
                 return $number === 1 ? $single : $plural;
+            }
+            function admin_url(string $path = ''): string { return 'https://example.test/wp-admin/' . $path; }
+            function add_query_arg(array $args, string $url): string { return $url . '?' . http_build_query($args); }
+            function sanitize_html_class(string $class): string { return str_replace('/', '-', $class); }
+            function esc_attr(string $text): string { return htmlspecialchars($text, ENT_QUOTES); }
+            function esc_html(string $text): string { return htmlspecialchars($text, ENT_QUOTES); }
+            function esc_js(string $text): string { return addslashes($text); }
+            function esc_html__(string $text, string $domain = 'default'): string { return esc_html($text); }
+            function esc_url(string $url): string { return $url; }
+            function esc_html_e(string $text, string $domain = 'default'): void { echo esc_html($text); }
+            function wp_nonce_field(string $action = '-1'): void {
+                echo '<input type="hidden" name="_wpnonce" value="test-nonce" />';
             }
             function do_action(string $hook, mixed ...$args): void {
                 if ($hook !== 'novamira_register_features') { return; }
@@ -308,6 +427,16 @@ final class FeatureRegistryTest extends TestCase
                     'skills' => ['shared-workflow' => 'shared'],
                     'abilities' => [],
                 ];
+                $value['novamira-pro/woocommerce'] = [
+                    'kind' => 'specialization',
+                    'provider' => 'Novamira Pro',
+                    'label' => 'WooCommerce',
+                    'default_active' => true,
+                    'depends_on' => [],
+                    'skills' => [],
+                    'abilities' => [],
+                    'ability_categories' => ['woocommerce'],
+                ];
                 if ($GLOBALS['include_invalid_feature']) {
                     $value['novamira-pro/invalid'] = [
                         'kind' => 'specialization',
@@ -348,6 +477,11 @@ final class FeatureRegistryTest extends TestCase
                     'third-party/custom' => new WP_Ability($name),
                     default => null,
                 };
+            }
+            function wp_get_ability_category(string $slug): ?object { return null; }
+            function wp_unregister_ability(string $name): bool {
+                $GLOBALS['unregistered'][] = $name;
+                return true;
             }
             require $argv[1] . '/includes/features/api.php';
             \Novamira\Features\initialize_features();

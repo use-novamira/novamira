@@ -83,6 +83,7 @@ function core_manifest(): array
                 'The live browser workspace and its editor integrations for watching and guiding an AI agent.',
                 domain: 'novamira',
             ),
+            'experimental' => true,
             'default_active' => true,
             'depends_on' => [],
             'skills' => [],

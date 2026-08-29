@@ -201,10 +201,6 @@
 .novamira-skills-search {
     width: 240px;
     height: 30px;
-    /* Right-align with the end of the pills column. The row's actions
-       column is ~102px wide + 12px gap, but it's invisible until hover, so
-       the bare header would float ~114px past the pills. */
-    margin-right: 114px;
     padding: 0 10px;
     border: 1px solid #d4d4d8;
     border-radius: 6px;
@@ -261,9 +257,24 @@
     animation: novamira-skills-import-flash 3s ease-out;
 }
 
-/* External-source sections (e.g. Novamira Pro): read-only, no toggle,
-   with a subtle grey wash to differentiate them from the user's
-   own skills above. */
+.novamira-skills .novamira-admin-list-row {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.novamira-skills .novamira-admin-list-row.is-user-skill .novamira-admin-list-main {
+    grid-column: auto;
+}
+
+.novamira-skills .novamira-admin-list-row:last-child {
+    border-radius: 0 0 6px 6px;
+}
+
+.novamira-skills [data-novamira-skills-list] .novamira-admin-list-row:not(.is-on) .slug {
+    color: #a1a1aa;
+}
+
+/* External-source sections are managed by Novamira features and
+   specializations rather than by individual skill controls. */
 .novamira-admin-list-section--external .novamira-admin-list-list {
     background: #fafafa;
 }
@@ -273,17 +284,15 @@
 }
 
 .novamira-admin-list-row.is-external:hover {
-    background: #f4f4f5;
+    background: #fafafa;
 }
 
-.novamira-admin-list-source-icon {
-    color: #a1a1aa;
-    font-size: 14px;
-    text-align: center;
+.novamira-admin-list-row:has(.novamira-admin-list-main[open]) {
+    align-items: start;
 }
 
 .novamira-admin-list-main--external {
-    pointer-events: none;
+    display: block;
     text-decoration: none;
 }
 
@@ -291,21 +300,48 @@
     color: #52525b;
 }
 
-.novamira-admin-list-main--external .desc {
-    color: #a1a1aa;
+.novamira-admin-list-summary {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    overflow: hidden;
+    min-width: 0;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
 }
 
-.novamira-admin-list-readonly-note {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 3px;
-    background: #f4f4f5;
+.novamira-admin-list-summary::-webkit-details-marker {
+    display: none;
+}
+
+.novamira-admin-list-summary:hover .slug {
+    color: #2271b1;
+}
+
+.novamira-admin-list-summary:focus-visible {
+    border-radius: 4px;
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.novamira-admin-list-detail {
+    padding: 4px 0 8px;
+}
+
+.novamira-admin-list-detail p {
+    max-width: 70ch;
+    margin: 0;
     color: #71717a;
-    font-size: 11px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.novamira-admin-list-action-note {
+    padding: 4px 10px;
+    color: #71717a;
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 .novamira-admin-list-source-blurb {
@@ -333,24 +369,62 @@
     100% { background: transparent; }
 }
 
-.novamira-admin-list-main .desc-badge {
+.novamira-admin-list-warning {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    padding: 2px 8px;
-    margin-left: 4px;
+    justify-content: center;
+    width: 24px;
+    height: 20px;
     border-radius: 3px;
+    background: #fef3c7;
+    color: #92400e;
     font-size: 11px;
     font-weight: 500;
     line-height: 1.4;
+    cursor: help;
 }
 
-.novamira-admin-list-main .desc-badge.is-missing {
+.novamira-admin-list-warning.is-critical {
     background: #fee2e2;
     color: #b32d2e;
 }
 
-/* Trash subsection — visually subdued. Actions stay visible (no
-   hover-reveal) so users can act on trashed items quickly. */
+.novamira-admin-list-warning:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.novamira-admin-list-warning::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    z-index: 100;
+    top: calc(100% + 4px);
+    left: 0;
+    width: max-content;
+    max-width: min(440px, calc(100vw - 96px));
+    padding: 6px 9px;
+    border-radius: 4px;
+    background: #1d2327;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    white-space: normal;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.novamira-admin-list-warning:hover::after,
+.novamira-admin-list-warning:focus-visible::after,
+.novamira-admin-list-main:focus-visible .novamira-admin-list-warning::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Trash subsection — visually subdued. */
 .novamira-admin-list-section--trash {
     background: #fafafa;
     border-color: #e4e4e7;
@@ -379,18 +453,8 @@
     text-decoration-color: #d4d4d8;
 }
 
-.novamira-admin-list-trash-icon {
-    color: #a1a1aa;
-    font-size: 16px;
-    text-align: center;
-}
-
 .novamira-admin-list-main--trash {
-    pointer-events: none;
-}
-
-.novamira-admin-list-actions--trash {
-    opacity: 1;
+    cursor: default;
 }
 
 .novamira-skills-badge {
@@ -400,16 +464,6 @@
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.2px;
-}
-
-.novamira-skills-badge--agentic {
-    background: #e7f3ff;
-    color: #1e5b94;
-}
-
-.novamira-skills-badge--prompt {
-    background: #f3e8ff;
-    color: #6b1f9c;
 }
 
 .novamira-skills-badge--status-enabled {

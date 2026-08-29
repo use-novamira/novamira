@@ -71,6 +71,7 @@ final class ManifestCompiler
                 'description' => $this->string($raw['description'] ?? ''),
             ],
             [
+                'experimental' => ($raw['experimental'] ?? false) === true,
                 'toggleable' => $this->flag($raw, 'toggleable'),
                 'visible' => $this->flag($raw, 'visible'),
                 'default_active' => $this->flag($raw, 'default_active'),
