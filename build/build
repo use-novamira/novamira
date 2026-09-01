@@ -46,13 +46,22 @@ fi
 
 # Install production dependencies directly into the isolated build. This keeps
 # the zip independent of the existing ignored vendor tree and leaves the
-# development installation untouched.
-COMPOSER_VENDOR_DIR="$BUILD_DIR/vendor" composer install --no-dev --optimize-autoloader --no-interaction
+# development installation untouched. The manifest is copied in and Composer is
+# pointed at the build as its root package rather than redirecting the vendor
+# directory with COMPOSER_VENDOR_DIR: that variable also reaches Composer's
+# global instance, which then reads the build's jetpack-autoloader as a globally
+# installed plugin and refuses to run because no global config allows it. The
+# copied manifest is removed again below, before the zip is created.
+# Scripts are skipped on install because the scoping below supersedes the
+# post-install run, and bin/ is not part of the build.
+cp composer.json composer.lock "$BUILD_DIR/"
+composer install --working-dir="$BUILD_DIR" --no-dev --optimize-autoloader --no-interaction --no-scripts
 php "$BASEDIR/bin/scope-mcp-adapter.php" "$BUILD_DIR/vendor" --delete-originals
 # The scoped copy replaces the original packages, so the autoloader has to be
 # regenerated: the manifests Composer wrote during install still map every class
 # of those packages to sources this build no longer ships.
-COMPOSER_VENDOR_DIR="$BUILD_DIR/vendor" composer dump-autoload --no-dev --optimize --no-interaction
+composer dump-autoload --working-dir="$BUILD_DIR" --no-dev --optimize --no-interaction
+rm "$BUILD_DIR/composer.json" "$BUILD_DIR/composer.lock"
 rm -rf "$BUILD_DIR/vendor/php-stubs"
 # Every bin directory, not just vendor/bin: packages ship their own CLI scripts
 # (defuse/php-encryption/bin, ...) and none of them are used at runtime.

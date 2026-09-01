@@ -1,5 +1,6 @@
-Unreleased
-* Fix: ChatGPT can now complete sign-in on hosting setups where a newly opened approval link was incorrectly reported as invalid or expired.
+v1.12.1 - 2026/09/01
+* Fix: Browser sign-in now completes on hosting with an external object cache, where a freshly opened approval link could be reported as invalid or expired before it was ever used. The short-lived approval state is now kept in the database, so AI clients that could not get past the approval screen, such as ChatGPT, connect again.
+* Tweak: The Troubleshoot page now confirms that every OAuth table is installed instead of checking only the first one, so a partial installation is reported rather than appearing healthy.
 
 v1.12.0 - 2026/08/29
 * New: A Features page lets administrators turn complete Novamira components on or off (Pro specializations will arrive with the future Novamira Pro 1.9.0 release). Abilities previously turned off individually are turned back on when their component is active.
