@@ -106,6 +106,7 @@ function novamira_uninstall_oauth_tables(): array
 
     return [
         $wpdb->prefix . 'novamira_oauth_clients',
+        $wpdb->prefix . 'novamira_oauth_pending_authorizations',
         $wpdb->prefix . 'novamira_oauth_auth_codes',
         $wpdb->prefix . 'novamira_oauth_access_tokens',
         $wpdb->prefix . 'novamira_oauth_device_codes',

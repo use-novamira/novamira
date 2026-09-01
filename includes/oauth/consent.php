@@ -9,9 +9,9 @@ namespace Novamira\OAuth\Consent;
 
 use League\OAuth2\Server\Exception\OAuthServerException;
 use Novamira\OAuth\Bridge;
-use Novamira\OAuth\Endpoints\Authorize;
 use Novamira\OAuth\Keys\KeyBootstrapError;
 use Novamira\OAuth\Repositories\ClientRepository;
+use Novamira\OAuth\Repositories\PendingAuthorizationRepository;
 use Novamira\OAuth\Repositories\UserEntity;
 use Novamira\OAuth\ServerFactory;
 
@@ -96,23 +96,28 @@ function resolve_pending(): ?array
         return null;
     }
 
-    // @mago-expect analysis:mixed-assignment
-    $pending = get_transient(Authorize\PENDING_PREFIX . $token);
-    if ($pending === false || !is_array($pending)) {
+    $pending_authorizations = new PendingAuthorizationRepository();
+    $pending = $pending_authorizations->find($token);
+    if ($pending === null) {
+        wp_die('Invalid or expired consent token.', title: '', args: ['response' => 400]);
+        return null;
+    }
+    if ($pending_authorizations->is_expired($pending['expires_at'])) {
+        $pending_authorizations->delete($token);
         wp_die('Invalid or expired consent token.', title: '', args: ['response' => 400]);
         return null;
     }
 
-    $stored_user_id = (int) ($pending['user_id'] ?? 0);
+    $stored_user_id = $pending['user_id'];
     if ($stored_user_id !== get_current_user_id()) {
         wp_die('Session mismatch.', title: '', args: ['response' => 403]);
         return null;
     }
 
-    $client_id = (string) ($pending['client_id'] ?? '');
+    $client_id = $pending['client_id'];
     $client = (new ClientRepository())->getClientEntity($client_id);
     if ($client === null) {
-        delete_transient(Authorize\PENDING_PREFIX . $token);
+        $pending_authorizations->delete($token);
         wp_die('The application is no longer registered.', title: '', args: ['response' => 400]);
         return null;
     }
@@ -120,10 +125,10 @@ function resolve_pending(): ?array
     return [
         'token' => $token,
         'pending' => $pending,
-        'redirect_uri' => (string) ($pending['redirect_uri'] ?? ''),
-        'state' => (string) ($pending['state'] ?? ''),
+        'redirect_uri' => $pending['redirect_uri'],
+        'state' => $pending['state'],
         'client_name' => $client->getName(),
-        'scope' => (string) ($pending['scope'] ?? 'mcp'),
+        'scope' => $pending['scope'],
     ];
 }
 
@@ -132,8 +137,13 @@ function render_post(string $token, array $pending, string $redirect_uri, string
 {
     check_admin_referer('novamira_oauth_consent_' . $token);
 
+    $pending_authorizations = new PendingAuthorizationRepository();
+    if (!$pending_authorizations->consume($token)) {
+        wp_die('Invalid or expired consent token.', title: '', args: ['response' => 400]);
+        return;
+    }
+
     if (array_key_exists('deny', $_POST)) {
-        delete_transient(Authorize\PENDING_PREFIX . $token);
         wp_redirect(add_query_arg(['error' => 'access_denied', 'state' => $state], $redirect_uri));
         exit();
     }
@@ -162,13 +172,11 @@ function render_post(string $token, array $pending, string $redirect_uri, string
         $authRequest->setUser($userEntity);
         $authRequest->setAuthorizationApproved(true);
 
-        delete_transient(Authorize\PENDING_PREFIX . $token);
         $psr7Response = $server->completeAuthorizationRequest($authRequest, Bridge\new_psr7_response());
 
         wp_redirect($psr7Response->getHeaderLine('Location'));
         exit();
     } catch (OAuthServerException $e) {
-        delete_transient(Authorize\PENDING_PREFIX . $token);
         wp_redirect(add_query_arg([
             'error' => $e->getErrorType(),
             'error_description' => $e->getMessage(),
@@ -179,7 +187,6 @@ function render_post(string $token, array $pending, string $redirect_uri, string
         // The generic message below would hide the one failure an operator can act on: this site
         // has no OAuth signing key and its PHP cannot make one. The reason (OpenSSL error strings
         // and configuration paths, never key material) goes to the PHP error log.
-        delete_transient(Authorize\PENDING_PREFIX . $token);
         error_log('Novamira OAuth: ' . $e->getMessage());
         wp_die(
             esc_html__(
@@ -190,7 +197,6 @@ function render_post(string $token, array $pending, string $redirect_uri, string
             args: ['response' => 500],
         );
     } catch (\Throwable $e) {
-        delete_transient(Authorize\PENDING_PREFIX . $token);
         wp_die('An error occurred during authorization. Please try again.', title: '', args: ['response' => 500]);
     }
 }

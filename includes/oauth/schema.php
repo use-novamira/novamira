@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 
 const SCHEMA_VERSION_OPTION = 'novamira_oauth_schema_version';
 
-const CURRENT_SCHEMA_VERSION = '3';
+const CURRENT_SCHEMA_VERSION = '4';
 
 function maybe_install(): void
 {
@@ -41,6 +41,23 @@ function maybe_install(): void
         grant_types VARCHAR(191) NOT NULL DEFAULT '',
         PRIMARY KEY (id),
         UNIQUE KEY client_id (client_id)
+    ) {$c};");
+
+    // Short-lived browser consent state is kept in the database rather than a transient. External
+    // object caches can route consecutive requests to different cache nodes, making a freshly
+    // written transient appear to have expired on the very next wp-admin request.
+    dbDelta("CREATE TABLE {$p}pending_authorizations (
+        token_hash CHAR(64) NOT NULL,
+        client_id VARCHAR(64) NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        code_challenge VARCHAR(128) NOT NULL,
+        code_challenge_method VARCHAR(16) NOT NULL,
+        scope TEXT NOT NULL,
+        state TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        PRIMARY KEY (token_hash),
+        KEY expires_at (expires_at)
     ) {$c};");
 
     dbDelta("CREATE TABLE {$p}auth_codes (
@@ -93,7 +110,29 @@ function maybe_install(): void
         KEY expires_at (expires_at)
     ) {$c};");
 
+    // dbDelta reports failures rather than throwing. Do not mark a partial migration complete:
+    // leaving the old version in place makes the installer retry on the next eligible request.
+    foreach (required_tables($p) as $table) {
+        $sql = $wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table));
+        if (!is_string($sql) || $wpdb->get_var($sql) !== $table) {
+            return;
+        }
+    }
+
     update_option(SCHEMA_VERSION_OPTION, CURRENT_SCHEMA_VERSION, autoload: false);
+}
+
+/** @return list<string> */
+function required_tables(string $prefix): array
+{
+    return array_map(static fn(string $suffix): string => $prefix . $suffix, [
+        'clients',
+        'pending_authorizations',
+        'auth_codes',
+        'access_tokens',
+        'device_codes',
+        'refresh_tokens',
+    ]);
 }
 
 function gc(): void
@@ -109,6 +148,15 @@ function gc(): void
         $sql = $wpdb->prepare("DELETE FROM `{$table}` WHERE expires_at < %s", $cutoff);
         // @mago-expect analysis:possibly-invalid-argument
         $wpdb->query($sql);
+    }
+
+    // Pending browser grants contain no useful audit history and are invalid as soon as they
+    // expire, so remove them immediately rather than retaining them with issued credentials.
+    $pending_table = $p . 'pending_authorizations';
+    // @mago-expect analysis:possibly-invalid-argument
+    $pending_sql = $wpdb->prepare("DELETE FROM `{$pending_table}` WHERE expires_at < %s", gmdate('Y-m-d H:i:s'));
+    if (is_string($pending_sql)) {
+        $wpdb->query($pending_sql);
     }
 
     // Device codes are the one table an unauthenticated request can write to, so they are not kept

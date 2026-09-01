@@ -15,6 +15,10 @@ final class UninstallDataTest extends TestCase
 
         self::assertContains('DROP TABLE IF EXISTS `wp_novamira_chat_sessions`', $result['queries']);
         self::assertContains('DROP TABLE IF EXISTS `wp_novamira_oauth_clients`', $result['queries']);
+        self::assertContains(
+            'DROP TABLE IF EXISTS `wp_novamira_oauth_pending_authorizations`',
+            $result['queries'],
+        );
         self::assertSame([], $result['deleted_posts']);
     }
 

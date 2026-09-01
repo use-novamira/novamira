@@ -118,6 +118,7 @@ function boot(): void
     Endpoints\LegacyFallback\register();
 
     require_once __DIR__ . '/repositories/client-repository.php';
+    require_once __DIR__ . '/repositories/PendingAuthorizationRepository.php';
     require_once __DIR__ . '/repositories/access-token-repository.php';
     require_once __DIR__ . '/repositories/auth-code-repository.php';
     require_once __DIR__ . '/repositories/refresh-token-repository.php';

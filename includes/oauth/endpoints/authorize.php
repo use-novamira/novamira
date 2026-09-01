@@ -9,12 +9,11 @@ namespace Novamira\OAuth\Endpoints\Authorize;
 
 use League\OAuth2\Server\RedirectUriValidators\RedirectUriValidator;
 use Novamira\OAuth\Repositories\ClientRepository;
+use Novamira\OAuth\Repositories\PendingAuthorizationRepository;
 
 if (!defined('ABSPATH')) {
     exit();
 }
-
-const PENDING_PREFIX = 'novamira_oauth_pending_';
 
 const PAGE_SLUG = 'novamira-oauth-authorize';
 
@@ -148,23 +147,43 @@ function handle(): void
         return;
     }
 
-    $token = bin2hex(random_bytes(16));
-    set_transient(
-        PENDING_PREFIX . $token,
-        [
-            'client_id' => $client_id,
-            'redirect_uri' => $redirect_uri,
-            'code_challenge' => $code_challenge,
-            'code_challenge_method' => $code_challenge_method,
-            'scope' => $scope,
-            'state' => $state,
-            'user_id' => get_current_user_id(),
-        ],
-        expiration: 600,
-    );
+    $token = create_pending_authorization([
+        'client_id' => $client_id,
+        'redirect_uri' => $redirect_uri,
+        'code_challenge' => $code_challenge,
+        'code_challenge_method' => $code_challenge_method,
+        'scope' => $scope,
+        'state' => $state,
+        'user_id' => get_current_user_id(),
+    ]);
+    if ($token === null) {
+        wp_die(
+            esc_html__('Novamira could not persist the authorization request. Please try again.', domain: 'novamira'),
+            title: '',
+            args: ['response' => 500],
+        );
+        return;
+    }
 
     wp_safe_redirect(admin_url('admin.php?page=novamira-oauth-consent&token=' . rawurlencode($token)));
     exit();
+}
+
+/**
+ * @param array{
+ *     client_id: string,
+ *     redirect_uri: string,
+ *     code_challenge: string,
+ *     code_challenge_method: string,
+ *     scope: string,
+ *     state: string,
+ *     user_id: int,
+ * } $pending
+ */
+function create_pending_authorization(array $pending): ?string
+{
+    $token = bin2hex(random_bytes(16));
+    return (new PendingAuthorizationRepository())->create($token, $pending) ? $token : null;
 }
 
 /**

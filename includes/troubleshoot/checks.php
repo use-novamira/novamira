@@ -322,10 +322,24 @@ function check_schema(): array
     // @mago-expect lint:no-global
     global $wpdb;
     /** @var \wpdb $wpdb */
-    $table = $wpdb->prefix . 'novamira_oauth_clients';
-    // @mago-expect analysis:possibly-invalid-argument
-    $found = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table));
-    if (is_string($found) && $found === $table) {
+    $prefix = $wpdb->prefix . 'novamira_oauth_';
+    $tables = array_map(static fn(string $suffix): string => $prefix . $suffix, [
+        'clients',
+        'pending_authorizations',
+        'auth_codes',
+        'access_tokens',
+        'device_codes',
+        'refresh_tokens',
+    ]);
+    $all_installed = true;
+    foreach ($tables as $table) {
+        $sql = $wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table));
+        if (!is_string($sql) || $wpdb->get_var($sql) !== $table) {
+            $all_installed = false;
+            break;
+        }
+    }
+    if ($all_installed) {
         return ok('schema', $label, __('The OAuth tables are installed.', domain: 'novamira'));
     }
     $blocked_reason = schema_blocked_reason();

@@ -1,3 +1,6 @@
+Unreleased
+* Fix: ChatGPT can now complete sign-in on hosting setups where a newly opened approval link was incorrectly reported as invalid or expired.
+
 v1.12.0 - 2026/08/29
 * New: A Features page lets administrators turn complete Novamira components on or off (Pro specializations will arrive with the future Novamira Pro 1.9.0 release). Abilities previously turned off individually are turned back on when their component is active.
 * Tweak: Features, skills, abilities, and sandbox files now share a quieter interface with clearer hierarchy and consistent disabled states. Incomplete user skills now state what is missing and how to complete them.
