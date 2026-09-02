@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 /**
  * Internal compatibility contract shared by metadata, startup gates, and agent context.
  */
-define(constant_name: 'NOVAMIRA_VERSION', value: '1.12.1');
+define(constant_name: 'NOVAMIRA_VERSION', value: '1.12.2');
 define(constant_name: 'NOVAMIRA_REST_API_VERSION', value: 1);
 define(constant_name: 'NOVAMIRA_MINIMUM_WORDPRESS_VERSION', value: '6.9');
 
