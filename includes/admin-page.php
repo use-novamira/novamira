@@ -74,7 +74,7 @@ function novamira_build_registered_ability_row(WP_Ability $ability, array $rules
     $feature_definition = $features->feature_for_ability($name, $ability->get_category());
     $feature_id = $feature_definition->id ?? null;
     $manager_kind = $feature_definition->kind ?? '';
-    $manager_label = $feature_definition->label ?? '';
+    $manager_label = $feature_definition?->label() ?? '';
     $individually_manageable = $feature_definition === null;
     $managed_by_feature = $feature_definition !== null && $feature_definition->toggleable;
     $infrastructure = $feature_definition !== null && !$feature_definition->toggleable;
@@ -133,7 +133,7 @@ function novamira_append_feature_ability_rows(array $groups, array $seen): array
                 'managed_by_feature' => $managed,
                 'infrastructure' => !$managed,
                 'manager_kind' => $feature->kind,
-                'manager_label' => $feature->label,
+                'manager_label' => $feature->label(),
                 'manage_url' => $managed ? \Novamira\Features\Admin\url($feature->id) : '',
             ];
         }

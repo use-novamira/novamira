@@ -33,7 +33,7 @@ final class ActivationValidator
                 $blockers[] = sprintf(
                     /* translators: %s: feature label */
                     __('%s has an invalid feature definition.', domain: 'novamira'),
-                    $definition->label,
+                    $definition->label(),
                 );
                 continue;
             }

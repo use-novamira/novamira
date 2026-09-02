@@ -338,6 +338,43 @@ final class FeatureRegistryTest extends TestCase
         self::assertFalse($result['active_after_second']);
     }
 
+    public function testFeatureLabelsAreTranslatedAfterInitAndLegacyPropertiesRemainReadable(): void
+    {
+        $result = $this->runRegistryScript(<<<'PHP'
+            $features = \Novamira\Features\features();
+            $visual = $features->definition('novamira/visual');
+            $labelBeforeInit = $visual->label();
+            $legacyLabelBeforeInit = $visual->label;
+            $translationsBeforeInit = $GLOBALS['translation_calls'];
+            $GLOBALS['init_calls'] = 1;
+            $label = $visual->label;
+            $description = $visual->description;
+            $visual->label();
+            echo json_encode([
+                'translations_during_boot' => $GLOBALS['translations_during_boot'],
+                'translations_before_init' => $translationsBeforeInit,
+                'label_before_init' => $labelBeforeInit,
+                'legacy_label_before_init' => $legacyLabelBeforeInit,
+                'label' => $label,
+                'description' => $description,
+                'translations_after_init' => $GLOBALS['translation_calls'],
+                'plain_string_label' => $features->definition('novamira-pro/elementor')->label,
+            ]);
+            PHP);
+
+        self::assertSame(0, $result['translations_during_boot']);
+        self::assertSame(0, $result['translations_before_init']);
+        self::assertSame('Novamira Visual', $result['label_before_init']);
+        self::assertSame('Novamira Visual', $result['legacy_label_before_init']);
+        self::assertSame('Novamira Visual', $result['label']);
+        self::assertSame(
+            'The live browser workspace and its editor integrations for watching and guiding an AI agent.',
+            $result['description'],
+        );
+        self::assertSame(2, $result['translations_after_init']);
+        self::assertSame('Elementor', $result['plain_string_label']);
+    }
+
     /** @return array<string, mixed> */
     private function runRegistryScript(string $body, bool $includeInvalid = false): array
     {
@@ -350,6 +387,9 @@ final class FeatureRegistryTest extends TestCase
             $GLOBALS['deactivated'] = [];
             $GLOBALS['unregistered'] = [];
             $GLOBALS['update_calls'] = 0;
+            $GLOBALS['translation_calls'] = 0;
+            $GLOBALS['translations_before_init'] = 0;
+            $GLOBALS['init_calls'] = 0;
             $GLOBALS['include_invalid_feature'] = __INCLUDE_INVALID__;
             $GLOBALS['blog_id'] = 1;
 
@@ -362,7 +402,11 @@ final class FeatureRegistryTest extends TestCase
                 public function get_meta(): array { return ['mcp' => ['public' => true]]; }
             }
 
-            function __(string $text, string $domain = 'default'): string { return $text; }
+            function __(string $text, string $domain = 'default'): string {
+                $GLOBALS['translation_calls']++;
+                return $text;
+            }
+            function did_action(string $hook): int { return $hook === 'init' ? $GLOBALS['init_calls'] : 0; }
             function _n(string $single, string $plural, int $number, string $domain = 'default'): string {
                 return $number === 1 ? $single : $plural;
             }
@@ -485,6 +529,8 @@ final class FeatureRegistryTest extends TestCase
             }
             require $argv[1] . '/includes/features/api.php';
             \Novamira\Features\initialize_features();
+            $GLOBALS['translations_during_boot'] = $GLOBALS['translation_calls'];
+            $GLOBALS['translations_before_init'] = $GLOBALS['translation_calls'];
             require $argv[1] . '/includes/features/admin.php';
             require $argv[1] . '/includes/helpers.php';
             require $argv[1] . '/includes/admin-page.php';

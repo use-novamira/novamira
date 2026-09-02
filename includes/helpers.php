@@ -968,7 +968,7 @@ function novamira_enrich_disabled_ability_error(mixed $result, mixed $args): mix
                 domain: 'novamira',
             ),
             $name,
-            $feature->label,
+            $feature->label(),
         );
         return $result;
     }

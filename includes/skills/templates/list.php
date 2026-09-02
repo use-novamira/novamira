@@ -389,7 +389,7 @@ $new_url = add_query_arg(['page' => Admin\PAGE_SLUG, 'skill' => 'new'], admin_ur
                     $feature_managed && count($specialization_managers) === count($toggleable_managers);
                 $only_features = $feature_managed && $specialization_managers === [];
                 $manager_label = implode(', ', array_map(
-                    static fn(\Novamira\Features\Definition $feature): string => $feature->label,
+                    static fn(\Novamira\Features\Definition $feature): string => $feature->label(),
                     $toggleable_managers,
                 ));
                 $manager_count = count($toggleable_managers);

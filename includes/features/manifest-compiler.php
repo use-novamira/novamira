@@ -66,9 +66,9 @@ final class ManifestCompiler
             $id,
             [
                 'kind' => ($raw['kind'] ?? null) === 'specialization' ? 'specialization' : 'feature',
-                'provider' => $this->string($raw['provider'] ?? 'Novamira'),
-                'label' => $this->string($raw['label'] ?? $id),
-                'description' => $this->string($raw['description'] ?? ''),
+                'provider' => self::string($raw['provider'] ?? 'Novamira'),
+                'label' => $this->text($raw['label'] ?? $id),
+                'description' => $this->text($raw['description'] ?? ''),
             ],
             [
                 'experimental' => ($raw['experimental'] ?? false) === true,
@@ -98,7 +98,7 @@ final class ManifestCompiler
         $shared = [];
         /** @var mixed $relationship */
         foreach ($value as $key => $relationship) {
-            $slug = is_string($key) ? $this->string($key) : $this->string($relationship);
+            $slug = is_string($key) ? self::string($key) : self::string($relationship);
             if ($slug === '') {
                 continue;
             }
@@ -118,9 +118,34 @@ final class ManifestCompiler
         return ($definition[$key] ?? true) !== false;
     }
 
-    private function string(mixed $value): string
+    private static function string(mixed $value): string
     {
         return is_scalar($value) ? trim((string) $value) : '';
+    }
+
+    /**
+     * Keeps core display strings deferred so that `__()` runs after `init`, rather than while the
+     * manifest compiles on `plugins_loaded`. See Definition::label().
+     *
+     * @return string|array{source: string, translate: \Closure(): string}
+     */
+    private function text(mixed $value)
+    {
+        if (
+            !is_array($value)
+            || !is_string($value['source'] ?? null)
+            || !($value['translate'] ?? null) instanceof \Closure
+        ) {
+            return self::string($value);
+        }
+
+        /** @var \Closure(): string $translate */
+        $translate = $value['translate'];
+
+        return [
+            'source' => self::string($value['source']),
+            'translate' => static fn(): string => self::string($translate()),
+        ];
     }
 
     /** @return list<string> */
@@ -132,7 +157,7 @@ final class ManifestCompiler
         $result = [];
         /** @var mixed $item */
         foreach ($value as $item) {
-            $string = $this->string($item);
+            $string = self::string($item);
             if ($string !== '') {
                 $result[$string] = true;
             }
@@ -143,7 +168,7 @@ final class ManifestCompiler
 
     private function callbackName(mixed $value): ?string
     {
-        $callback = $this->string($value);
+        $callback = self::string($value);
 
         return $callback !== '' ? $callback : null;
     }

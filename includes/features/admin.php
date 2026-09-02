@@ -122,7 +122,7 @@ function render_page(): void
         $groups[$kind][$id] = $definition;
     }
     uasort($groups['specialization'], static function (Features\Definition $a, Features\Definition $b): int {
-        $label_order = strcasecmp($a->label, $b->label);
+        $label_order = strcasecmp($a->label(), $b->label());
 
         return $label_order !== 0 ? $label_order : strcmp($a->id, $b->id);
     });
@@ -220,7 +220,7 @@ function render_row(string $id, Features\Definition $feature, Features\Manager $
         $changed_features,
         static fn(string $featureId): bool => $featureId !== $id,
     ));
-    $confirm = feature_confirmation($active ? 'disable' : 'enable', $feature->label, $affected_features);
+    $confirm = feature_confirmation($active ? 'disable' : 'enable', $feature->label(), $affected_features);
     ?>
     <article id="<?php echo
         esc_attr(sanitize_html_class($id))
@@ -254,7 +254,7 @@ function render_feature_main(Features\Definition $feature, ?string $disabledLabe
     <details class="novamira-feature-main">
         <summary>
             <span class="novamira-feature-summary-copy">
-                <span class="slug"><?php echo esc_html($feature->label); ?></span>
+                <span class="slug"><?php echo esc_html($feature->label()); ?></span>
                 <?php render_feature_maturity($feature); ?>
                 <?php render_feature_state($disabledLabel, $dependencyWarning); ?>
             </span>
@@ -263,7 +263,7 @@ function render_feature_main(Features\Definition $feature, ?string $disabledLabe
             </span>
         </summary>
         <div class="novamira-feature-details">
-            <p><?php echo esc_html($feature->description); ?></p>
+            <p><?php echo esc_html($feature->description()); ?></p>
             <?php render_feature_warning($dependencyWarning); ?>
         </div>
     </details>
@@ -321,7 +321,7 @@ function feature_dependency_warning(
         return $offReason === null ? null : ['label' => $offReason['label'], 'details' => $offReason['title']];
     }
     $labels = array_map(
-        static fn(string $dependency): string => $manager->definition($dependency)->label ?? $dependency,
+        static fn(string $dependency): string => $manager->definition($dependency)?->label() ?? $dependency,
         $inactiveDependencies,
     );
 
@@ -407,7 +407,7 @@ function specialization_off_reason(
     }
 
     $labels = array_map(
-        static fn(string $dependency): string => $manager->definition($dependency)->label ?? $dependency,
+        static fn(string $dependency): string => $manager->definition($dependency)?->label() ?? $dependency,
         $inactiveDependencies,
     );
     $label = count($labels) === 1
@@ -430,7 +430,7 @@ function specialization_off_reason(
             /* translators: %s: comma-separated specialization labels */
             __('Required specializations are unavailable: %s.', domain: 'novamira'),
             implode(', ', array_map(
-                static fn(string $dependency): string => $manager->definition($dependency)->label ?? $dependency,
+                static fn(string $dependency): string => $manager->definition($dependency)?->label() ?? $dependency,
                 $unavailable,
             )),
         )

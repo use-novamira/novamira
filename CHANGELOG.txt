@@ -1,3 +1,5 @@
+* Fix: Activating Novamira with WordPress debugging on no longer prints a "Translation loading for the `novamira` domain was triggered too early" notice, followed by "Cannot modify header information" warnings in wp-admin. Feature names and descriptions are now translated when they are displayed rather than while the plugin loads, and abilities still register as early as before.
+
 v1.12.1 - 2026/09/01
 * Fix: Browser sign-in now completes on hosting with an external object cache, where a freshly opened approval link could be reported as invalid or expired before it was ever used. The short-lived approval state is now kept in the database, so AI clients that could not get past the approval screen, such as ChatGPT, connect again.
 * Tweak: The Troubleshoot page now confirms that every OAuth table is installed instead of checking only the first one, so a partial installation is reported rather than appearing healthy.

@@ -240,7 +240,7 @@ function immutable_skill_error(string $slug, string $source_label): WP_Error
                 domain: 'novamira',
             ),
             $slug,
-            implode(', ', array_map(static fn(Features\Definition $feature): string => $feature->label, $toggleable)),
+            implode(', ', array_map(static fn(Features\Definition $feature): string => $feature->label(), $toggleable)),
         ));
     }
 

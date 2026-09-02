@@ -121,7 +121,7 @@ function execute_skill_get(array $input, ?\WP_Ability $previous): array|WP_Error
         $managers = $features->features_for_skill($agent_slug);
         if ($managers !== [] && !$features->is_skill_active($agent_slug)) {
             return feature_disabled_error($agent_slug, array_map(
-                static fn(Features\Definition $feature): string => $feature->label,
+                static fn(Features\Definition $feature): string => $feature->label(),
                 $managers,
             ));
         }

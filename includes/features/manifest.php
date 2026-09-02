@@ -11,6 +11,15 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
+/**
+ * @param \Closure(): string $translate
+ * @return array{source: string, translate: \Closure(): string}
+ */
+function deferred_text(string $source, \Closure $translate): array
+{
+    return ['source' => $source, 'translate' => $translate];
+}
+
 /** @return array<string, array<string, mixed>> */
 function core_manifest(): array
 {
@@ -18,11 +27,14 @@ function core_manifest(): array
         'novamira/infrastructure' => [
             'kind' => 'feature',
             'provider' => 'Novamira',
-            'label' => __('Novamira Infrastructure', domain: 'novamira'),
-            'description' => __(
+            'label' => deferred_text('Novamira Infrastructure', static fn(): string => __(
+                'Novamira Infrastructure',
+                domain: 'novamira',
+            )),
+            'description' => deferred_text('Infrastructure required for Novamira to expose and load skills safely.', static fn(): string => __(
                 'Infrastructure required for Novamira to expose and load skills safely.',
                 domain: 'novamira',
-            ),
+            )),
             'toggleable' => false,
             'visible' => false,
             'default_active' => true,
@@ -40,10 +52,16 @@ function core_manifest(): array
         'novamira/design' => [
             'kind' => 'feature',
             'provider' => 'Novamira',
-            'label' => __('Novamira Design', domain: 'novamira'),
-            'description' => __(
-                'One saved design system your AI follows on every page it builds, so the site stays consistent and looks deliberate rather than generic.',
+            'label' => deferred_text('Novamira Design', static fn(): string => __(
+                'Novamira Design',
                 domain: 'novamira',
+            )),
+            'description' => deferred_text(
+                'One saved design system your AI follows on every page it builds, so the site stays consistent and looks deliberate rather than generic.',
+                static fn(): string => __(
+                    'One saved design system your AI follows on every page it builds, so the site stays consistent and looks deliberate rather than generic.',
+                    domain: 'novamira',
+                ),
             ),
             'default_active' => true,
             'depends_on' => [],
@@ -64,10 +82,13 @@ function core_manifest(): array
         'novamira/chat' => [
             'kind' => 'feature',
             'provider' => 'Novamira',
-            'label' => __('Novamira Chat', domain: 'novamira'),
-            'description' => __(
+            'label' => deferred_text('Novamira Chat', static fn(): string => __('Novamira Chat', domain: 'novamira')),
+            'description' => deferred_text(
                 'An AI agent inside your WordPress dashboard: describe a change in plain language, review its plan, and approve it to apply the change.',
-                domain: 'novamira',
+                static fn(): string => __(
+                    'An AI agent inside your WordPress dashboard: describe a change in plain language, review its plan, and approve it to apply the change.',
+                    domain: 'novamira',
+                ),
             ),
             'default_active' => true,
             'depends_on' => [],
@@ -78,11 +99,14 @@ function core_manifest(): array
         'novamira/visual' => [
             'kind' => 'feature',
             'provider' => 'Novamira',
-            'label' => __('Novamira Visual', domain: 'novamira'),
-            'description' => __(
+            'label' => deferred_text('Novamira Visual', static fn(): string => __(
+                'Novamira Visual',
+                domain: 'novamira',
+            )),
+            'description' => deferred_text('The live browser workspace and its editor integrations for watching and guiding an AI agent.', static fn(): string => __(
                 'The live browser workspace and its editor integrations for watching and guiding an AI agent.',
                 domain: 'novamira',
-            ),
+            )),
             'experimental' => true,
             'default_active' => true,
             'depends_on' => [],
@@ -93,11 +117,14 @@ function core_manifest(): array
         'novamira/block-editor-queue' => [
             'kind' => 'feature',
             'provider' => 'Novamira',
-            'label' => __('Block Editor Queue', domain: 'novamira'),
-            'description' => __(
+            'label' => deferred_text('Block Editor Queue', static fn(): string => __(
+                'Block Editor Queue',
+                domain: 'novamira',
+            )),
+            'description' => deferred_text('The browser-backed Gutenberg authoring workflow, including queue storage, finalization, REST routes, and abilities.', static fn(): string => __(
                 'The browser-backed Gutenberg authoring workflow, including queue storage, finalization, REST routes, and abilities.',
                 domain: 'novamira',
-            ),
+            )),
             'default_active' => true,
             'depends_on' => [],
             'skills' => ['gutenberg-edit-content'],
