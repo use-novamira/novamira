@@ -224,7 +224,7 @@ function novamira_is_sandbox_internal_file_name(string $filename): bool
 }
 
 /**
- * Add web-server protection and migrate legacy plaintext .php.disabled files to sidecar markers.
+ * Restrict direct web access to static assets and migrate legacy plaintext .php.disabled files to sidecar markers.
  */
 function novamira_prepare_sandbox_directory(): void
 {
@@ -233,17 +233,52 @@ function novamira_prepare_sandbox_directory(): void
         return;
     }
 
-    $protection_files = [
+    $legacy_protection_files = [
         '.htaccess' => "# Novamira sandbox: generated code and operational files are private.\n<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n",
         'web.config' => "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n    <system.webServer>\n        <security>\n            <authorization>\n                <remove users=\"*\" roles=\"\" verbs=\"\" />\n                <add accessType=\"Deny\" users=\"*\" />\n            </authorization>\n        </security>\n    </system.webServer>\n</configuration>\n",
+    ];
+    $protection_files = [
+        '.htaccess' => <<<'HTACCESS'
+            # Novamira sandbox: only CSS, JavaScript and the empty directory index may be served directly.
+            <FilesMatch "(?i)(^(?!index[.]html$|.*[.](?:css|js)$).+$|[.](?:php[0-9]?|phtml|phar)(?:[.]|$))">
+                <IfModule mod_authz_core.c>
+                    Require all denied
+                </IfModule>
+                <IfModule !mod_authz_core.c>
+                    Order Allow,Deny
+                    Deny from all
+                </IfModule>
+            </FilesMatch>
+            HTACCESS . "\n",
+        'web.config' => <<<'WEB_CONFIG'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <configuration>
+                <system.webServer>
+                    <security>
+                        <requestFiltering>
+                            <fileExtensions allowUnlisted="false">
+                                <clear />
+                                <add fileExtension=".css" allowed="true" />
+                                <add fileExtension=".js" allowed="true" />
+                            </fileExtensions>
+                        </requestFiltering>
+                    </security>
+                </system.webServer>
+            </configuration>
+            WEB_CONFIG . "\n",
         'index.html' => '',
     ];
 
     foreach ($protection_files as $filename => $contents) {
         $path = $sandbox_dir . $filename;
-        if (!is_file($path)) {
-            file_put_contents($path, $contents, LOCK_EX);
+        if (is_file($path)) {
+            $legacy = $legacy_protection_files[$filename] ?? null;
+            if ($legacy === null || filesize($path) !== strlen($legacy) || file_get_contents($path) !== $legacy) {
+                continue;
+            }
         }
+
+        file_put_contents($path, $contents, LOCK_EX);
     }
 
     $legacy_files = glob($sandbox_dir . '*.php.disabled');

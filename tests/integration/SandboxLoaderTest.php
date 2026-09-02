@@ -30,7 +30,7 @@ final class SandboxLoaderTest extends TestCase
         rmdir($this->sandboxDirectory);
     }
 
-    public function testPreparingSandboxProtectsItAndMigratesLegacyDisabledSource(): void
+    public function testPreparingSandboxAllowsOnlyStaticAssetsAndMigratesLegacyDisabledSource(): void
     {
         $legacy = $this->sandboxDirectory . '/extension.php.disabled';
         file_put_contents($legacy, "<?php echo 'sandbox-loaded';");
@@ -39,12 +39,15 @@ final class SandboxLoaderTest extends TestCase
 
         self::assertSame(0, $exitCode);
         self::assertSame('runner-complete', $output);
-        self::assertFileExists($this->sandboxDirectory . '/.htaccess');
-        self::assertStringContainsString(
-            'Require all denied',
-            (string) file_get_contents($this->sandboxDirectory . '/.htaccess'),
-        );
-        self::assertFileExists($this->sandboxDirectory . '/web.config');
+        $htaccess = (string) file_get_contents($this->sandboxDirectory . '/.htaccess');
+        self::assertStringContainsString('(?:css|js)', $htaccess);
+        self::assertStringContainsString('(?:php[0-9]?|phtml|phar)', $htaccess);
+        self::assertStringContainsString('Require all denied', $htaccess);
+        $webConfig = (string) file_get_contents($this->sandboxDirectory . '/web.config');
+        self::assertStringContainsString('allowUnlisted="false"', $webConfig);
+        self::assertStringContainsString('<clear />', $webConfig);
+        self::assertStringContainsString('fileExtension=".css" allowed="true"', $webConfig);
+        self::assertStringContainsString('fileExtension=".js" allowed="true"', $webConfig);
         self::assertFileExists($this->sandboxDirectory . '/index.html');
         self::assertFileExists($this->sandboxDirectory . '/extension.php');
         self::assertFileExists($this->sandboxDirectory . '/.extension.php.disabled');
@@ -53,6 +56,79 @@ final class SandboxLoaderTest extends TestCase
         [$loaderOutput, $loaderExitCode] = $this->runLoader('request');
         self::assertSame(0, $loaderExitCode);
         self::assertSame('runner-complete', $loaderOutput);
+    }
+
+    public function testPreparingSandboxUpgradesOnlyNovamiraLegacyProtectionFiles(): void
+    {
+        $legacyHtaccess = "# Novamira sandbox: generated code and operational files are private.\n<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n";
+        $legacyWebConfig = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<configuration>\n    <system.webServer>\n        <security>\n            <authorization>\n                <remove users=\"*\" roles=\"\" verbs=\"\" />\n                <add accessType=\"Deny\" users=\"*\" />\n            </authorization>\n        </security>\n    </system.webServer>\n</configuration>\n";
+        file_put_contents($this->sandboxDirectory . '/.htaccess', $legacyHtaccess);
+        file_put_contents($this->sandboxDirectory . '/web.config', $legacyWebConfig);
+
+        [$output, $exitCode] = $this->runLoader('prepare');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+        self::assertStringContainsString(
+            '(?:css|js)',
+            (string) file_get_contents($this->sandboxDirectory . '/.htaccess'),
+        );
+        self::assertStringContainsString(
+            'fileExtension=".css" allowed="true"',
+            (string) file_get_contents($this->sandboxDirectory . '/web.config'),
+        );
+    }
+
+    public function testPreparingSandboxPreservesCustomProtectionFiles(): void
+    {
+        file_put_contents($this->sandboxDirectory . '/.htaccess', "# custom\n");
+        file_put_contents($this->sandboxDirectory . '/web.config', "<configuration><!-- custom --></configuration>\n");
+
+        [$output, $exitCode] = $this->runLoader('prepare');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+        self::assertSame("# custom\n", file_get_contents($this->sandboxDirectory . '/.htaccess'));
+        self::assertSame(
+            "<configuration><!-- custom --></configuration>\n",
+            file_get_contents($this->sandboxDirectory . '/web.config'),
+        );
+    }
+
+    public function testGeneratedApacheRuleAllowsOnlyStaticAssetsAndTheDirectoryIndex(): void
+    {
+        [$output, $exitCode] = $this->runLoader('prepare');
+
+        self::assertSame(0, $exitCode);
+        self::assertSame('runner-complete', $output);
+        $htaccess = (string) file_get_contents($this->sandboxDirectory . '/.htaccess');
+        self::assertSame(1, preg_match('/<FilesMatch "(.+)">/', $htaccess, $matches));
+        $rule = '#' . $matches[1] . '#';
+
+        foreach (['style.css', 'app.js', 'STYLE.CSS', 'index.html'] as $served) {
+            self::assertSame(0, preg_match($rule, $served), $served . ' should be served directly');
+        }
+
+        $denied = [
+            'extension.php',
+            'extension.php5',
+            'extension.phtml',
+            'archive.phar',
+            'evil.php.css',
+            'evil.PHP.css',
+            'evil.phtml.js',
+            'evil.phar.css',
+            'evil.php.html',
+            'notes.html',
+            '.crashed',
+            '.loading',
+            '.htaccess',
+            'web.config',
+            '.extension.php.disabled',
+        ];
+        foreach ($denied as $blocked) {
+            self::assertSame(1, preg_match($rule, $blocked), $blocked . ' should be blocked');
+        }
     }
 
     public function testActivationProbeDoesNotLoadSandboxFiles(): void

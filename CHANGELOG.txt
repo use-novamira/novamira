@@ -1,4 +1,5 @@
 * Fix: Activating Novamira with WordPress debugging on no longer prints a "Translation loading for the `novamira` domain was triggered too early" notice, followed by "Cannot modify header information" warnings in wp-admin. Feature names and descriptions are now translated when they are displayed rather than while the plugin loads, and abilities still register as early as before.
+* Fix: CSS and JavaScript files created in the sandbox can be loaded by site pages again. PHP and all other sandbox files remain blocked from direct web requests, and protection files installed by the previous release are upgraded automatically without replacing custom server rules.
 
 v1.12.1 - 2026/09/01
 * Fix: Browser sign-in now completes on hosting with an external object cache, where a freshly opened approval link could be reported as invalid or expired before it was ever used. The short-lived approval state is now kept in the database, so AI clients that could not get past the approval screen, such as ChatGPT, connect again.
