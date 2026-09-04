@@ -77,6 +77,7 @@ final class ManifestCompiler
                 'default_active' => $this->flag($raw, 'default_active'),
                 'boot' => $this->callbackName($raw['boot'] ?? null),
                 'deactivate' => $this->callbackName($raw['deactivate'] ?? null),
+                'legacy_options' => $this->stringList($raw['legacy_options'] ?? []),
             ],
             $this->stringList($raw['depends_on'] ?? []),
             [

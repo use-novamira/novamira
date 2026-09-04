@@ -49,6 +49,20 @@ function core_manifest(): array
                 'novamira-mcp-adapter/execute-ability',
             ],
         ],
+        'novamira/user-context' => [
+            'kind' => 'feature',
+            'provider' => 'Novamira',
+            'label' => deferred_text('User Context', static fn(): string => __('User Context', domain: 'novamira')),
+            'description' => deferred_text('Site-specific instructions added to the system context received by connected agents.', static fn(): string => __(
+                'Site-specific instructions added to the system context received by connected agents.',
+                domain: 'novamira',
+            )),
+            'default_active' => true,
+            'depends_on' => [],
+            'skills' => [],
+            'abilities' => [],
+            'legacy_options' => ['novamira_instructions_enabled', 'nvp_instructions_enabled'],
+        ],
         'novamira/design' => [
             'kind' => 'feature',
             'provider' => 'Novamira',

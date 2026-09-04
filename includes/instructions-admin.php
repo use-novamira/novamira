@@ -27,6 +27,8 @@ const LEGACY_PRO_INSTRUCTIONS_CONTENT_OPTION = 'nvp_instructions_content';
 
 const OPTION_MISSING = '__novamira_option_missing__';
 
+const USER_CONTEXT_FEATURE_ID = 'novamira/user-context';
+
 function context_page_slug(): string
 {
     return 'novamira-context';
@@ -75,12 +77,6 @@ function instructions_read_option_with_legacy(string $option_name, string $legac
     return $default;
 }
 
-function instructions_update_enabled_value(string $value): void
-{
-    update_option(instructions_enabled_option_name(), $value);
-    update_option(instructions_legacy_enabled_option_name(), $value);
-}
-
 function instructions_update_content(string $content): void
 {
     update_option(instructions_content_option_name(), $content);
@@ -97,14 +93,20 @@ function legacy_pro_context_loaded(): bool
 
 function instructions_is_enabled(): bool
 {
-    return filter_var(
-        instructions_read_option_with_legacy(
-            option_name: instructions_enabled_option_name(),
-            legacy_option_name: instructions_legacy_enabled_option_name(),
-            default: true,
-        ),
-        FILTER_VALIDATE_BOOLEAN,
-    );
+    try {
+        return \Novamira\Features\features()->is_active(USER_CONTEXT_FEATURE_ID);
+    } catch (\LogicException) {
+        // Before the Features runtime initializes, retain the historical
+        // value. Normal requests use only the central feature preference.
+        return filter_var(
+            instructions_read_option_with_legacy(
+                option_name: instructions_enabled_option_name(),
+                legacy_option_name: instructions_legacy_enabled_option_name(),
+                default: true,
+            ),
+            FILTER_VALIDATE_BOOLEAN,
+        );
+    }
 }
 
 function instructions_get_content(): string
@@ -184,7 +186,7 @@ function context_handle_post(): ?array
     }
 
     $action = instructions_post_string('novamira_context_action');
-    if (!in_array($action, ['toggle_context', 'save_context'], strict: true)) {
+    if ($action !== 'save_context') {
         return null;
     }
 
@@ -194,28 +196,7 @@ function context_handle_post(): ?array
         wp_die(esc_html__('You are not allowed to manage context.', domain: 'novamira'));
     }
 
-    if ($action === 'toggle_context') {
-        return instructions_handle_toggle();
-    }
-
     return instructions_handle_save();
-}
-
-/** @return array{type:string,message:string} */
-function instructions_handle_toggle(): array
-{
-    $enable = instructions_post_string('instructions_enabled') === '1';
-    // Store as string to avoid WordPress's update_option short-circuit when the
-    // option doesn't yet exist: get_option returns false as the implicit old
-    // value, and update_option(name, false) bails out before add_option runs.
-    instructions_update_enabled_value($enable ? '1' : '0');
-
-    return [
-        'type' => 'success',
-        'message' => $enable
-            ? __('User context enabled for agents.', domain: 'novamira')
-            : __('User context disabled for agents. Content is kept.', domain: 'novamira'),
-    ];
 }
 
 /** @return array{type:string,message:string} */
@@ -292,7 +273,7 @@ function render_context_page(): void
         <?php render_context_notice($notice); ?>
         <?php render_context_styles(); ?>
         <?php render_context_system_section(); ?>
-        <?php render_user_context_section(); ?>
+        <?php render_user_context_state(); ?>
         <?php do_action('novamira_context_page_sections'); ?>
     </div>
     <?php
@@ -305,12 +286,6 @@ function render_context_styles(): void
         .novamira-context-section { margin-top:24px; max-width:1100px; }
         .novamira-context-section h2 { margin-bottom:4px; font-size:16px; }
         .novamira-context-panel { background:#fff; border:1px solid #dcdcde; border-radius:12px; padding:16px 20px; margin-top:12px; }
-        .novamira-context-status { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-        .novamira-context-status .status-text { display:flex; align-items:center; gap:10px; }
-        .novamira-context-status .status-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:999px; font-weight:600; font-size:12px; }
-        .novamira-context-status .status-pill.is-on { background:#edf7ed; color:#0a5c1b; }
-        .novamira-context-status .status-pill.is-off { background:#fcf0f1; color:#8a2424; }
-        .novamira-context-status .status-hint { color:#50575e; margin:6px 0 0; max-width:680px; }
         .novamira-system-box summary { cursor:pointer; font-weight:600; }
         .novamira-system-preview-wrap { position:relative; margin-top:12px; }
         .novamira-system-preview { box-sizing:border-box; width:100%; max-height:none; overflow:auto; margin:0; padding:14px 16px; background:#f6f7f7; border:1px solid #dcdcde; border-radius:8px; white-space:pre-wrap; font-family:ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; font-size:12px; line-height:1.55; }
@@ -319,6 +294,8 @@ function render_context_styles(): void
         .novamira-context-guidance { margin-top:12px; color:#1d2327; }
         .novamira-context-guidance ul { list-style:disc; margin-left:20px; max-width:780px; }
         .novamira-context-guidance li { margin:4px 0; }
+        .novamira-context-disabled { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; border-style:dashed; }
+        .novamira-context-disabled p { margin:4px 0 0; color:#50575e; }
         .novamira-context-form { margin-top:12px; }
         .novamira-context-form textarea { font-family:ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; font-size:13px; }
     </style>
@@ -353,21 +330,7 @@ function render_context_system_section(): void
 
 function render_user_context_section(): void
 {
-    $is_enabled = instructions_is_enabled();
     $content = instructions_get_content();
-    $submit_value = $is_enabled ? '0' : '1';
-    $toggle_label = $is_enabled
-        ? __('Disable user context', domain: 'novamira')
-        : __('Enable user context', domain: 'novamira');
-    $toggle_class = $is_enabled ? 'button button-secondary' : 'button button-primary';
-    $status_class = $is_enabled ? 'is-on' : 'is-off';
-    $status_label = $is_enabled ? __('On', domain: 'novamira') : __('Off', domain: 'novamira');
-    $hint = $is_enabled
-        ? __('User-added context is prepended to the system context shown to agents.', domain: 'novamira')
-        : __(
-            'User-added context is hidden from agents. Content stays in place and is used again when you re-enable.',
-            domain: 'novamira',
-        );
     $form_url = context_page_url();
     ?>
     <section class="novamira-context-section" aria-labelledby="novamira-user-context-heading">
@@ -376,26 +339,6 @@ function render_user_context_section(): void
             'Additional instructions provided by this site owner for all connected agents.',
             domain: 'novamira',
         ); ?></p>
-
-        <div class="novamira-context-panel novamira-context-status">
-            <div>
-                <div class="status-text">
-                    <strong><?php esc_html_e('User context:', domain: 'novamira'); ?></strong>
-                    <span class="status-pill <?php echo esc_attr($status_class); ?>"><?php
-
-                    echo esc_html($status_label); ?></span>
-                </div>
-                <p class="status-hint"><?php echo esc_html($hint); ?></p>
-            </div>
-            <form method="post" action="<?php echo esc_url($form_url); ?>">
-                <?php wp_nonce_field('novamira_context'); ?>
-                <input type="hidden" name="novamira_context_action" value="toggle_context">
-                <input type="hidden" name="instructions_enabled" value="<?php echo esc_attr($submit_value); ?>">
-                <button type="submit" class="<?php echo esc_attr($toggle_class); ?>"><?php echo
-                    esc_html($toggle_label)
-                ; ?></button>
-            </form>
-        </div>
 
         <div class="novamira-context-panel novamira-context-guidance">
             <p style="margin-top:0;"><?php esc_html_e(
@@ -444,6 +387,34 @@ function render_user_context_section(): void
                 ); ?></button>
             </p>
         </form>
+    </section>
+    <?php
+}
+
+function render_user_context_state(): void
+{
+    if (instructions_is_enabled()) {
+        render_user_context_section();
+        return;
+    }
+
+    $features_url = admin_url('admin.php?page=novamira-features#novamira-user-context');
+    ?>
+    <section class="novamira-context-section" aria-labelledby="novamira-user-context-disabled-heading">
+        <h2 id="novamira-user-context-disabled-heading"><?php esc_html_e('User context', domain: 'novamira'); ?></h2>
+        <div class="novamira-context-panel novamira-context-disabled">
+            <div>
+                <strong><?php esc_html_e('User context is disabled.', domain: 'novamira'); ?></strong>
+                <p><?php esc_html_e(
+                    'Connected agents receive only the system context shown above.',
+                    domain: 'novamira',
+                ); ?></p>
+            </div>
+            <a class="button button-secondary" href="<?php echo esc_url($features_url); ?>"><?php esc_html_e(
+                'Manage features',
+                domain: 'novamira',
+            ); ?></a>
+        </div>
     </section>
     <?php
 }

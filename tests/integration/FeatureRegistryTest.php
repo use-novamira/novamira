@@ -152,6 +152,82 @@ final class FeatureRegistryTest extends TestCase
         self::assertSame(['addon', 'elementor'], $result['deactivated']);
     }
 
+    public function testLegacyPreferenceMigratesOnceAndFeatureStoreControlsContext(): void
+    {
+        $result = $this->runRegistryScript(<<<'PHP'
+            $GLOBALS['options']['novamira_instructions_enabled'] = '0';
+            $features = \Novamira\Features\features();
+            $beforeBoot = $features->is_active('novamira/user-context');
+            $writesBeforeBoot = $GLOBALS['update_calls'];
+            $features->boot_active();
+            $migrated = $GLOBALS['options']['novamira_feature_preferences']['novamira/user-context'];
+            $features->activate('novamira/user-context');
+            $GLOBALS['options']['novamira_instructions_enabled'] = '0';
+            echo json_encode([
+                'before_boot' => $beforeBoot,
+                'writes_before_boot' => $writesBeforeBoot,
+                'migrated' => $migrated,
+                'active' => $features->is_active('novamira/user-context'),
+                'runtime_enabled' => \Novamira\Context\instructions_is_enabled(),
+                'legacy_unchanged' => $GLOBALS['options']['novamira_instructions_enabled'],
+                'migration_supported' => (new \Novamira\Features\Registrar())->supports_legacy_preference_migration(),
+            ]);
+            PHP);
+
+        self::assertFalse($result['before_boot']);
+        self::assertSame(0, $result['writes_before_boot']);
+        self::assertFalse($result['migrated']);
+        self::assertTrue($result['active']);
+        self::assertTrue($result['runtime_enabled']);
+        self::assertSame('0', $result['legacy_unchanged']);
+        self::assertTrue($result['migration_supported']);
+    }
+
+    public function testCentralPreferenceWinsOverLegacyPreference(): void
+    {
+        $result = $this->runRegistryScript(<<<'PHP'
+            $GLOBALS['options']['novamira_feature_preferences'] = ['novamira/user-context' => true];
+            $GLOBALS['options']['novamira_instructions_enabled'] = '0';
+            $features = \Novamira\Features\features();
+            echo json_encode([
+                'active' => $features->is_active('novamira/user-context'),
+                'runtime_enabled' => \Novamira\Context\instructions_is_enabled(),
+                'states' => $GLOBALS['options']['novamira_feature_preferences'],
+            ]);
+            PHP);
+
+        self::assertTrue($result['active']);
+        self::assertTrue($result['runtime_enabled']);
+        self::assertTrue($result['states']['novamira/user-context']);
+    }
+
+    public function testUserContextStateSwitchesBetweenDisabledNoticeAndEditor(): void
+    {
+        $result = $this->runRegistryScript(<<<'PHP'
+            $features = \Novamira\Features\features();
+            $features->deactivate('novamira/user-context');
+            ob_start();
+            \Novamira\Context\render_user_context_state();
+            $disabledSection = ob_get_clean();
+
+            $features->activate('novamira/user-context');
+            ob_start();
+            \Novamira\Context\render_user_context_state();
+            $enabledSection = ob_get_clean();
+
+            echo json_encode([
+                'disabled_section' => $disabledSection,
+                'enabled_section' => $enabledSection,
+            ]);
+            PHP);
+
+        self::assertStringContainsString('novamira-context-disabled', $result['disabled_section']);
+        self::assertStringContainsString('novamira-features#novamira-user-context', $result['disabled_section']);
+        self::assertStringNotContainsString('instructions_content', $result['disabled_section']);
+        self::assertStringContainsString('novamira-user-context-heading', $result['enabled_section']);
+        self::assertStringNotContainsString('novamira-context-disabled', $result['enabled_section']);
+    }
+
     public function testAbilityHubReactivatesLegacyRuleAndExplainsSpecializationOwnership(): void
     {
         $result = $this->runRegistryScript(<<<'PHP'
@@ -412,12 +488,15 @@ final class FeatureRegistryTest extends TestCase
             }
             function admin_url(string $path = ''): string { return 'https://example.test/wp-admin/' . $path; }
             function add_query_arg(array $args, string $url): string { return $url . '?' . http_build_query($args); }
+            function wp_unslash(mixed $value): mixed { return $value; }
             function sanitize_html_class(string $class): string { return str_replace('/', '-', $class); }
             function esc_attr(string $text): string { return htmlspecialchars($text, ENT_QUOTES); }
             function esc_html(string $text): string { return htmlspecialchars($text, ENT_QUOTES); }
             function esc_js(string $text): string { return addslashes($text); }
             function esc_html__(string $text, string $domain = 'default'): string { return esc_html($text); }
+            function esc_attr__(string $text, string $domain = 'default'): string { return esc_attr($text); }
             function esc_url(string $url): string { return $url; }
+            function esc_textarea(string $text): string { return htmlspecialchars($text, ENT_QUOTES); }
             function esc_html_e(string $text, string $domain = 'default'): void { echo esc_html($text); }
             function wp_nonce_field(string $action = '-1'): void {
                 echo '<input type="hidden" name="_wpnonce" value="test-nonce" />';
@@ -528,6 +607,7 @@ final class FeatureRegistryTest extends TestCase
                 return true;
             }
             require $argv[1] . '/includes/features/api.php';
+            require $argv[1] . '/includes/instructions-admin.php';
             \Novamira\Features\initialize_features();
             $GLOBALS['translations_during_boot'] = $GLOBALS['translation_calls'];
             $GLOBALS['translations_before_init'] = $GLOBALS['translation_calls'];

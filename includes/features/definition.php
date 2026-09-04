@@ -64,13 +64,16 @@ final class Definition
     /** @var list<string> */
     public array $abilityCategories;
 
+    /** @var list<string> */
+    public array $legacyOptions;
+
     public ?string $bootCallback;
 
     public ?string $deactivateCallback;
 
     /**
      * @param array{kind: 'feature'|'specialization', provider: string, label: string|array{source: string, translate: \Closure(): string}, description: string|array{source: string, translate: \Closure(): string}} $identity
-     * @param array{experimental: bool, toggleable: bool, visible: bool, default_active: bool, boot: ?string, deactivate: ?string} $behavior
+     * @param array{experimental: bool, toggleable: bool, visible: bool, default_active: bool, boot: ?string, deactivate: ?string, legacy_options: list<string>} $behavior
      * @param list<string> $dependencies
      * @param array{owned_skills: list<string>, shared_skills: list<string>, abilities: list<string>, ability_categories: list<string>} $assets
      */
@@ -87,6 +90,7 @@ final class Definition
         $this->defaultActive = $behavior['default_active'];
         $this->bootCallback = $behavior['boot'];
         $this->deactivateCallback = $behavior['deactivate'];
+        $this->legacyOptions = $behavior['legacy_options'];
         $this->dependsOn = $dependencies;
         $this->ownedSkills = $assets['owned_skills'];
         $this->sharedSkills = $assets['shared_skills'];

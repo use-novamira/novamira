@@ -113,15 +113,25 @@ function render_page(): void
         wp_get_abilities();
     }
     $manager = Features\features();
-    $groups = ['feature' => [], 'specialization' => []];
+    $core_features = [];
+    $provider_features = [];
+    $specializations = [];
     foreach ($manager->definitions() as $id => $definition) {
         if (!$definition->visible || !specialization_is_visible($definition)) {
             continue;
         }
-        $kind = $definition->kind;
-        $groups[$kind][$id] = $definition;
+        if ($definition->kind === 'specialization') {
+            $specializations[$id] = $definition;
+            continue;
+        }
+        if ($definition->provider === 'Novamira') {
+            $core_features[$id] = $definition;
+            continue;
+        }
+        $provider_features[$definition->provider][$id] = $definition;
     }
-    uasort($groups['specialization'], static function (Features\Definition $a, Features\Definition $b): int {
+    ksort($provider_features, flags: SORT_NATURAL | SORT_FLAG_CASE);
+    uasort($specializations, static function (Features\Definition $a, Features\Definition $b): int {
         $label_order = strcasecmp($a->label(), $b->label());
 
         return $label_order !== 0 ? $label_order : strcmp($a->id, $b->id);
@@ -153,13 +163,12 @@ function render_page(): void
         <?php foreach ($manager->errors() as $error): ?>
             <div class="notice notice-error"><p><?php echo esc_html($error); ?></p></div>
         <?php endforeach; ?>
-        <?php render_group(__('Core', domain: 'novamira'), $groups['feature'], $manager); ?>
-        <?php if ($groups['specialization'] !== []): ?>
-            <?php render_group(
-                __('Novamira Pro Specializations', domain: 'novamira'),
-                $groups['specialization'],
-                $manager,
-            ); ?>
+        <?php render_group(__('Core', domain: 'novamira'), $core_features, $manager); ?>
+        <?php foreach ($provider_features as $provider => $features): ?>
+            <?php render_group($provider, $features, $manager); ?>
+        <?php endforeach; ?>
+        <?php if ($specializations !== []): ?>
+            <?php render_group(__('Novamira Pro Specializations', domain: 'novamira'), $specializations, $manager); ?>
         <?php endif; ?>
     </div>
     <?php

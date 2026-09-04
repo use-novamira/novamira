@@ -14,6 +14,7 @@ if (!defined('ABSPATH')) {
 const OPTION_STATES = 'novamira_feature_preferences';
 
 // @mago-expect lint:file-name -- includes/ uses lowercase module filenames rather than PSR-4 filenames.
+// @mago-expect lint:cyclomatic-complexity -- migration and persistence branches share one bounded state owner.
 final class StateStore
 {
     /** @var array<int, array<string, bool>> */
@@ -49,6 +50,7 @@ final class StateStore
             }
             $states[$id] = in_array($active, [true, 1, '1'], strict: true);
         }
+        $states = $this->migrateLegacyPreferences($states);
         $this->cache[$site] = $states;
         $this->needsReconciliation[$site] = $states !== $raw;
 
@@ -88,5 +90,33 @@ final class StateStore
     private function siteId(): int
     {
         return function_exists('get_current_blog_id') ? get_current_blog_id() : 0;
+    }
+
+    /**
+     * Import each domain-specific toggle only while its central feature key is absent.
+     * Once imported, the feature store is the sole source of truth.
+     *
+     * @param array<string, bool> $states
+     * @return array<string, bool>
+     */
+    private function migrateLegacyPreferences(array $states): array
+    {
+        $missing = new \stdClass();
+        foreach ($this->registry->definitions() as $id => $definition) {
+            if (!$definition->toggleable || array_key_exists($id, $states)) {
+                continue;
+            }
+            foreach ($definition->legacyOptions as $option) {
+                /** @var mixed $legacy */
+                $legacy = get_option($option, default_value: $missing);
+                if ($legacy === $missing) {
+                    continue;
+                }
+                $states[$id] = filter_var($legacy, FILTER_VALIDATE_BOOLEAN);
+                break;
+            }
+        }
+
+        return $states;
     }
 }

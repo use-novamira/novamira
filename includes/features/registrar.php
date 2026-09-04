@@ -55,4 +55,10 @@ final class Registrar
     {
         return $this->errors;
     }
+
+    /** Capability marker for integrations that declare options to import into the central feature store. */
+    public function supports_legacy_preference_migration(): bool
+    {
+        return true;
+    }
 }
