@@ -232,6 +232,16 @@ function novamira_cli_login_command(string $site_url, array $environment = []): 
 }
 
 /**
+ * POSIX-shell login command for a browserless or remote environment.
+ *
+ * @param array<string, string> $environment
+ */
+function novamira_cli_device_login_command(string $site_url, array $environment = []): string
+{
+    return novamira_cli_login_command($site_url, $environment) . ' --device';
+}
+
+/**
  * PowerShell form of the CLI login command.
  *
  * @param array<string, string> $environment
@@ -246,6 +256,16 @@ function novamira_cli_windows_login_command(string $site_url, array $environment
     $quoted_url = "'" . str_replace(search: "'", replace: "''", subject: $site_url) . "'";
     $commands[] = 'novamira auth login ' . $quoted_url;
     return implode('; ', $commands);
+}
+
+/**
+ * PowerShell login command for a browserless or remote environment.
+ *
+ * @param array<string, string> $environment
+ */
+function novamira_cli_windows_device_login_command(string $site_url, array $environment = []): string
+{
+    return novamira_cli_windows_login_command($site_url, $environment) . ' --device';
 }
 
 /**

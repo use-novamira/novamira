@@ -1419,6 +1419,37 @@ function novamira_render_oauth_config_section(string $rest_url): void
     <?php
 }
 
+function novamira_cli_authorization_prompt(
+    string $login_unix,
+    string $login_windows,
+    string $device_login_unix,
+    string $device_login_windows,
+): string {
+    if ($login_unix === $login_windows) {
+        return sprintf(
+            /* translators: 1: browser-flow login command, 2: device-flow login command */
+            __(
+                "Then authorize the site by running:\n\n%1\$s\n\nKeep the login process running while I approve access in the browser. If the browser flow fails, times out, does not open a browser, or the environment is headless, retry automatically with:\n\n%2\$s\n\nShow me the verification URL and short code, ask me to approve that code from any device where I am already signed in to WordPress, and keep polling until authorization completes.",
+                domain: 'novamira',
+            ),
+            $login_unix,
+            $device_login_unix,
+        );
+    }
+
+    return sprintf(
+        /* translators: 1: POSIX browser-flow login, 2: PowerShell browser-flow login, 3: POSIX device-flow login, 4: PowerShell device-flow login */
+        __(
+            "Then authorize the site with the command for the current shell. In a POSIX shell run:\n\n%1\$s\n\nIn PowerShell run:\n\n%2\$s\n\nKeep the login process running while I approve access in the browser. If the browser flow fails, times out, does not open a browser, or the environment is headless, retry automatically with the matching device-flow command. In a POSIX shell run:\n\n%3\$s\n\nIn PowerShell run:\n\n%4\$s\n\nShow me the verification URL and short code, ask me to approve that code from any device where I am already signed in to WordPress, and keep polling until authorization completes.",
+            domain: 'novamira',
+        ),
+        $login_unix,
+        $login_windows,
+        $device_login_unix,
+        $device_login_windows,
+    );
+}
+
 /**
  * Render the Novamira CLI setup route for every agent that can load the bundled
  * skill. The selected product swaps the installer destination without exposing
@@ -1438,6 +1469,12 @@ function novamira_render_cli_config_section(): void
     }
     $login_unix = novamira_cli_login_command($site_url, $login_environment);
     $login_windows = novamira_cli_windows_login_command($site_url, $login_environment);
+    $authorization_prompt = novamira_cli_authorization_prompt(
+        $login_unix,
+        $login_windows,
+        novamira_cli_device_login_command($site_url, $login_environment),
+        novamira_cli_windows_device_login_command($site_url, $login_environment),
+    );
     $hosting = \Novamira\Hosting\Detector::current();
     $hosting_note = '';
     if (is_array($hosting)) {
@@ -1481,17 +1518,16 @@ function novamira_render_cli_config_section(): void
             'windowsLogin' => $login_windows,
             'projectNote' => $project_note,
             'prompt' => sprintf(
-                /* translators: 1: client label, 2: site URL, 3: Unix install command, 4: Windows install command, 5: Unix login command, 6: Windows login command, 7: optional project-only note */
+                /* translators: 1: client label, 2: site URL, 3: POSIX installer, 4: PowerShell installer, 5: authorization instructions, 6: optional project/hosting note */
                 __(
-                    "I want to connect %1\$s to this WordPress site with Novamira CLI: %2\$s\n\nInstall the official Novamira CLI and its Novamira skill for this agent. On macOS or Linux run:\n\n%3\$s\n\nOn Windows PowerShell run:\n\n%4\$s\n\nThen authorize the site. On macOS or Linux run:\n\n%5\$s\n\nOn Windows PowerShell run:\n\n%6\$s\n\nThe login opens my browser. Ask me to approve the authorization there, then run novamira doctor --json yourself and verify the connection. Do not ask me to run doctor. %7\$s",
+                    "I want to connect %1\$s to this WordPress site with Novamira CLI: %2\$s\n\nInspect the current shell and run exactly one installer. In a POSIX shell run:\n\n%3\$s\n\nIn PowerShell run:\n\n%4\$s\n\n%5\$s\n\nOnce authorized, run novamira doctor --json yourself and verify the connection. Do not ask me to run installation, login, or diagnostic commands. %6\$s",
                     domain: 'novamira',
                 ),
                 $label,
                 $site_url,
                 $unix_install,
                 $windows_install,
-                $login_unix,
-                $login_windows,
+                $authorization_prompt,
                 $prompt_notes,
             ),
         ];
