@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Novamira\Abilities\Gutenberg;
 
+use stdClass;
 use WP_Block_Type_Registry;
 use WP_Error;
 use WP_Post;
@@ -717,8 +718,35 @@ function normalize_blocks(mixed $value): array|WP_Error
     return $blocks;
 }
 
+function normalize_block_attributes(mixed $attributes): stdClass
+{
+    if ($attributes instanceof stdClass) {
+        return $attributes;
+    }
+
+    if (is_array($attributes)) {
+        return (object) $attributes;
+    }
+
+    return new stdClass();
+}
+
+/** @return array<array-key, mixed> */
+function parsed_block_attributes(mixed $attributes): array
+{
+    if ($attributes instanceof stdClass) {
+        return get_object_vars($attributes);
+    }
+
+    if (is_array($attributes)) {
+        return $attributes;
+    }
+
+    return [];
+}
+
 /**
- * @return array{name: string, attributes: array<string, mixed>, innerBlocks: list<array<string, mixed>>}|WP_Error
+ * @return array{name: string, attributes: stdClass, innerBlocks: list<array<string, mixed>>}|WP_Error
  */
 function normalize_block(mixed $value, string $path): array|WP_Error
 {
@@ -731,13 +759,17 @@ function normalize_block(mixed $value, string $path): array|WP_Error
     }
     $name = trim($value['name']);
 
-    if (array_key_exists('attributes', $value) && !is_array($value['attributes'])) {
+    if (
+        array_key_exists('attributes', $value)
+        && !is_array($value['attributes'])
+        && !$value['attributes'] instanceof stdClass
+    ) {
         return new WP_Error('gutenberg_invalid_block_spec', sprintf(
             '%s.attributes must be an object when present.',
             $path,
         ));
     }
-    $attributes = is_array($value['attributes'] ?? null) ? $value['attributes'] : [];
+    $attributes = normalize_block_attributes($value['attributes'] ?? null);
 
     if (array_key_exists('innerBlocks', $value) && !is_array($value['innerBlocks'])) {
         return new WP_Error('gutenberg_invalid_block_spec', sprintf(
@@ -756,7 +788,6 @@ function normalize_block(mixed $value, string $path): array|WP_Error
         $normalized_inner_blocks[] = $normalized;
     }
 
-    /** @var array<string, mixed> $attributes */
     return [
         'name' => $name,
         'attributes' => $attributes,
@@ -976,8 +1007,7 @@ function spec_to_parsed_block(array $block): array
         $inner_blocks[] = spec_to_parsed_block($inner_block);
     }
 
-    $attributes = is_array($block['attributes'] ?? null) ? $block['attributes'] : [];
-    /** @var array<string, mixed> $attributes */
+    $attributes = parsed_block_attributes($block['attributes'] ?? null);
 
     return [
         'blockName' => (string) $block['name'],

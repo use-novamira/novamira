@@ -134,9 +134,15 @@ function enqueue_gutenberg_finalizer_editor_bridge(): void
                 }
             };
 
+            const blockAttributes = ( spec ) => spec.attributes
+                && typeof spec.attributes === 'object'
+                && ! Array.isArray( spec.attributes )
+                ? spec.attributes
+                : {};
+
             const toBlock = ( blocksApi, spec ) => blocksApi.createBlock(
                 spec.name,
-                spec.attributes || {},
+                blockAttributes( spec ),
                 ( spec.innerBlocks || [] ).map( ( innerSpec ) => toBlock( blocksApi, innerSpec ) )
             );
 
@@ -926,9 +932,15 @@ function gutenberg_finalizer_script(): string
                 } );
             };
 
+            const blockAttributes = ( spec ) => spec.attributes
+                && typeof spec.attributes === 'object'
+                && ! Array.isArray( spec.attributes )
+                ? spec.attributes
+                : {};
+
             const toBlock = ( blocksApi, spec ) => blocksApi.createBlock(
                 spec.name,
-                spec.attributes || {},
+                blockAttributes( spec ),
                 ( spec.innerBlocks || [] ).map( ( innerSpec ) => toBlock( blocksApi, innerSpec ) )
             );
 
