@@ -19,12 +19,6 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
-/** Check whether the current user may view an Ability's MCP metadata. */
-function novamira_current_user_can_view_ability_metadata(string $ability_name): bool
-{
-    return !str_starts_with($ability_name, 'novamira/') || novamira_current_user_can_manage();
-}
-
 /** Keep the MCP Adapter's standard permission for the shared discovery tool. */
 function novamira_discover_abilities_permission(): bool|\WP_Error
 {

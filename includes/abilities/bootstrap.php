@@ -9,6 +9,8 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
+require_once dirname(__DIR__) . '/ability-metadata.php';
+
 /** @return array{available: bool, reason: string} */
 function novamira_wp_cli_status(): array
 {
@@ -64,6 +66,7 @@ function novamira_boot_ability_rest_surface(): bool
         return false;
     }
 
+    novamira_register_ability_metadata_rest_filter();
     require_once dirname(__DIR__) . '/rest-shim.php';
     add_action('rest_api_init', callback: 'novamira_register_ability_run_rest_shim');
 

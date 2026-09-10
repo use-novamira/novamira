@@ -169,6 +169,16 @@ final class McpAdapterBuiltinAbilitiesRaceTest extends TestCase
         self::assertNotContains('filter novamira_mcp_adapter_create_default_server -> false', $filtered['trace']);
     }
 
+    public function testMcpDiscoveryMetadataVisibilityRemainsNamespaceScoped(): void
+    {
+        $result = $this->runBootScenario('foreign-below');
+
+        self::assertContains('foreign/ping', $result['subscriber_discovery']);
+        self::assertNotContains('novamira/read-file', $result['subscriber_discovery']);
+        self::assertContains('foreign/ping', $result['manager_discovery']);
+        self::assertContains('novamira/read-file', $result['manager_discovery']);
+    }
+
     public function testHookEmulationFollowsWpHookIteration(): void
     {
         $result = $this->runBootScenario('hook-conformance');

@@ -19,6 +19,17 @@ if (!function_exists('add_action')) {
         return true;
     }
 }
+if (!function_exists('add_filter')) {
+    function add_filter(
+        string $hook_name,
+        callable|string $callback,
+        int $priority = 10,
+        int $accepted_args = 1,
+    ): bool {
+        $GLOBALS['novamira_test_filters'][] = [$hook_name, $callback, $priority, $accepted_args];
+        return true;
+    }
+}
 if (!function_exists('get_bloginfo')) {
     function get_bloginfo(string $show = ''): string
     {
@@ -70,6 +81,8 @@ if (!function_exists('esc_html')) {
 if (!function_exists('novamira_current_user_can_manage')) {
     function novamira_current_user_can_manage(): bool
     {
+        $GLOBALS['novamira_test_current_user_can_manage_calls'] =
+            ($GLOBALS['novamira_test_current_user_can_manage_calls'] ?? 0) + 1;
         return (bool) ($GLOBALS['novamira_test_current_user_can_manage'] ?? false);
     }
 }
@@ -96,6 +109,7 @@ final class CompatibilityStartupTest extends TestCase
         $GLOBALS['wp_version'] = '6.9.2';
         $GLOBALS['novamira_test_home'] = 'https://example.test';
         $GLOBALS['novamira_test_actions'] = [];
+        $GLOBALS['novamira_test_filters'] = [];
         $GLOBALS['novamira_test_notices'] = [];
         $GLOBALS['novamira_test_current_user_can_manage'] = true;
     }
@@ -106,6 +120,7 @@ final class CompatibilityStartupTest extends TestCase
             $GLOBALS['wp_version'],
             $GLOBALS['novamira_test_home'],
             $GLOBALS['novamira_test_actions'],
+            $GLOBALS['novamira_test_filters'],
             $GLOBALS['novamira_test_notices'],
             $GLOBALS['novamira_test_current_user_can_manage'],
         );
@@ -202,6 +217,14 @@ final class CompatibilityStartupTest extends TestCase
             $GLOBALS['novamira_test_actions'],
         );
         self::assertContains(
+            ['rest_request_before_callbacks', 'novamira_prevent_restricted_rest_ability_run', 10, 3],
+            $GLOBALS['novamira_test_filters'],
+        );
+        self::assertContains(
+            ['rest_request_after_callbacks', 'novamira_filter_rest_ability_metadata', 10, 3],
+            $GLOBALS['novamira_test_filters'],
+        );
+        self::assertContains(
             ['wp_abilities_api_categories_init', 'novamira_register_ability_categories', 20, 1],
             $GLOBALS['novamira_test_actions'],
         );
@@ -226,6 +249,7 @@ final class CompatibilityStartupTest extends TestCase
 
         $hooks = array_column($GLOBALS['novamira_test_actions'], 0);
         self::assertSame(['admin_notices', 'network_admin_notices'], $hooks);
+        self::assertSame([], $GLOBALS['novamira_test_filters']);
 
         novamira_render_wordpress_compatibility_notice();
         self::assertCount(1, $GLOBALS['novamira_test_notices']);

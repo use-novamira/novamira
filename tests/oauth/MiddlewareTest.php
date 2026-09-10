@@ -11,6 +11,8 @@ use PHPUnit\Framework\TestCase;
 if (!function_exists('novamira_current_user_can_manage')) {
     function novamira_current_user_can_manage(): bool
     {
+        $GLOBALS['novamira_test_current_user_can_manage_calls'] =
+            ($GLOBALS['novamira_test_current_user_can_manage_calls'] ?? 0) + 1;
         return (bool) ($GLOBALS['novamira_test_current_user_can_manage'] ?? false);
     }
 }
@@ -77,8 +79,21 @@ if (!class_exists('WP_Ability')) {
     class WP_Ability
     {
         /** @param array<string, mixed> $meta */
-        public function __construct(private array $meta, private mixed $result = null)
+        public function __construct(
+            private array $meta,
+            private mixed $result = null,
+            private string $name = '',
+            private string $category = '',
+        ) {}
+
+        public function get_name(): string
         {
+            return $this->name;
+        }
+
+        public function get_category(): string
+        {
+            return $this->category;
         }
 
         public function get_meta_item(string $key, mixed $default = null): mixed
@@ -132,6 +147,12 @@ if (!class_exists('WP_REST_Request')) {
             return $this->json;
         }
 
+        /** @return array<string, mixed> */
+        public function get_query_params(): array
+        {
+            return $this->params;
+        }
+
         public function offsetExists(mixed $offset): bool
         {
             return is_string($offset) && array_key_exists($offset, $this->params);
@@ -167,9 +188,46 @@ if (!class_exists('WP_REST_Response')) {
         {
         }
 
-        public function header(string $name, string $value): void
+        public function header(string $name, string $value, bool $replace = true): void
         {
+            if (!$replace && isset($this->headers[$name])) {
+                $this->headers[$name] .= ', ' . $value;
+                return;
+            }
+
             $this->headers[$name] = $value;
+        }
+
+        public function link_header(string $rel, string $link): void
+        {
+            $this->header('Link', '<' . $link . '>; rel="' . $rel . '"', replace: false);
+        }
+
+        /** @return array<string, string> */
+        public function get_headers(): array
+        {
+            return $this->headers;
+        }
+
+        /** @param array<string, string> $headers */
+        public function set_headers(array $headers): void
+        {
+            $this->headers = $headers;
+        }
+
+        public function get_data(): mixed
+        {
+            return $this->data;
+        }
+
+        public function set_data(mixed $data): void
+        {
+            $this->data = $data;
+        }
+
+        public function get_status(): int
+        {
+            return $this->status;
         }
     }
 }

@@ -79,6 +79,7 @@ $GLOBALS['novamira_test_notices'] = [];
 $GLOBALS['novamira_test_ability_args'] = [];
 $GLOBALS['novamira_test_rest_routes'] = [];
 $GLOBALS['novamira_test_trace'] = [];
+$GLOBALS['novamira_test_current_user_can_manage'] = false;
 
 // --- Plugin API (mirrors wp-includes/plugin.php + class-wp-hook.php) ---------------------------
 
@@ -517,7 +518,7 @@ function novamira_wordpress_abilities_supported(): bool
 
 function novamira_current_user_can_manage(): bool
 {
-    return false;
+    return $GLOBALS['novamira_test_current_user_can_manage'];
 }
 
 function novamira_build_server_instructions(): string
@@ -692,6 +693,20 @@ if ($server !== null) {
 }
 ksort($tools);
 
+$discover_callback = $GLOBALS['novamira_test_ability_args']['novamira-mcp-adapter/discover-abilities']['execute_callback']
+    ?? null;
+$subscriber_discovery = [];
+$manager_discovery = [];
+if (is_callable($discover_callback)) {
+    $GLOBALS['novamira_test_current_user_can_manage'] = false;
+    $subscriber_result = $discover_callback();
+    $subscriber_discovery = array_column($subscriber_result['abilities'], 'name');
+
+    $GLOBALS['novamira_test_current_user_can_manage'] = true;
+    $manager_result = $discover_callback();
+    $manager_discovery = array_column($manager_result['abilities'], 'name');
+}
+
 echo json_encode([
     'scenario' => $novamira_scenario,
     'abilities_before_rest_api_init' => $abilities_before_rest_api_init,
@@ -703,6 +718,8 @@ echo json_encode([
     'rest_routes' => $GLOBALS['novamira_test_rest_routes'],
     'get_ability_info_permission_callback' => $GLOBALS['novamira_test_ability_args']['novamira-mcp-adapter/get-ability-info']['permission_callback'] ?? null,
     'execute_ability_parameters' => $GLOBALS['novamira_test_ability_args']['novamira-mcp-adapter/execute-ability']['input_schema']['properties']['parameters'] ?? null,
+    'subscriber_discovery' => $subscriber_discovery,
+    'manager_discovery' => $manager_discovery,
     'trace' => $GLOBALS['novamira_test_trace'],
     'notices' => $GLOBALS['novamira_test_notices'],
 ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
