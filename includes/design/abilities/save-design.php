@@ -62,6 +62,7 @@ function register(): void
         'execute_callback' => __NAMESPACE__ . '\\execute',
         'permission_callback' => 'novamira_permission_callback',
         'meta' => [
+            'show_in_rest' => true,
             'annotations' => [
                 'readonly' => false,
                 'destructive' => false,

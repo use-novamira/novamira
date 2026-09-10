@@ -113,6 +113,7 @@ function register(): void
         },
         'permission_callback' => 'novamira_permission_callback',
         'meta' => [
+            'show_in_rest' => true,
             'annotations' => [
                 'readonly' => true,
                 'destructive' => false,
