@@ -39,6 +39,26 @@ const DEVICE_CODE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
  */
 function resource_identifier(): string
 {
+    // Core's get_rest_url() dereferences $wp_rewrite when its permalink-structure condition is
+    // truthy. Plugins that resolve the current user before wp-settings.php creates $wp_rewrite
+    // cause a null dereference there. Mirror core's own predicate (multisite blog option then
+    // single-site option, same truthiness) so the guard fires exactly when core would dereference.
+    // WP_Rewrite reads permalink_structure from the database; the URL does not capture rest_url
+    // or home_url filters registered later.
+    // @mago-expect lint:no-global -- $wp_rewrite is WordPress' global rewrite object.
+    if (
+        // @mago-expect analysis:mixed-operand -- WordPress functions return mixed; truthiness mirrors core.
+        // @mago-expect analysis:mixed-operand
+        // @mago-expect analysis:null-argument -- WordPress's phpdoc says int but the function accepts null.
+        // @mago-expect lint:literal-named-argument -- mirrors core's get_rest_url() call verbatim.
+        (is_multisite() && get_blog_option(null, 'permalink_structure') || get_option('permalink_structure'))
+        && class_exists('WP_Rewrite')
+        && !($GLOBALS['wp_rewrite'] ?? null) instanceof \WP_Rewrite
+    ) {
+        // @mago-expect lint:no-global
+        $GLOBALS['wp_rewrite'] = new \WP_Rewrite();
+    }
+
     return rest_url('mcp/novamira-oauth');
 }
 

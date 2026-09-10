@@ -1,4 +1,5 @@
 * Fix: Novamira Design tools are now available to AI clients that connect over the REST Abilities API, alongside the rest of Novamira's abilities.
+* Fix: Prevent an HTTP 500 when another plugin triggers Bearer authentication before WordPress creates its rewrite object on sites using pretty or index-based permalinks.
 
 v1.12.3 - 2026/09/09
 * Fix: Blocks sent to the Block Editor Queue without any settings of their own now save with all of their content. Such a block reached the hidden editor in a form the editor could mistake for outdated content that needed converting, and the conversion discarded the block's items: a bulleted or numbered list was saved empty, or with a single blank item, while the queue still reported the item as finalized. Queue items created before this release are corrected as they are read, so batches already waiting do not need to be recreated.

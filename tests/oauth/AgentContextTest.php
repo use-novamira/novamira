@@ -108,6 +108,12 @@ if (!function_exists('is_multisite')) {
         return false;
     }
 }
+if (!function_exists('get_blog_option')) {
+    function get_blog_option(?int $id, string $name, mixed $default_value = false): mixed
+    {
+        return $GLOBALS['novamira_test_blog_options'][$name] ?? $default_value;
+    }
+}
 
 use PHPUnit\Framework\TestCase;
 
