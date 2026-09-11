@@ -836,24 +836,6 @@ function novamira_create_mirror_mcp_server(
 }
 
 /**
- * Tell administrators that Novamira already includes the MCP Adapter.
- */
-function novamira_render_mcp_adapter_plugin_notice(): void
-{
-    if (!novamira_current_user_can_manage()) {
-        return;
-    }
-
-    novamira_render_persistent_admin_notice(
-        esc_html__(
-            'Novamira bundles the MCP Adapter. You can safely deactivate the standalone MCP Adapter plugin.',
-            domain: 'novamira',
-        ),
-        meta_key: 'novamira_mcp_adapter_notice_dismissed',
-    );
-}
-
-/**
  * Replicate DefaultServerFactory::discover_abilities_by_type for reuse on the legacy alias.
  *
  * @return list<string>
@@ -965,11 +947,6 @@ if ($novamira_adapter_initialized) {
         $resultObj->tools = $tools;
         return $result;
     });
-
-    // Info notice if the standalone MCP Adapter plugin is still active.
-    if (function_exists('is_plugin_active') && is_plugin_active('mcp-adapter/mcp-adapter.php')) {
-        add_action('admin_notices', callback: 'novamira_render_mcp_adapter_plugin_notice');
-    }
 }
 add_filter(
     'novamira_mcp_adapter_tool_call_result',
