@@ -2,6 +2,7 @@
 * Fix: Prevent an HTTP 500 when another plugin triggers Bearer authentication before WordPress creates its rewrite object on sites using pretty or index-based permalinks.
 * Fix: Browser sign-in now reaches the approval screen on sites whose WordPress Address and Site Address use different hosts (for example www and non-www), including after logging in, instead of stopping on the bare wp-admin dashboard.
 * Fix: MCP server names now distinguish WordPress sites installed in different subdirectories on the same domain, and site titles with symbols display correctly in Claude connectors and bundles.
+* Fix: Novamira Visual server names now distinguish WordPress sites installed in different subdirectories on the same domain, and site titles with symbols display correctly in the Visual bundle.
 
 v1.12.3 - 2026/09/09
 * Fix: Blocks sent to the Block Editor Queue without any settings of their own now save with all of their content. Such a block reached the hidden editor in a form the editor could mistake for outdated content that needed converting, and the conversion discarded the block's items: a bulleted or numbered list was saved empty, or with a single blank item, while the queue still reported the item as finalized. Queue items created before this release are corrected as they are read, so batches already waiting do not need to be recreated.

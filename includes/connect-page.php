@@ -202,31 +202,48 @@ function novamira_render_production_warning(): void
  *
  * Root sites retain the original host-only algorithm byte-for-byte. Subdirectory sites
  * include the path, with a short URL hash when the combined slug exceeds the 25-character cap.
+ * The prefix counts toward the cap: the slug gets whatever the prefix leaves of 25 characters.
  */
-function novamira_build_mcp_server_name_default(string $site_host, ?int $site_port, string $site_path): string
-{
-    $site_slug = (string) preg_replace(pattern: '/^www\./', replacement: '', subject: $site_host);
-    $site_slug = (string) preg_replace(pattern: '/[^a-z0-9-]+/', replacement: '-', subject: strtolower($site_slug));
-    $site_slug = trim($site_slug, characters: '-');
+function novamira_build_mcp_server_name_default(
+    string $site_host,
+    ?int $site_port,
+    string $site_path,
+    string $prefix = 'novamira-',
+): string {
+    $slug_budget = max(0, 25 - strlen($prefix));
+    $site_slug = novamira_mcp_server_name_slug((string) preg_replace(
+        pattern: '/^www\./',
+        replacement: '',
+        subject: $site_host,
+    ));
 
     $site_path = trim($site_path, characters: '/');
     if ($site_path === '') {
-        $site_slug = substr($site_slug, offset: 0, length: 16);
+        $site_slug = substr($site_slug, offset: 0, length: $slug_budget);
         $site_slug = rtrim($site_slug, characters: '-');
-        return 'novamira-' . $site_slug;
+        return $prefix . $site_slug;
     }
 
-    $path_slug = (string) preg_replace(pattern: '/[^a-z0-9-]+/', replacement: '-', subject: strtolower($site_path));
-    $path_slug = trim($path_slug, characters: '-');
+    $path_slug = novamira_mcp_server_name_slug($site_path);
     $site_slug = trim($site_slug . '-' . $path_slug, characters: '-');
     $site_slug = (string) preg_replace(pattern: '/-{2,}/', replacement: '-', subject: $site_slug);
-    if ($path_slug !== '' && strlen($site_slug) <= 16) {
-        return 'novamira-' . $site_slug;
+    if ($path_slug !== '' && strlen($site_slug) <= $slug_budget) {
+        return $prefix . $site_slug;
     }
 
+    // Seven characters of the budget go to "-" plus the 6-character hash.
     $hash = novamira_mcp_server_name_hash($site_host, $site_port, $site_path);
-    $site_slug = rtrim(substr($site_slug, offset: 0, length: 9), characters: '-');
-    return 'novamira-' . ($site_slug !== '' ? $site_slug . '-' : '') . $hash;
+    $site_slug = rtrim(substr($site_slug, offset: 0, length: max(0, $slug_budget - 7)), characters: '-');
+    return $prefix . ($site_slug !== '' ? $site_slug . '-' : '') . $hash;
+}
+
+/**
+ * Lowercase a URL component, replace every run of characters outside [a-z0-9-] with "-", and trim hyphens.
+ */
+function novamira_mcp_server_name_slug(string $value): string
+{
+    $slug = (string) preg_replace(pattern: '/[^a-z0-9-]+/', replacement: '-', subject: strtolower($value));
+    return trim($slug, characters: '-');
 }
 
 /**
@@ -264,6 +281,24 @@ function novamira_parse_mcp_server_site_url(string $site_url): ?array
 }
 
 /**
+ * Return the URL components that identify the current site in its default MCP server names.
+ *
+ * Reads the stored home option first, so per-request home_url filters cannot change the name.
+ *
+ * @return array{host: string, port: int|null, path: string}
+ */
+function novamira_get_mcp_server_site(): array
+{
+    $stored_home = trim((string) get_option('home'));
+    $site = $stored_home !== '' ? novamira_parse_mcp_server_site_url($stored_home) : null;
+    if ($site === null) {
+        $site = novamira_parse_mcp_server_site_url(home_url());
+    }
+
+    return $site ?? ['host' => 'wordpress', 'port' => null, 'path' => ''];
+}
+
+/**
  * Compute the default MCP server name for the current site.
  *
  * Capped at 25 characters total because some MCP clients reject longer server names.
@@ -271,14 +306,7 @@ function novamira_parse_mcp_server_site_url(string $site_url): ?array
  */
 function novamira_get_mcp_server_name_default(): string
 {
-    $stored_home = trim((string) get_option('home'));
-    $site = $stored_home !== '' ? novamira_parse_mcp_server_site_url($stored_home) : null;
-    if ($site === null) {
-        $site = novamira_parse_mcp_server_site_url(home_url());
-    }
-    if ($site === null) {
-        $site = ['host' => 'wordpress', 'port' => null, 'path' => ''];
-    }
+    $site = novamira_get_mcp_server_site();
 
     return novamira_build_mcp_server_name_default($site['host'], $site['port'], $site['path']);
 }

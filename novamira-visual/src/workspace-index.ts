@@ -634,20 +634,9 @@ class AgentWorkspace {
 		return row;
 	}
 
+	/** Computed server-side so the JSON configs match the .mcpb bundle name. */
 	private mcpServerName(): string {
-		let host = "wordpress";
-		try {
-			host = new URL(workspaceData.siteUrl).hostname;
-		} catch {
-			/* keep the fallback */
-		}
-		let slug = host
-			.replace(/^www\./, "")
-			.toLowerCase()
-			.replace(/[^a-z0-9-]+/g, "-")
-			.replace(/^-+|-+$/g, "");
-		slug = slug.slice(0, 9).replace(/-+$/g, "");
-		return `novamira-visual-${slug}`;
+		return workspaceData.serverName || "novamira-visual";
 	}
 
 	private copyButton(label: string, getText: () => string): HTMLButtonElement {

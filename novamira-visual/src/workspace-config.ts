@@ -2,6 +2,7 @@ declare const novamiraVisualWorkspaceData: {
 	adminUrl: string;
 	siteUrl: string;
 	siteName: string;
+	serverName?: string;
 	restUrl: string;
 	workspaceUrl: string;
 	mcpbUrl: string;

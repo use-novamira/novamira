@@ -207,6 +207,7 @@ class Workspace
             'adminUrl' => \esc_url_raw(\admin_url()),
             'siteUrl' => \esc_url_raw(\home_url('/')),
             'siteName' => (string) \get_bloginfo('name'),
+            'serverName' => $this->server_name(),
             'restUrl' => \esc_url_raw(\rest_url('novamira-visual/v1/')),
             'workspaceUrl' => \esc_url_raw($this->get_workspace_url()),
             'mcpbUrl' => \esc_url_raw(\wp_nonce_url(
@@ -285,7 +286,7 @@ class Workspace
      */
     private function build_mcpb_manifest(string $workspace_url, string $server_name): array
     {
-        $site_name = \trim((string) \get_bloginfo('name'));
+        $site_name = \novamira_plain_site_name((string) \get_bloginfo('name'));
         $display_name = $site_name !== '' ? 'Novamira Visual: ' . $site_name : 'Novamira Visual';
 
         return [
@@ -313,22 +314,23 @@ class Workspace
     }
 
     /**
-     * Unique MCP server name for this site, mirroring the workspace client's
-     * mcpServerName(): novamira-visual-{host slug}, capped at 25 characters.
+     * Unique MCP server name for this site, capped at 25 characters. The same value
+     * names the .mcpb bundle and is passed to the workspace for its JSON configs.
+     *
+     * The shared helpers live in includes/connect-page.php, which novamira.php loads
+     * unconditionally before any feature (this one included) boots on plugins_loaded.
      */
     private function server_name(): string
     {
-        $host = (string) \wp_parse_url(\home_url(), PHP_URL_HOST);
-        if ($host === '') {
-            $host = 'wordpress';
-        }
-        $host = (string) \preg_replace('/^www\./', replacement: '', subject: \strtolower($host));
-        $slug = (string) \preg_replace('/[^a-z0-9-]+/', replacement: '-', subject: $host);
-        $slug = \trim($slug, '-');
-        $slug = \substr($slug, 0, 9);
-        $slug = \rtrim($slug, '-');
+        $site = \novamira_get_mcp_server_site();
 
-        return 'novamira-visual-' . $slug;
+        // Visual has always lowercased the host before stripping "www.".
+        return \novamira_build_mcp_server_name_default(
+            \strtolower($site['host']),
+            $site['port'],
+            $site['path'],
+            prefix: 'novamira-visual-',
+        );
     }
 
     private function get_workspace_url(): string
