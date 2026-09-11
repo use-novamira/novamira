@@ -380,8 +380,18 @@ function novamira_build_connector_install_link(string $mcp_url, string $connecto
  */
 function novamira_build_connector_display_name(string $site_name): string
 {
-    $site_name = trim($site_name);
+    $site_name = novamira_plain_site_name($site_name);
     return $site_name !== '' ? 'Novamira - ' . $site_name : 'Novamira';
+}
+
+/**
+ * Decode a WordPress site name for use in plain-text client metadata.
+ */
+function novamira_plain_site_name(string $site_name): string
+{
+    $site_name = html_entity_decode($site_name, flags: ENT_QUOTES | ENT_HTML5, encoding: 'UTF-8');
+    $trimmed = preg_replace(pattern: '/^(?:\s|\x{00A0})+|(?:\s|\x{00A0})+$/u', replacement: '', subject: $site_name);
+    return $trimmed ?? trim($site_name);
 }
 
 /**

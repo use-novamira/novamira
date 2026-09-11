@@ -47,6 +47,18 @@ final class ConnectorLinkTest extends TestCase
     public function testDisplayNameWithAndWithoutSiteName(): void
     {
         self::assertSame('Novamira - My Blog', novamira_build_connector_display_name('My Blog'));
+        self::assertSame('Novamira - A & B', novamira_build_connector_display_name('A &amp; B'));
         self::assertSame('Novamira', novamira_build_connector_display_name('   '));
+        self::assertSame('Novamira', novamira_build_connector_display_name('&nbsp;'));
+    }
+
+    public function testInvalidUtf8SiteNameFallsBackToByteSafeTrim(): void
+    {
+        $site_name = "Caf\xE9";
+
+        self::assertNotSame('', novamira_plain_site_name($site_name));
+        self::assertSame(trim($site_name), novamira_plain_site_name($site_name));
+        self::assertNotSame('Novamira', novamira_build_connector_display_name($site_name));
+        self::assertSame("ok\xC3", novamira_plain_site_name(" ok\xC3 "));
     }
 }
