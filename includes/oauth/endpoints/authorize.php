@@ -170,6 +170,30 @@ function handle(): void
 }
 
 /**
+ * `allowed_redirect_hosts` callback. wp_validate_redirect() seeds the list with the home_url() host
+ * only, but the authorize and consent pages are admin_url() addresses built from `siteurl`. When the
+ * two hosts differ, wp_safe_redirect() swaps the legacy /authorize hand-off, the consent redirect
+ * and wp-login.php's post-login return for its bare admin_url() fallback, dropping the query string
+ * that carries the authorization request. Adds the site's own admin host, read from configuration
+ * and never from the request; the list is returned unchanged when the host is already present.
+ */
+function allow_admin_host(mixed $hosts): mixed
+{
+    // Core seeds an array; leave whatever another filter returned in its place alone.
+    if (!is_array($hosts)) {
+        return $hosts;
+    }
+
+    $admin_host = (string) wp_parse_url(admin_url(), PHP_URL_HOST);
+    if ($admin_host === '' || in_array($admin_host, $hosts, strict: true)) {
+        return $hosts;
+    }
+
+    $hosts[] = $admin_host;
+    return $hosts;
+}
+
+/**
  * @param array{
  *     client_id: string,
  *     redirect_uri: string,

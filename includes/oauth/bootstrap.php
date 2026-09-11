@@ -164,6 +164,10 @@ function boot(): void
     // step authenticates with the wp-admin cookie, which works even where REST cookie auth
     // is disabled. See endpoints/authorize.php for the rationale.
     add_action('admin_menu', __NAMESPACE__ . '\\Endpoints\\Authorize\\register');
+    // Every page of the browser flow is an admin_url() address, which wp_safe_redirect() rejects
+    // when its host differs from home_url()'s. Registered site-wide, not around our own redirects,
+    // because wp-login.php performs the post-login return to the authorize page.
+    add_filter('allowed_redirect_hosts', __NAMESPACE__ . '\\Endpoints\\Authorize\\allow_admin_host');
 
     require_once __DIR__ . '/endpoints/token.php';
     add_action('rest_api_init', __NAMESPACE__ . '\\Endpoints\\Token\\register');
