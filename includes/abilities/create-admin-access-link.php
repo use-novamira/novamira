@@ -153,7 +153,7 @@ function novamira_create_admin_access_link(array $input = [])
             'curl -s -X POST -H "%s: $access_token" -H "%s: $access_nonce" %s',
             $token_header,
             $nonce_header,
-            escapeshellarg($exchange_url),
+            novamira_shell_quote($exchange_url),
         ),
     ];
 }

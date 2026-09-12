@@ -1,4 +1,5 @@
 Unreleased
+* Fix: Admin access and upload link abilities now return their curl examples when PHP disables `escapeshellarg`, instead of failing while formatting the response.
 * Fix: Troubleshoot now tells you who is redirecting an OAuth discovery URL. When the redirect comes from WordPress itself, the check points at the redirection, SEO or security plugin holding a rule for that path instead of sending you to hosting support, which cannot see or remove it.
 * Fix: Novamira Design tools are now available to AI clients that connect over the REST Abilities API, alongside the rest of Novamira's abilities.
 * Fix: Prevent an HTTP 500 when another plugin triggers Bearer authentication before WordPress creates its rewrite object on sites using pretty or index-based permalinks.

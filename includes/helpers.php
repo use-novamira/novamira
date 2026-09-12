@@ -14,6 +14,16 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Quote a value for display in a POSIX shell command.
+ *
+ * @internal Display only; never use to build a command that is executed. See novamira_build_wp_cli_shell_command().
+ */
+function novamira_shell_quote(string $value): string
+{
+    return "'" . str_replace(search: "'", replace: "'\\''", subject: $value) . "'";
+}
+
+/**
  * Resolve a filesystem path, ensuring it stays within the allowed base directory.
  *
  * @param string $path       The path to resolve. Relative paths are prepended with ABSPATH.
