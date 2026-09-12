@@ -221,14 +221,34 @@ final class CheckDiscoveryTest extends TestCase
     public function testRedirectOnRequiredFails(): void
     {
         $map = $this->valid_map();
-        $map[self::PR_APPEND] = [
-            'code' => 301,
-            'location' => 'https://example.test/',
-            'content-type' => 'text/html',
-            'body' => '',
-            'headers' => [],
-        ];
+        $map[self::PR_APPEND] = $this->redirect();
         self::assertSame('fail', $this->run_discovery($map));
+    }
+
+    public function testEdgeRedirectPointsAtHosting(): void
+    {
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = $this->redirect();
+        $result = $this->run_check($map);
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('redirected by the server', $result['message']);
+        self::assertStringContainsString('hosting support', $result['remedy']);
+    }
+
+    public function testWordPressRedirectPointsAtTheSiteNotHosting(): void
+    {
+        // wp_redirect() stamps X-Redirect-By, so the rule lives in a plugin on the site. Telling the
+        // owner to call hosting here sends them after a rule hosting cannot see.
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = $this->redirect(redirect_by: 'WordPress');
+        $result = $this->run_check($map);
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('from inside WordPress', $result['message']);
+        self::assertStringContainsString('WordPress"', $result['message']);
+        self::assertStringContainsString('redirect rules', $result['remedy']);
+        self::assertStringNotContainsString('hosting support', $result['remedy']);
     }
 
     public function testTransportErrorOnRequiredFails(): void
@@ -243,10 +263,38 @@ final class CheckDiscoveryTest extends TestCase
      */
     private function run_discovery(array $http): string
     {
+        return $this->run_check($http)['status'];
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $http
+     * @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+     */
+    private function run_check(array $http): array
+    {
         $GLOBALS['novamira_test_http'] = $http;
         $headers = [];
-        $result = check_discovery($headers);
-        return $result['status'];
+        return check_discovery($headers);
+    }
+
+    /**
+     * A redirect response, optionally carrying the X-Redirect-By header wp_redirect() stamps.
+     *
+     * @return array<string, mixed>
+     */
+    private function redirect(string $redirect_by = ''): array
+    {
+        $response = [
+            'code' => 301,
+            'location' => 'https://example.test/',
+            'content-type' => 'text/html',
+            'body' => '',
+            'headers' => [],
+        ];
+        if ($redirect_by !== '') {
+            $response['x-redirect-by'] = $redirect_by;
+        }
+        return $response;
     }
 
     /**

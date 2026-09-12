@@ -533,29 +533,7 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     }
     $code = (int) wp_remote_retrieve_response_code($response);
     if ($code >= 300 && $code < 400) {
-        $location = wp_remote_retrieve_header($response, header: 'location');
-        $location = is_string($location) && $location !== '' ? $location : __('another URL', domain: 'novamira');
-        return [
-            'ok' => false,
-            'failure' => fail(
-                'discovery',
-                $label,
-                sprintf(
-                    /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL */
-                    __(
-                        '%1$s is redirected by the server (HTTP %2$d to %3$s) instead of being answered. AI clients follow the redirect, receive a web page instead of the OAuth metadata, and sign-in fails with a registration error. This is typically a hosting-level rule on the /.well-known/ paths, not something WordPress controls.',
-                        domain: 'novamira',
-                    ),
-                    $probe['url'],
-                    $code,
-                    $location,
-                ),
-                __(
-                    'Ask your hosting support to let this path, including any subpath, pass through to WordPress ("proxy pass as dynamic"), then run these checks again.',
-                    domain: 'novamira',
-                ),
-            ),
-        ];
+        return ['ok' => false, 'failure' => discovery_redirect_failure($probe, $label, $code, $response)];
     }
     $media_type = discovery_media_type(wp_remote_retrieve_header($response, header: 'content-type'));
     // @mago-expect analysis:mixed-assignment
@@ -604,6 +582,69 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     }
     $headers = normalize_headers(wp_remote_retrieve_headers($response));
     return ['ok' => true, 'failure' => null];
+}
+
+/**
+ * Report a redirect on a discovery URL, naming the layer that produced it.
+ *
+ * `wp_redirect()` stamps `X-Redirect-By` on everything it sends, so its presence proves the
+ * redirect was decided by PHP inside this WordPress rather than by the web server, a CDN or a WAF.
+ * The distinction decides who can fix it: an edge rule needs hosting support, while a redirect
+ * plugin's rule is one the site owner removes themselves in wp-admin. Sending them to hosting for
+ * a rule hosting cannot see costs a support round-trip and leaves the site broken, so each case
+ * gets its own message and remedy.
+ *
+ * @param array{url: string, field: string, expected: string, requirement: string, group: string, label: string} $probe
+ * @param array<array-key, mixed> $response
+ * @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+ */
+function discovery_redirect_failure(array $probe, string $label, int $code, array $response): array
+{
+    $location = wp_remote_retrieve_header($response, header: 'location');
+    $location = is_string($location) && $location !== '' ? $location : __('another URL', domain: 'novamira');
+    $redirect_by = wp_remote_retrieve_header($response, header: 'x-redirect-by');
+    $redirect_by = is_string($redirect_by) ? trim($redirect_by) : '';
+
+    if ($redirect_by !== '') {
+        return fail(
+            'discovery',
+            $label,
+            sprintf(
+                /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL, 4: value of the X-Redirect-By header */
+                __(
+                    '%1$s is redirected from inside WordPress (HTTP %2$d to %3$s, sent by "%4$s") instead of being answered. AI clients follow the redirect, receive a web page instead of the OAuth metadata, and sign-in fails with a registration error. A plugin on this site is claiming this exact URL before Novamira can answer it — typically a redirection, SEO or security plugin, from a rule that was created while the path still returned 404.',
+                    domain: 'novamira',
+                ),
+                $probe['url'],
+                $code,
+                $location,
+                $redirect_by,
+            ),
+            __(
+                'Open the redirect rules of the redirection, SEO and security plugins on this site, delete any rule matching this path, and exclude /.well-known/ from their 404 handling and automatic redirects. Then run these checks again. Hosting cannot help with this one: a server, CDN or firewall rule would not carry an X-Redirect-By header.',
+                domain: 'novamira',
+            ),
+        );
+    }
+
+    return fail(
+        'discovery',
+        $label,
+        sprintf(
+            /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL */
+            __(
+                '%1$s is redirected by the server (HTTP %2$d to %3$s) instead of being answered. AI clients follow the redirect, receive a web page instead of the OAuth metadata, and sign-in fails with a registration error. The redirect is decided before WordPress runs, so it is typically a hosting-level rule on the /.well-known/ paths, not something WordPress controls.',
+                domain: 'novamira',
+            ),
+            $probe['url'],
+            $code,
+            $location,
+        ),
+        __(
+            'Ask your hosting support to let this path, including any subpath, pass through to WordPress ("proxy pass as dynamic"), then run these checks again.',
+            domain: 'novamira',
+        ),
+    );
 }
 
 /**
