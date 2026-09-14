@@ -573,7 +573,7 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
             novamira_build_oauth_bridge_configs($mcp_url, $mcp_name, $env)
             + [
                 'claude-ai' => novamira_oauth_cloud_only_notice('Claude.ai'),
-                'chatgpt' => novamira_oauth_cloud_only_notice('ChatGPT'),
+                'chatgpt' => novamira_oauth_cloud_only_notice('ChatGPT.com'),
             ]
         );
     }

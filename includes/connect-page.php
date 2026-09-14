@@ -487,7 +487,7 @@ function novamira_mcp_clients(): array
         'claude-code' => 'Claude Code',
         'claude-desktop' => 'Claude Desktop',
         'claude-ai' => 'Claude.ai',
-        'chatgpt' => 'ChatGPT',
+        'chatgpt' => 'ChatGPT.com',
         'codex-app' => 'Codex in ChatGPT Desktop',
         'codex-cli' => 'Codex CLI',
         'antigravity' => 'Antigravity',
