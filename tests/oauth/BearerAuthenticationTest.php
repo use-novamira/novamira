@@ -21,7 +21,63 @@ if (!function_exists('add_action')) {
 if (!function_exists('rest_url')) {
     function rest_url(string $path = ''): string
     {
+        if (($GLOBALS['novamira_test_rest_url_throws'] ?? false) === true) {
+            throw new RuntimeException('REST URL generation failed.');
+        }
         return 'https://example.test/wp-json/' . ltrim($path, characters: '/');
+    }
+}
+if (!function_exists('home_url')) {
+    function home_url(string $path = ''): string
+    {
+        return 'https://example.test' . $path;
+    }
+}
+if (!function_exists('get_option')) {
+    function get_option(string $name, mixed $default_value = false): mixed
+    {
+        return $GLOBALS['novamira_test_options'][$name] ?? $default_value;
+    }
+}
+if (!function_exists('is_multisite')) {
+    function is_multisite(): bool
+    {
+        return false;
+    }
+}
+if (!function_exists('wp_set_current_user')) {
+    function wp_set_current_user(int $user_id): int
+    {
+        $GLOBALS['novamira_test_current_user_id'] = $user_id;
+        return $user_id;
+    }
+}
+if (!class_exists('WP_Error')) {
+    class WP_Error
+    {
+        /** @param array<string, mixed> $data */
+        public function __construct(
+            private string $code = '',
+            private string $message = '',
+            private array $data = [],
+        ) {
+        }
+
+        public function get_error_code(): string
+        {
+            return $this->code;
+        }
+
+        public function get_error_message(): string
+        {
+            return $this->message;
+        }
+
+        /** @return array<string, mixed> */
+        public function get_error_data(): array
+        {
+            return $this->data;
+        }
     }
 }
 
@@ -41,6 +97,7 @@ use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../includes/oauth/bootstrap.php';
 require_once __DIR__ . '/../../includes/oauth/bridge.php';
+require_once __DIR__ . '/../../includes/oauth/endpoints/discovery.php';
 require_once __DIR__ . '/../../includes/oauth/repositories/access-token-repository.php';
 require_once __DIR__ . '/../../includes/oauth/middleware.php';
 
@@ -64,6 +121,8 @@ final class BearerAuthenticationTest extends TestCase
         $_SERVER['HTTPS'] = 'on';
         $_SERVER['HTTP_HOST'] = 'example.test';
         $_SERVER['REQUEST_URI'] = '/wp-json/wp-abilities/v1/abilities';
+        $GLOBALS['novamira_test_current_user_id'] = 0;
+        \Novamira\OAuth\Middleware\reset_request_context();
     }
 
     protected function tearDown(): void
@@ -73,7 +132,10 @@ final class BearerAuthenticationTest extends TestCase
             $_SERVER['HTTPS'],
             $_SERVER['HTTP_HOST'],
             $_SERVER['REQUEST_URI'],
+            $GLOBALS['novamira_test_current_user_id'],
+            $GLOBALS['novamira_test_rest_url_throws'],
         );
+        \Novamira\OAuth\Middleware\reset_request_context();
     }
 
     #[DataProvider('issuedScopeProvider')]
@@ -88,6 +150,52 @@ final class BearerAuthenticationTest extends TestCase
                 $this->resourceServer(revoked: false),
             ),
         );
+    }
+
+    public function testValidNovamiraTokenEstablishesItsSubjectIdentity(): void
+    {
+        $token = $this->accessToken(new \DateTimeImmutable('+1 hour'), ['mcp']);
+        $resolved = \Novamira\OAuth\Middleware\resolve_bearer_identity_using(
+            false,
+            'Bearer ' . $token,
+            fn(string $authorization): array => \Novamira\OAuth\Middleware\validate_bearer_credential(
+                $authorization,
+                $this->resourceServer(revoked: false),
+            ),
+        );
+
+        self::assertSame(73, $resolved);
+        self::assertSame(73, $GLOBALS['novamira_test_current_user_id']);
+        self::assertSame(
+            ['user_id' => 73, 'scopes' => ['mcp']],
+            \Novamira\OAuth\Middleware\request_oauth_identity(),
+        );
+        self::assertNull(\Novamira\OAuth\Middleware\reject_invalid_bearer(null));
+    }
+
+    public function testNovamiraShapedTokenWithInvalidSignatureIsRejected(): void
+    {
+        $token = $this->accessToken(new \DateTimeImmutable('+1 hour'), ['mcp']);
+        $parts = explode('.', $token);
+        self::assertCount(3, $parts);
+        $parts[2] = ($parts[2][0] === 'A' ? 'B' : 'A') . substr($parts[2], 1);
+
+        $resolved = \Novamira\OAuth\Middleware\resolve_bearer_identity_using(
+            false,
+            'Bearer ' . implode('.', $parts),
+            fn(string $authorization): array => \Novamira\OAuth\Middleware\validate_bearer_credential(
+                $authorization,
+                $this->resourceServer(revoked: false),
+            ),
+        );
+
+        self::assertFalse($resolved);
+        self::assertSame(0, $GLOBALS['novamira_test_current_user_id']);
+        self::assertNull(\Novamira\OAuth\Middleware\request_oauth_identity());
+        $error = \Novamira\OAuth\Middleware\reject_invalid_bearer(null);
+        self::assertInstanceOf(WP_Error::class, $error);
+        self::assertSame('rest_oauth_error', $error->get_error_code());
+        self::assertSame(401, $error->get_error_data()['status']);
     }
 
     /** @return iterable<string, array{list<string>}> */
