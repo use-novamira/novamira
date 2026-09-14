@@ -102,7 +102,9 @@ function novamira_delete_file($input)
     ]);
 
     if (in_array($real_resolved, $protected, strict: true)) {
-        return new WP_Error('protected_path', sprintf('Cannot delete protected WordPress directory: %s', $resolved));
+        return new WP_Error('protected_path', sprintf('Cannot delete protected WordPress directory: %s', $resolved), [
+            'status' => 403,
+        ]);
     }
 
     // Delete a file or symlink.
@@ -123,7 +125,7 @@ function novamira_delete_file($input)
         return novamira_delete_directory($resolved, $recursive);
     }
 
-    return new WP_Error('unknown_type', sprintf('Path is not a file or directory: %s', $resolved));
+    return new WP_Error('unknown_type', sprintf('Path is not a file or directory: %s', $resolved), ['status' => 400]);
 }
 
 /**
@@ -142,10 +144,11 @@ function novamira_delete_directory($resolved, $recursive)
     $is_empty = count($contents) <= 2;
 
     if (!$is_empty && !$recursive) {
-        return new WP_Error('directory_not_empty', sprintf(
-            'Directory is not empty. Set recursive=true to delete: %s',
-            $resolved,
-        ));
+        return new WP_Error(
+            'directory_not_empty',
+            sprintf('Directory is not empty. Set recursive=true to delete: %s', $resolved),
+            ['status' => 409],
+        );
     }
 
     if ($is_empty) {

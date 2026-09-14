@@ -78,7 +78,9 @@ function novamira_enable_legacy_sandbox_file(string $path): array|WP_Error|null
 
     $enabled_path = substr($legacy_path, offset: 0, length: -9);
     if (file_exists($enabled_path)) {
-        return new WP_Error('enabled_file_exists', sprintf('An enabled version already exists: %s', $enabled_path));
+        return new WP_Error('enabled_file_exists', sprintf('An enabled version already exists: %s', $enabled_path), [
+            'status' => 409,
+        ]);
     }
     if (!rename($legacy_path, $enabled_path)) {
         return new WP_Error('rename_failed', sprintf('Failed to enable legacy file: %s', $legacy_path));
@@ -127,7 +129,7 @@ function novamira_enable_file($input)
     }
 
     if (!is_file($resolved)) {
-        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved));
+        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved), ['status' => 400]);
     }
 
     $disabled_path = novamira_sandbox_disabled_marker_path($resolved);

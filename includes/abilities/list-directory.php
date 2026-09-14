@@ -117,8 +117,9 @@ function novamira_list_directory(array $input = [])
         return $resolved;
     }
 
+    // ABSPATH is a directory by construction, so only a caller-provided path can reach this refusal.
     if (!is_dir($resolved)) {
-        return new WP_Error('not_a_directory', sprintf('Path is not a directory: %s', $resolved));
+        return new WP_Error('not_a_directory', sprintf('Path is not a directory: %s', $resolved), ['status' => 400]);
     }
 
     if (!is_readable($resolved)) {

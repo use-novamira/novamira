@@ -86,7 +86,7 @@ function novamira_read_file($input)
     }
 
     if (!is_file($resolved)) {
-        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved));
+        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved), ['status' => 400]);
     }
 
     if (!is_readable($resolved)) {

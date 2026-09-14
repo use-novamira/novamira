@@ -115,11 +115,14 @@ function novamira_decode_write_content(string $content, string $encoding): strin
         return new WP_Error(
             'base64_not_supported',
             'novamira/write-file does not accept base64 or binary content. Use novamira/create-upload-link for ZIPs, plugins, themes, media, binary files, or other large uploads.',
+            ['status' => 400],
         );
     }
 
     if ($encoding !== 'utf-8') {
-        return new WP_Error('unsupported_encoding', 'novamira/write-file only accepts UTF-8 text content.');
+        return new WP_Error('unsupported_encoding', 'novamira/write-file only accepts UTF-8 text content.', [
+            'status' => 400,
+        ]);
     }
 
     return $content;
@@ -161,7 +164,9 @@ function novamira_write_file($input)
     $parent_dir = dirname($resolved);
 
     if (!is_dir($parent_dir) && !$create_directories) {
-        return new WP_Error('directory_not_found', sprintf('Parent directory does not exist: %s', $parent_dir));
+        return new WP_Error('directory_not_found', sprintf('Parent directory does not exist: %s', $parent_dir), [
+            'status' => 404,
+        ]);
     }
 
     $directories_created = novamira_ensure_parent_dir($parent_dir);
