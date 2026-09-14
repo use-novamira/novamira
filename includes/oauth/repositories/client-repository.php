@@ -46,6 +46,14 @@ final class ClientRepository implements ClientRepositoryInterface
     public const DEFAULT_GRANT_TYPES = ['authorization_code', 'refresh_token'];
 
     /**
+     * Registers a client and returns its identifier, or null when the row was not written.
+     *
+     * The caller must treat null as a failed registration: handing back an identifier the table
+     * never accepted leaves the client holding a client_id that no authorization request can
+     * resolve, and nothing on the site to show why. The database error is logged because only the
+     * server can see it — a clients table whose migration never applied its newest column refuses
+     * every insert here while the reads that do not name that column keep answering.
+     *
      * @param list<string> $redirect_uris
      * @param list<string>|null $grant_types
      */
@@ -56,12 +64,12 @@ final class ClientRepository implements ClientRepositoryInterface
         string $registered_by_ip,
         bool $admin_created = false,
         ?array $grant_types = null,
-    ): string {
+    ): ?string {
         // @mago-expect lint:no-global
         global $wpdb;
         /** @var \wpdb $wpdb */
         $client_id = bin2hex(random_bytes(16));
-        $wpdb->insert($wpdb->prefix . 'novamira_oauth_clients', [
+        $inserted = $wpdb->insert($wpdb->prefix . 'novamira_oauth_clients', [
             'client_id' => $client_id,
             'client_name' => $client_name,
             'redirect_uris' => wp_json_encode($redirect_uris),
@@ -73,6 +81,10 @@ final class ClientRepository implements ClientRepositoryInterface
             'admin_created' => $admin_created ? 1 : 0,
             'grant_types' => (string) wp_json_encode($grant_types ?? self::DEFAULT_GRANT_TYPES),
         ]);
+        if ($inserted !== 1) {
+            error_log(sprintf('Novamira OAuth: failed to store client %s. %s', $client_id, $wpdb->last_error));
+            return null;
+        }
         return $client_id;
     }
 

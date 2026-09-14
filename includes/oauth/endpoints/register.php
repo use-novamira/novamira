@@ -52,16 +52,13 @@ function is_self_test_request(WP_REST_Request $req): bool
  * is the whole point of the grant — so it registers without one, and having none is also what keeps
  * it out of the authorization-code flow.
  */
-function register_device_client(string $client_name, string $client_ip): WP_REST_Response
+function register_device_client(string $client_name, string $client_ip): WP_REST_Response|WP_Error
 {
     $grants = [\Novamira\OAuth\DEVICE_CODE_GRANT_TYPE, 'refresh_token'];
-    $client_id = (new ClientRepository())->create(
-        $client_name,
-        [],
-        $client_ip,
-        admin_created: false,
-        grant_types: $grants,
-    );
+    $client_id = store_client($client_name, [], $client_ip, $grants);
+    if ($client_id === null) {
+        return client_store_failure();
+    }
 
     return new WP_REST_Response([
         'client_id' => $client_id,
@@ -123,6 +120,57 @@ function registration_refusal(WP_REST_Request $req, string $client_ip): ?WP_Erro
     return null;
 }
 
+/**
+ * Stores a registered client, repairing the client store once if that is why the write failed.
+ *
+ * A clients table that lacks a column refuses every insert, and this is where that surfaces: the
+ * installer records its version even when its own ADD COLUMN was denied, so it does not retry on
+ * every request. So the repair runs here, on demand — additive only, see
+ * Schema\repair_missing_columns() — and the insert is retried exactly once, and only when the clients
+ * table was provably missing a column. A write that failed for any other reason is not retried, and
+ * nothing here loops.
+ *
+ * @param list<string> $redirect_uris
+ * @param list<string>|null $grant_types Null registers the default grants.
+ */
+function store_client(string $client_name, array $redirect_uris, string $client_ip, ?array $grant_types = null): ?string
+{
+    $clients = new ClientRepository();
+    $client_id = $clients->create($client_name, $redirect_uris, $client_ip, grant_types: $grant_types);
+    if ($client_id !== null) {
+        return $client_id;
+    }
+
+    // @mago-expect lint:no-global
+    global $wpdb;
+    /** @var \wpdb $wpdb */
+    $report = \Novamira\OAuth\Schema\repair_missing_columns($wpdb->prefix . 'novamira_oauth_');
+    if (!array_key_exists('clients', $report['missing'])) {
+        return null;
+    }
+
+    return $clients->create($client_name, $redirect_uris, $client_ip, grant_types: $grant_types);
+}
+
+/**
+ * The registration could not be stored.
+ *
+ * Answering 201 with an identifier the client store never accepted is worse than refusing: the
+ * client keeps a client_id that the very next authorization request cannot resolve, and the site
+ * reports nothing wrong. 500 says the failure is on this server, which is where it is.
+ */
+function client_store_failure(): WP_Error
+{
+    return new WP_Error(
+        'server_error',
+        __(
+            'The client could not be stored, so no registration was created. See the OAuth storage check on the Novamira Troubleshoot page, and the database error in the PHP error log.',
+            domain: 'novamira',
+        ),
+        ['status' => 500],
+    );
+}
+
 // @mago-expect lint:cyclomatic-complexity
 function handle(WP_REST_Request $req): WP_REST_Response|WP_Error
 {
@@ -173,7 +221,10 @@ function handle(WP_REST_Request $req): WP_REST_Response|WP_Error
     }
 
     $clean_uris = array_values(array_unique($clean_uris));
-    $client_id = (new ClientRepository())->create($client_name, $clean_uris, $client_ip);
+    $client_id = store_client($client_name, $clean_uris, $client_ip);
+    if ($client_id === null) {
+        return client_store_failure();
+    }
 
     return new WP_REST_Response([
         'client_id' => $client_id,
