@@ -79,11 +79,13 @@ function novamira_disable_file($input)
     }
 
     if (!is_file($resolved)) {
-        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved));
+        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved), ['status' => 400]);
     }
 
     if (strtolower(pathinfo($resolved, PATHINFO_EXTENSION)) !== 'php') {
-        return new WP_Error('not_a_php_file', sprintf('Only sandbox PHP files can be disabled: %s', $resolved));
+        return new WP_Error('not_a_php_file', sprintf('Only sandbox PHP files can be disabled: %s', $resolved), [
+            'status' => 400,
+        ]);
     }
 
     $disabled_path = novamira_sandbox_disabled_marker_path($resolved);
@@ -98,10 +100,11 @@ function novamira_disable_file($input)
     }
 
     if (file_exists($disabled_path)) {
-        return new WP_Error('disabled_marker_exists', sprintf(
-            'The disabled marker path is occupied: %s',
-            $disabled_path,
-        ));
+        return new WP_Error(
+            'disabled_marker_exists',
+            sprintf('The disabled marker path is occupied: %s', $disabled_path),
+            ['status' => 409],
+        );
     }
 
     if (!novamira_create_sandbox_disabled_marker($resolved)) {

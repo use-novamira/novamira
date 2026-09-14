@@ -127,6 +127,7 @@ function boot(): void
 
     require_once __DIR__ . '/schema.php';
     Schema\maybe_install();
+    Schema\schedule_gc();
 
     require_once __DIR__ . '/endpoints/discovery.php';
     Endpoints\Discovery\register();

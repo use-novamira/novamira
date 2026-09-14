@@ -151,12 +151,12 @@ function novamira_create_upload_link($input)
             sprintf(
                 'curl -X PUT -H "%s: $upload_token" --data-binary @/path/to/local-file %s',
                 $token_header,
-                escapeshellarg($upload_url),
+                novamira_shell_quote($upload_url),
             ),
             sprintf(
                 'curl -H "%s: $upload_token" -F file=@/path/to/local-file %s',
                 $token_header,
-                escapeshellarg($upload_url),
+                novamira_shell_quote($upload_url),
             ),
         ],
     ];

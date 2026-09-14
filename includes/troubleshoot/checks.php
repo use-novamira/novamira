@@ -188,9 +188,17 @@ function warn(
 }
 
 /** @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string} */
-function fail(string $id, string $label, string $message, string $remedy = ''): array
-{
-    return result($id, status: 'fail', label: $label, message: $message, remedy: $remedy);
+// Mirrors result(): one positional parameter per key of the fixed result shape.
+// @mago-expect lint:excessive-parameter-list
+function fail(
+    string $id,
+    string $label,
+    string $message,
+    string $remedy = '',
+    string $action = '',
+    string $copy = '',
+): array {
+    return result($id, status: 'fail', label: $label, message: $message, remedy: $remedy, action: $action, copy: $copy);
 }
 
 /** @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string} */
@@ -315,6 +323,178 @@ function schema_blocked_reason(): ?string
     return null;
 }
 
+/**
+ * The installer's own definition of a complete OAuth schema, loaded on demand.
+ *
+ * checks.php is loaded on every request; includes/oauth/schema.php is loaded by
+ * Novamira\OAuth\boot(), which returns before that when the abilities or transport gate is closed —
+ * exactly the sites this page is opened on. Loading it here keeps the required tables and columns a
+ * single source of truth rather than a copy that can drift from the CREATE TABLE statements.
+ *
+ * The file declares definitions and functions only. Its garbage-collection schedule is registered
+ * by boot() through Schema\schedule_gc(), so reading a definition from here cannot leave a
+ * scheduled event behind on a site whose OAuth endpoints are switched off.
+ */
+function require_schema_definition(): void
+{
+    if (function_exists('Novamira\\OAuth\\Schema\\required_columns')) {
+        return;
+    }
+    require_once dirname(__DIR__) . '/oauth/schema.php';
+}
+
+/**
+ * The storage result for an install whose six tables all exist.
+ *
+ * A table can exist and still be missing a column a later schema version added. Every insert that
+ * names the column is then refused while the reads that do not name it keep answering, so new
+ * clients cannot register while the ones already connected work — and a check that only counts
+ * table names calls that healthy. A table the database would not describe is not evidence of
+ * either: it is reported as unverified rather than as installed.
+ *
+ * @param array{missing: array<string, list<string>>, unreadable: list<string>} $report
+ * @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+ */
+function schema_columns_result(string $label, string $prefix, array $report): array
+{
+    if ($report['unreadable'] !== []) {
+        return fail(
+            'schema',
+            $label,
+            sprintf(
+                /* translators: %s: comma-separated list of database table names */
+                __(
+                    'The OAuth storage could not be verified: the database did not describe %s, so whether its columns are complete is unknown.',
+                    domain: 'novamira',
+                ),
+                implode(', ', $report['unreadable']),
+            ),
+            __(
+                'Look in the PHP error log for the database error behind it, then run these checks again. A database that answers again reports the storage as installed or names what is missing.',
+                domain: 'novamira',
+            ),
+        );
+    }
+    if ($report['missing'] === []) {
+        return ok('schema', $label, __('The OAuth tables are installed.', domain: 'novamira'));
+    }
+
+    $described = [];
+    foreach ($report['missing'] as $suffix => $columns) {
+        $described[] = $prefix . $suffix . ' (' . implode(', ', $columns) . ')';
+    }
+    // Which step breaks depends on the table: a clients table that cannot take the row refuses the
+    // registration itself, while any other incomplete table lets registration through and fails at
+    // the step that writes to it. The reason a broken connection has to be made again differs the
+    // same way.
+    $clients_incomplete = array_key_exists('clients', $report['missing']);
+    $symptom = $clients_incomplete
+        ? __(
+            'No AI client can register on this site, while clients that connected before those columns were added keep working.',
+            domain: 'novamira',
+        )
+        : __(
+            'Registering an AI client still succeeds, but the sign-in step that writes to the incomplete table fails, so the connection cannot complete.',
+            domain: 'novamira',
+        );
+    $reconnect = $clients_incomplete
+        ? __(
+            'a client ID handed out while the table was incomplete was never stored, so that connection cannot recover on its own.',
+            domain: 'novamira',
+        )
+        : __('a sign-in that failed part-way does not resume on its own.', domain: 'novamira');
+
+    return fail(
+        'schema',
+        $label,
+        sprintf(
+            /* translators: 1: list of database tables, each followed by the columns it is missing; 2: which step fails */
+            __('The OAuth tables are installed but incomplete: %1$s. %2$s', domain: 'novamira'),
+            implode('; ', $described),
+            $symptom,
+        ),
+        sprintf(
+            /* translators: %s: why an AI connection made while the storage was incomplete has to be made again */
+            __(
+                'Novamira could not add the missing column(s), which usually means the WordPress database user may not ALTER tables. 1. Send the message below to your hosting support: it contains the exact SQL that adds the missing column(s), or it asks them to grant the ALTER privilege to the WordPress database user instead. 2. Once they have done either, run these checks again: SQL they ran takes effect immediately, and with ALTER granted this check adds the columns itself. 3. Once this check passes, remove the AI connector from your AI client and add it again: %s',
+                domain: 'novamira',
+            ),
+            $reconnect,
+        ),
+        copy: schema_repair_request($prefix, $report['missing']),
+    );
+}
+
+/**
+ * The statements that add the columns an incomplete install is missing, one per column.
+ *
+ * Built from the installer's own definitions — Schema\table_definitions() through
+ * Schema\declared_column(), assembled by Schema\add_column_statement() — and never written out
+ * here, so what an administrator hands to a host is exactly what Novamira would have run itself and
+ * cannot drift from it. A column its statement does not declare gets no statement rather than a
+ * guessed one.
+ *
+ * @param array<string, list<string>> $missing Table suffix => the required columns it does not have.
+ * @return list<string>
+ */
+function schema_repair_statements(string $prefix, array $missing): array
+{
+    $definitions = \Novamira\OAuth\Schema\table_definitions($prefix);
+    $statements = [];
+    foreach ($missing as $suffix => $columns) {
+        if (!array_key_exists($suffix, $definitions)) {
+            continue;
+        }
+        foreach ($columns as $column) {
+            $declared = \Novamira\OAuth\Schema\declared_column($definitions[$suffix], $column);
+            if ($declared === null) {
+                continue;
+            }
+            $statements[] = \Novamira\OAuth\Schema\add_column_statement($prefix . $suffix, $declared) . ';';
+        }
+    }
+
+    return $statements;
+}
+
+/**
+ * A message ready to send to hosting support for an incomplete OAuth storage: what is
+ * wrong in plain terms, the exact statements that repair it, and the alternative of granting ALTER
+ * so Novamira repairs it itself. The same pattern as the bot-filter check's support message.
+ *
+ * @param array<string, list<string>> $missing Table suffix => the required columns it does not have.
+ */
+function schema_repair_request(string $prefix, array $missing): string
+{
+    $paragraphs = [
+        sprintf(
+            /* translators: %s: site URL */
+            __(
+                'Hello, my WordPress site %s runs Novamira, a plugin that lets AI clients (Claude, ChatGPT and similar services) connect to the site through OAuth. Some of its database tables are missing columns, because the WordPress database user was not allowed to ALTER them, so AI clients cannot finish connecting.',
+                domain: 'novamira',
+            ),
+            home_url(),
+        ),
+    ];
+    $statements = schema_repair_statements($prefix, $missing);
+    if ($statements === []) {
+        $paragraphs[] = __(
+            'Could you grant the ALTER privilege on the WordPress database to the WordPress database user? Novamira then adds the missing columns itself the next time an AI client registers or its Troubleshoot checks run. Thank you.',
+            domain: 'novamira',
+        );
+        return implode("\n\n", $paragraphs);
+    }
+
+    $paragraphs[] = __('Could you run these statements on the WordPress database?', domain: 'novamira');
+    $paragraphs[] = implode("\n", $statements);
+    $paragraphs[] = __(
+        'Alternatively, grant the ALTER privilege on the WordPress database to the WordPress database user: Novamira then adds the missing columns itself the next time an AI client registers or its Troubleshoot checks run. Thank you.',
+        domain: 'novamira',
+    );
+
+    return implode("\n\n", $paragraphs);
+}
+
 /** @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string} */
 function check_schema(): array
 {
@@ -322,25 +502,17 @@ function check_schema(): array
     // @mago-expect lint:no-global
     global $wpdb;
     /** @var \wpdb $wpdb */
+    require_schema_definition();
     $prefix = $wpdb->prefix . 'novamira_oauth_';
-    $tables = array_map(static fn(string $suffix): string => $prefix . $suffix, [
-        'clients',
-        'pending_authorizations',
-        'auth_codes',
-        'access_tokens',
-        'device_codes',
-        'refresh_tokens',
-    ]);
-    $all_installed = true;
-    foreach ($tables as $table) {
-        $sql = $wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($table));
-        if (!is_string($sql) || $wpdb->get_var($sql) !== $table) {
-            $all_installed = false;
-            break;
+    if (\Novamira\OAuth\Schema\tables_installed($prefix)) {
+        // A column the installer could not add is added here if the database now allows it — this
+        // page runs for administrators only, and the repair can only add columns. The report is
+        // taken again afterwards so the result describes the storage as it is now, not as it was.
+        $report = \Novamira\OAuth\Schema\repair_missing_columns($prefix);
+        if ($report['missing'] !== []) {
+            $report = \Novamira\OAuth\Schema\column_report($prefix);
         }
-    }
-    if ($all_installed) {
-        return ok('schema', $label, __('The OAuth tables are installed.', domain: 'novamira'));
+        return schema_columns_result($label, $prefix, $report);
     }
     $blocked_reason = schema_blocked_reason();
     if ($blocked_reason !== null) {
@@ -533,29 +705,7 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     }
     $code = (int) wp_remote_retrieve_response_code($response);
     if ($code >= 300 && $code < 400) {
-        $location = wp_remote_retrieve_header($response, header: 'location');
-        $location = is_string($location) && $location !== '' ? $location : __('another URL', domain: 'novamira');
-        return [
-            'ok' => false,
-            'failure' => fail(
-                'discovery',
-                $label,
-                sprintf(
-                    /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL */
-                    __(
-                        '%1$s is redirected by the server (HTTP %2$d to %3$s) instead of being answered. AI clients follow the redirect, receive a web page instead of the OAuth metadata, and sign-in fails with a registration error. This is typically a hosting-level rule on the /.well-known/ paths, not something WordPress controls.',
-                        domain: 'novamira',
-                    ),
-                    $probe['url'],
-                    $code,
-                    $location,
-                ),
-                __(
-                    'Ask your hosting support to let this path, including any subpath, pass through to WordPress ("proxy pass as dynamic"), then run these checks again.',
-                    domain: 'novamira',
-                ),
-            ),
-        ];
+        return ['ok' => false, 'failure' => discovery_redirect_failure($probe, $label, $code, $response)];
     }
     $media_type = discovery_media_type(wp_remote_retrieve_header($response, header: 'content-type'));
     // @mago-expect analysis:mixed-assignment
@@ -604,6 +754,69 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     }
     $headers = normalize_headers(wp_remote_retrieve_headers($response));
     return ['ok' => true, 'failure' => null];
+}
+
+/**
+ * Report a redirect on a discovery URL, naming the layer that produced it.
+ *
+ * `wp_redirect()` stamps `X-Redirect-By` on everything it sends, so its presence proves the
+ * redirect was decided by PHP inside this WordPress rather than by the web server, a CDN or a WAF.
+ * The distinction decides who can fix it: an edge rule needs hosting support, while a redirect
+ * plugin's rule is one the site owner removes themselves in wp-admin. Sending them to hosting for
+ * a rule hosting cannot see costs a support round-trip and leaves the site broken, so each case
+ * gets its own message and remedy.
+ *
+ * @param array{url: string, field: string, expected: string, requirement: string, group: string, label: string} $probe
+ * @param array<array-key, mixed> $response
+ * @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+ */
+function discovery_redirect_failure(array $probe, string $label, int $code, array $response): array
+{
+    $location = wp_remote_retrieve_header($response, header: 'location');
+    $location = is_string($location) && $location !== '' ? $location : __('another URL', domain: 'novamira');
+    $redirect_by = wp_remote_retrieve_header($response, header: 'x-redirect-by');
+    $redirect_by = is_string($redirect_by) ? trim($redirect_by) : '';
+
+    if ($redirect_by !== '') {
+        return fail(
+            'discovery',
+            $label,
+            sprintf(
+                /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL, 4: value of the X-Redirect-By header */
+                __(
+                    '%1$s is redirected from inside WordPress (HTTP %2$d to %3$s, sent by "%4$s") instead of being answered. AI clients follow the redirect, receive a web page instead of the OAuth metadata, and sign-in fails with a registration error. A plugin on this site is claiming this exact URL before Novamira can answer it — typically a redirection, SEO or security plugin, from a rule that was created while the path still returned 404.',
+                    domain: 'novamira',
+                ),
+                $probe['url'],
+                $code,
+                $location,
+                $redirect_by,
+            ),
+            __(
+                'Open the redirect rules of the redirection, SEO and security plugins on this site, delete any rule matching this path, and exclude /.well-known/ from their 404 handling and automatic redirects. Then run these checks again. Hosting cannot help with this one: a server, CDN or firewall rule would not carry an X-Redirect-By header.',
+                domain: 'novamira',
+            ),
+        );
+    }
+
+    return fail(
+        'discovery',
+        $label,
+        sprintf(
+            /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL */
+            __(
+                '%1$s is redirected by the server (HTTP %2$d to %3$s) instead of being answered. AI clients follow the redirect, receive a web page instead of the OAuth metadata, and sign-in fails with a registration error. The redirect is decided before WordPress runs, so it is typically a hosting-level rule on the /.well-known/ paths, not something WordPress controls.',
+                domain: 'novamira',
+            ),
+            $probe['url'],
+            $code,
+            $location,
+        ),
+        __(
+            'Ask your hosting support to let this path, including any subpath, pass through to WordPress ("proxy pass as dynamic"), then run these checks again.',
+            domain: 'novamira',
+        ),
+    );
 }
 
 /**
@@ -670,12 +883,38 @@ function check_registration(): array
     // @mago-expect analysis:mixed-assignment
     $body = json_decode(wp_remote_retrieve_body($response), associative: true);
     if ($code === 201 && is_array($body) && is_string($body['client_id'] ?? null)) {
-        (new ClientRepository())->revoke($body['client_id']);
+        $client_id = $body['client_id'];
+        $clients = new ClientRepository();
+        // 201 says the endpoint was reached, not that the client exists: a clients table that
+        // refuses the insert produces a registration for a client_id the next authorization
+        // request cannot resolve, and this check used to call that a success. Read it back, then
+        // delete it either way so the probe leaves nothing behind even when the row is partial.
+        try {
+            $stored = client_is_stored($clients, $client_id);
+        } finally {
+            // The probe must not leave a client behind on any exit, including one this read throws:
+            // a storage layer that fails mid-read is exactly when a forgotten row would stay.
+            $clients->revoke($client_id);
+        }
+        if (!$stored) {
+            return fail(
+                'registration',
+                $label,
+                __(
+                    'The registration endpoint answered HTTP 201, but the client it reported is not in the OAuth storage: the write to the clients table failed. An AI client registers, then fails to sign in because the site does not know its client ID.',
+                    domain: 'novamira',
+                ),
+                __(
+                    'See the "OAuth storage" check above for an incomplete table (its message for your host contains the exact SQL), and the PHP error log for the database error the write hit. Once storage is fixed, run these checks again, then remove the AI connector from your AI client and add it again: the client ID it was given was never stored, so the old connection cannot recover.',
+                    domain: 'novamira',
+                ),
+            );
+        }
         return ok(
             'registration',
             $label,
             __(
-                'A test registration succeeded (the test client was deleted right away). If an AI client still cannot register, the block is between that client and this site — typically a firewall or bot filter on datacenter IPs — or its attempts exhausted the per-address limits; see the registration-error symptom below.',
+                'A test registration succeeded and the client was read back from storage (the test client was deleted right away). If an AI client still cannot register, the block is between that client and this site — typically a firewall or bot filter on datacenter IPs — or its attempts exhausted the per-address limits; see the registration-error symptom below.',
                 domain: 'novamira',
             ),
         );
@@ -695,6 +934,25 @@ function check_registration(): array
             action: 'registration',
         );
     }
+    // A registration that could not be stored now answers 500, so the generic diagnosis below —
+    // which names an intercepted request — would be a cause this check has not established. A 500
+    // does not establish one either way: it can come from the registration code or from a layer
+    // answering in its place, so both are named and neither is asserted.
+    if ($code === 500) {
+        return fail(
+            'registration',
+            $label,
+            __(
+                'The registration endpoint answered HTTP 500. Either the registration ran and could not store the client, or a security plugin, firewall or the server answered for it — this check cannot tell which from the status alone.',
+                domain: 'novamira',
+            ),
+            __(
+                'Look at the "OAuth storage" check above: an incomplete table there is the cause (its message for your host contains the exact SQL), and the PHP error log carries the database error behind it. If storage is reported as installed, allow anonymous POST requests to /wp-json/novamira/v1/oauth/register. Once storage is fixed and this check passes, remove the AI connector from your AI client and add it again, so it registers afresh instead of reusing a registration that failed.',
+                domain: 'novamira',
+            ),
+        );
+    }
+
     return fail(
         'registration',
         $label,
@@ -711,6 +969,35 @@ function check_registration(): array
             domain: 'novamira',
         ),
     );
+}
+
+/**
+ * How many times the registration probe looks for the client it has just registered, and how long
+ * it waits between attempts.
+ *
+ * The registration happened in a separate HTTP request, which wrote; this request reads. Where
+ * reads are answered by a replica, that replica can be a moment behind the write, and one missed
+ * read is not evidence that the write failed — telling a working site that its storage is broken is
+ * the same class of defect as the false success this check exists to catch. A healthy site pays for
+ * the first read only.
+ */
+const STORE_READ_BACK_ATTEMPTS = 3;
+
+const STORE_READ_BACK_WAIT = 250_000;
+
+/** Whether the registered client can be read back from the store, allowing for a lagging replica. */
+function client_is_stored(ClientRepository $clients, string $client_id): bool
+{
+    for ($attempt = 1; $attempt <= STORE_READ_BACK_ATTEMPTS; $attempt++) {
+        if ($clients->getClientEntity($client_id) !== null) {
+            return true;
+        }
+        if ($attempt < STORE_READ_BACK_ATTEMPTS) {
+            usleep(STORE_READ_BACK_WAIT);
+        }
+    }
+
+    return false;
 }
 
 /**

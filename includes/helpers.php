@@ -14,6 +14,16 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Quote a value for display in a POSIX shell command.
+ *
+ * @internal Display only; never use to build a command that is executed. See novamira_build_wp_cli_shell_command().
+ */
+function novamira_shell_quote(string $value): string
+{
+    return "'" . str_replace(search: "'", replace: "'\\''", subject: $value) . "'";
+}
+
+/**
  * Resolve a filesystem path, ensuring it stays within the allowed base directory.
  *
  * @param string $path       The path to resolve. Relative paths are prepended with ABSPATH.
@@ -55,11 +65,15 @@ function novamira_resolve_path($path, $must_exist = false)
         }
 
         if (!novamira_path_is_within_directory($resolved, $real_base)) {
-            return new WP_Error('path_outside_base', sprintf(
-                __('Path "%s" is outside the allowed base directory "%s".', domain: 'novamira'),
-                $resolved,
-                $real_base,
-            ));
+            return new WP_Error(
+                'path_outside_base',
+                sprintf(
+                    __('Path "%s" is outside the allowed base directory "%s".', domain: 'novamira'),
+                    $resolved,
+                    $real_base,
+                ),
+                ['status' => 403],
+            );
         }
     }
 
@@ -314,11 +328,15 @@ function novamira_validate_sandbox_path($resolved)
     }
 
     if (!novamira_path_is_child_of_directory($real_resolved, $real_sandbox)) {
-        return new WP_Error('outside_sandbox', sprintf(
-            /* translators: %s: sandbox directory path */
-            __('Only files inside the sandbox (%s) can be modified.', domain: 'novamira'),
-            $sandbox_dir,
-        ));
+        return new WP_Error(
+            'outside_sandbox',
+            sprintf(
+                /* translators: %s: sandbox directory path */
+                __('Only files inside the sandbox (%s) can be modified.', domain: 'novamira'),
+                $sandbox_dir,
+            ),
+            ['status' => 403],
+        );
     }
 
     return true;
@@ -340,19 +358,23 @@ function novamira_check_php_sandbox(string $resolved): bool|WP_Error
     $real_sandbox = realpath($sandbox_dir);
     $parent_dir = realpath(dirname($resolved));
 
-    // If sandbox doesn't exist yet, compare normalized paths.
+    // Canonicalize the nearest existing ancestor so it matches the resolved candidate path.
     if ($real_sandbox === false) {
-        $real_sandbox = rtrim(string: $sandbox_dir, characters: '/\\');
+        $real_sandbox = novamira_normalize_missing_path(rtrim(string: $sandbox_dir, characters: '/\\'));
     }
     if ($parent_dir === false) {
         $parent_dir = dirname($resolved);
     }
 
     if (!novamira_path_is_within_directory($parent_dir, $real_sandbox)) {
-        return new WP_Error('php_sandbox_required', sprintf(
-            'PHP files and PHP execution control files can only be written to the sandbox directory: %s. Use a path like "wp-content/novamira-sandbox/my-feature.php".',
-            $sandbox_dir,
-        ));
+        return new WP_Error(
+            'php_sandbox_required',
+            sprintf(
+                'PHP files and PHP execution control files can only be written to the sandbox directory: %s. Use a path like "wp-content/novamira-sandbox/my-feature.php".',
+                $sandbox_dir,
+            ),
+            ['status' => 403],
+        );
     }
 
     return true;
@@ -409,7 +431,9 @@ function novamira_reject_final_path_symlink(string $resolved): bool|WP_Error
         return true;
     }
 
-    return new WP_Error('symlink_write_rejected', sprintf('Refusing to write through symlink path: %s', $resolved));
+    return new WP_Error('symlink_write_rejected', sprintf('Refusing to write through symlink path: %s', $resolved), [
+        'status' => 403,
+    ]);
 }
 
 /**

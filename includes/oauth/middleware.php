@@ -78,12 +78,12 @@ function resolve_bearer_identity_using(mixed $user, string $auth, \Closure $vali
     if (!has_bearer_scheme($auth)) {
         return $user;
     }
-    if (!has_bearer_authorization($auth)) {
-        record_authentication_error('Malformed OAuth Bearer credential.');
-        return $user;
-    }
 
     try {
+        if (!is_novamira_bearer_credential($auth)) {
+            return $user;
+        }
+
         $identity = $validator(normalize_bearer_authorization($auth));
         $user_id = $identity['user_id'];
         if ($user_id <= 0) {
@@ -196,7 +196,7 @@ function authorize_routed_request(mixed $result, mixed $handler, WP_REST_Request
  */
 function challenge_unauthenticated(mixed $result, mixed $handler, WP_REST_Request $request): mixed
 {
-    if ($result !== null || get_current_user_id() > 0 || has_bearer_scheme(get_authorization_header())) {
+    if ($result !== null || get_current_user_id() > 0) {
         return $result;
     }
 
@@ -360,6 +360,82 @@ function normalize_bearer_authorization(string $auth): string
         return $auth;
     }
     return 'Bearer ' . $matches[1];
+}
+
+/**
+ * Decide whether an unverified credential has the invariant shape of a Novamira access token.
+ *
+ * AccessTokenEntity always emits a three-part JWT and encodes its audience as the exact resource
+ * identifier. League also accepts that single audience in array form. This check only selects the
+ * responsible authenticator; the resource server still verifies every security property before the
+ * credential can establish an identity.
+ */
+function is_novamira_bearer_credential(string $auth): bool
+{
+    $matches = [];
+    if (preg_match('/^\s*Bearer\s+([^\s.]+)\.([^\s.]+)\.([^\s.]+)\s*$/i', $auth, $matches) !== 1) {
+        return false;
+    }
+
+    $header = decode_jwt_object($matches[1]);
+    $payload = decode_jwt_object($matches[2]);
+    $signature = decode_base64url($matches[3]);
+    $audience = null;
+    if (is_string($payload['aud'] ?? null)) {
+        $audience = $payload['aud'];
+    }
+    if (
+        $audience === null
+        && is_array($payload['aud'] ?? null)
+        && count($payload['aud']) === 1
+        && is_string($payload['aud'][0] ?? null)
+    ) {
+        $audience = $payload['aud'][0];
+    }
+
+    return (
+        $header !== null
+        && $payload !== null
+        && $signature !== null
+        && $audience === \Novamira\OAuth\resource_identifier()
+    );
+}
+
+/** @return array<array-key, mixed>|null */
+function decode_jwt_object(string $encoded): ?array
+{
+    $json = decode_base64url($encoded);
+    if ($json === null) {
+        return null;
+    }
+
+    try {
+        // @mago-expect analysis:mixed-assignment
+        $decoded = json_decode($json, flags: JSON_THROW_ON_ERROR);
+    } catch (\JsonException) {
+        return null;
+    }
+
+    return $decoded instanceof \stdClass ? get_object_vars($decoded) : null;
+}
+
+function decode_base64url(string $encoded): ?string
+{
+    if ($encoded === '' || preg_match('/^[A-Za-z0-9_-]+$/D', $encoded) !== 1) {
+        return null;
+    }
+
+    $remainder = strlen($encoded) % 4;
+    if ($remainder === 1) {
+        return null;
+    }
+
+    $decoded = base64_decode(
+        strtr(string: $encoded, from: '-_', to: '+/') . str_repeat(string: '=', times: (4 - $remainder) % 4),
+        strict: true,
+    );
+
+    return is_string($decoded) && $decoded !== '' ? $decoded : null;
 }
 
 /** @return list<string> */

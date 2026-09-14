@@ -114,7 +114,7 @@ function novamira_edit_file($input)
     }
 
     if (!is_file($resolved)) {
-        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved));
+        return new WP_Error('not_a_file', sprintf('Path is not a file: %s', $resolved), ['status' => 400]);
     }
 
     $sandbox_error = novamira_check_php_execution_sandbox($resolved);
@@ -131,7 +131,7 @@ function novamira_edit_file($input)
     $replace_all = ($input['replace_all'] ?? false) === true;
 
     if ($old_string === $new_string) {
-        return new WP_Error('no_change', 'old_string and new_string are identical. No edit needed.');
+        return new WP_Error('no_change', 'old_string and new_string are identical. No edit needed.', ['status' => 400]);
     }
 
     $content = file_get_contents($resolved);
@@ -145,14 +145,19 @@ function novamira_edit_file($input)
         return new WP_Error(
             'no_match',
             'old_string was not found in the file. Make sure it matches the file content exactly, including whitespace and indentation.',
+            ['status' => 400],
         );
     }
 
     if ($count > 1 && !$replace_all) {
-        return new WP_Error('multiple_matches', sprintf(
-            'old_string was found %d times in the file. Include more surrounding context to make it unique, or set replace_all to true.',
-            $count,
-        ));
+        return new WP_Error(
+            'multiple_matches',
+            sprintf(
+                'old_string was found %d times in the file. Include more surrounding context to make it unique, or set replace_all to true.',
+                $count,
+            ),
+            ['status' => 400],
+        );
     }
 
     $new_content = $replace_all
