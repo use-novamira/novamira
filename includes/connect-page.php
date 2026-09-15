@@ -488,8 +488,9 @@ function novamira_mcp_clients(): array
         'claude-desktop' => 'Claude Desktop',
         'claude-ai' => 'Claude.ai',
         'chatgpt' => 'ChatGPT.com',
-        'grok' => 'Grok.com',
         'codex-app' => 'Codex in ChatGPT Desktop',
+        'grok' => 'Grok.com',
+        'grok-bot' => 'Grok Bot',
         'codex-cli' => 'Codex CLI',
         'antigravity' => 'Antigravity',
         'antigravity-cli' => 'Antigravity CLI',
@@ -2328,6 +2329,10 @@ function novamira_build_configs(string $rest_url, string $username, string $disp
             ],
             'isShell' => false,
         ],
+        // Grok Bot has no config file of its own: it reads the prompt above and connects itself,
+        // so there is no manual snippet to show (the "Manual configuration" section stays hidden
+        // for it, see novamiraSetClient() on the Configuration page).
+        'grok-bot' => ['code' => '', 'hint' => '', 'paths' => [], 'isShell' => false],
     ];
 
     return array_merge(novamira_build_standard_configs($mcp_servers_json, $vscode_servers_json), $special);
@@ -2807,14 +2812,17 @@ function novamira_render_config_section(string $rest_url, string $username, stri
             if (mergeNote) { mergeNote.style.display = cfg.isShell ? 'none' : ''; }
 
             var isDesktop = client === 'claude-desktop';
+            var noManualConfig = client === 'grok-bot';
             var mcpbEl = document.getElementById('novamira-mcpb-download');
             if (mcpbEl) { mcpbEl.style.display = isDesktop ? '' : 'none'; }
             var pasteBlock = document.getElementById('novamira-paste-block');
             if (pasteBlock) { pasteBlock.style.display = isDesktop ? 'none' : ''; }
             var pwNotice = document.getElementById('novamira-prompt-password-notice');
-            if (pwNotice) { pwNotice.style.display = isDesktop ? 'none' : ''; }
+            // The notice's only purpose is to point at the manual config as a privacy-preserving
+            // alternative; a client with none (Grok Bot has no config file) has nothing to point at.
+            if (pwNotice) { pwNotice.style.display = isDesktop || noManualConfig ? 'none' : ''; }
             var manualBtnWrap = document.getElementById('novamira-manual-btn-wrap');
-            if (manualBtnWrap) { manualBtnWrap.style.display = ''; }
+            if (manualBtnWrap) { manualBtnWrap.style.display = noManualConfig ? 'none' : ''; }
             var npxlessToggle = document.getElementById('novamira-npxless-toggle');
             if (npxlessToggle) {
                 var showNpxless = client === 'claude-code' || client === 'codex-app' || client === 'codex-cli';

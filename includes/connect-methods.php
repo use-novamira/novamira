@@ -565,6 +565,42 @@ function novamira_oauth_grok_steps(string $mcp_name, string $mcp_url): array
 }
 
 /**
+ * One-line instruction that an agentic client with its own connector UI can carry out on its own,
+ * instead of a step-by-step form walkthrough.
+ */
+function novamira_oauth_agent_add_prompt(string $mcp_name, string $mcp_url): string
+{
+    return sprintf(
+        /* translators: 1: MCP server name, 2: OAuth server URL */
+        __('Add this WordPress site as a remote MCP server over OAuth, named "%1$s": %2$s', domain: 'novamira'),
+        $mcp_name,
+        $mcp_url,
+    );
+}
+
+/**
+ * Prompt for Grok Bot, xAI's agentic assistant with its own cloud browser, filesystem, and
+ * terminal. Unlike grok.com's chat, which needs the custom-connector form, Grok Bot can carry out
+ * the equivalent setup from a single instruction. Cloud-only like grok.com, so this is offered
+ * only on a publicly reachable site (see novamira_build_oauth_configs()).
+ *
+ * @return list<array<string, string>>
+ */
+function novamira_oauth_grok_bot_steps(string $mcp_name, string $mcp_url): array
+{
+    return [
+        [
+            'title' => __('Paste this into the chat', domain: 'novamira'),
+            'body' => __(
+                'Grok Bot can add a remote MCP connector and sign in with OAuth from a single instruction.',
+                domain: 'novamira',
+            ),
+            'copy' => novamira_oauth_agent_add_prompt($mcp_name, $mcp_url),
+        ],
+    ];
+}
+
+/**
  * A message-only client entry: no config, just an explanation. Used for a cloud client on a local
  * site, where the client's servers cannot reach the site so no working config exists.
  *
@@ -594,8 +630,8 @@ function novamira_oauth_cloud_only_notice(string $client_label): array
  * uses the bridge (which also carries the self-signed TLS bypass). Browser-only cloud clients
  * receive an explanatory notice because they cannot reach a local URL.
  *
- * ChatGPT and Grok are cloud-only like Claude.ai but always kept in the list: publicly they get
- * their own custom-connector steps, locally a notice explaining they need a public site.
+ * ChatGPT, Grok, and Grok Bot are cloud-only like Claude.ai but always kept in the list: publicly
+ * they get their own connector steps, locally a notice explaining they need a public site.
  *
  * @return array<string, array<string, mixed>>
  */
@@ -611,6 +647,7 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
                 'claude-ai' => novamira_oauth_cloud_only_notice('Claude.ai'),
                 'chatgpt' => novamira_oauth_cloud_only_notice('ChatGPT.com'),
                 'grok' => novamira_oauth_cloud_only_notice('Grok.com'),
+                'grok-bot' => novamira_oauth_cloud_only_notice('Grok Bot'),
             ]
         );
     }
@@ -624,6 +661,14 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
                 'paths' => [],
                 'isShell' => false,
                 'steps' => novamira_oauth_chatgpt_steps($mcp_name, $mcp_url),
+            ],
+            'grok-bot' => [
+                'kind' => 'code',
+                'code' => '',
+                'hint' => '',
+                'paths' => [],
+                'isShell' => false,
+                'steps' => novamira_oauth_grok_bot_steps($mcp_name, $mcp_url),
             ],
             'grok' => [
                 'kind' => 'code',
