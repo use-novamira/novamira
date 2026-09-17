@@ -1,3 +1,6 @@
+Unreleased
+* Fix: The OAuth sign-in addresses answer as not found while AI Abilities are off, and page caches no longer keep that answer: enabling the abilities now takes effect immediately, instead of requiring the cache to be emptied by hand.
+
 v1.12.4 - 2026/09/15
 * New: Grok.com and Grok Bot support. Connect grok.com with OAuth sign-in through a custom connector, or hand Grok Bot a short prompt with the server details and let it set up the OAuth or application password connection on its own.
 * Fix: Admin access and upload link abilities now return their curl examples when PHP disables `escapeshellarg`, instead of failing while formatting the response.

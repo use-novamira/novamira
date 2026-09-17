@@ -256,6 +256,8 @@ require_once __DIR__ . '/includes/upload-link.php';
 require_once __DIR__ . '/includes/admin-access-link.php';
 require_once __DIR__ . '/includes/skills/bootstrap.php';
 require_once __DIR__ . '/includes/oauth/bootstrap.php';
+require_once __DIR__ . '/includes/cache-purge.php';
+\Novamira\CachePurge\register();
 require_once __DIR__ . '/includes/troubleshoot/bootstrap.php';
 require_once __DIR__ . '/includes/instructions-admin.php';
 
