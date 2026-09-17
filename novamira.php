@@ -229,6 +229,8 @@ require_once __DIR__ . '/includes/chat-schema.php';
 
 register_activation_hook(__FILE__, callback: 'novamira_chat_schema_install');
 register_deactivation_hook(__FILE__, callback: 'novamira_unschedule_gutenberg_cron');
+register_activation_hook(__FILE__, callback: 'novamira_schedule_specializations_refresh');
+register_deactivation_hook(__FILE__, callback: 'novamira_unschedule_specializations_refresh');
 add_action('admin_notices', callback: 'novamira_render_mcp_dependency_notice');
 add_action('network_admin_notices', callback: 'novamira_render_mcp_dependency_notice');
 add_action('rest_api_init', callback: 'novamira_register_missing_mcp_endpoint', priority: 999);
@@ -248,6 +250,7 @@ require_once __DIR__ . '/includes/oauth/connections.php';
 add_action('admin_menu', callback: static function (): void {
     \Novamira\OAuth\Connections\register();
 });
+require_once __DIR__ . '/includes/specializations.php';
 require_once __DIR__ . '/includes/pro-upsell.php';
 require_once __DIR__ . '/includes/upload-link.php';
 require_once __DIR__ . '/includes/admin-access-link.php';

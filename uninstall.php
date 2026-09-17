@@ -69,9 +69,12 @@ function novamira_uninstall_current_site(array $plan): void
     }
 
     delete_option('novamira_feature_preferences');
+    // Cache of the specializations Pro publishes: never user data, always removed.
+    delete_option('novamira_specializations');
 
     wp_clear_scheduled_hook('novamira_oauth_gc');
     wp_clear_scheduled_hook('novamira_gutenberg_cleanup');
+    wp_clear_scheduled_hook('novamira_specializations_refresh');
 }
 
 function novamira_uninstall_post_type(string $post_type): void

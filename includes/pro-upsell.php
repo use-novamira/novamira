@@ -29,132 +29,41 @@ function novamira_pro_is_active(): bool
 }
 
 /**
- * Third-party plugins and themes that Novamira Pro ships dedicated
- * specializations and skills for. Drives the personalized upsell copy: any of
- * these that is active on the site gets named explicitly.
+ * Labels of the specializations whose plugin or theme is active on this site,
+ * in published order.
  *
- * The `category` keys group entries for the generic fallback copy; see
- * novamira_pro_integration_groups().
- *
- * Each entry declares one of `constant` / `class` / `function`; presence of that symbol means the
- * plugin or theme is active (see novamira_pro_integration_active()).
- *
- * @return list<array{label: string, category: string, constant?: string, class?: string, function?: string}>
- */
-// @mago-expect lint:halstead
-function novamira_pro_integration_catalog(): array
-{
-    return [
-        // Page builders, themes, and block libraries.
-        ['label' => 'Elementor', 'category' => 'builder', 'constant' => 'ELEMENTOR_VERSION'],
-        ['label' => 'Bricks Builder', 'category' => 'builder', 'constant' => 'BRICKS_VERSION'],
-        ['label' => 'Bricksforge', 'category' => 'builder', 'constant' => 'BRICKSFORGE_VERSION'],
-        ['label' => 'Divi 5', 'category' => 'builder', 'constant' => 'ET_BUILDER_VERSION'],
-        ['label' => 'WPBakery Page Builder', 'category' => 'builder', 'constant' => 'WPB_VC_VERSION'],
-        ['label' => 'Breakdance', 'category' => 'builder', 'function' => 'Breakdance\\Data\\get_global_option'],
-        ['label' => 'Mosaic', 'category' => 'builder', 'class' => 'Mosaic\\Database\\MosaicDB'],
-        ['label' => 'Etch', 'category' => 'builder', 'class' => 'Etch\\Plugin'],
-        ['label' => 'Beaver Builder', 'category' => 'builder', 'class' => 'FLBuilderModel'],
-        ['label' => 'GeneratePress', 'category' => 'builder', 'function' => 'generate_get_option'],
-        ['label' => 'GenerateBlocks', 'category' => 'builder', 'constant' => 'GENERATEBLOCKS_VERSION'],
-        ['label' => 'Kadence', 'category' => 'builder', 'class' => 'Kadence\\Theme'],
-        ['label' => 'Kadence Blocks', 'category' => 'builder', 'constant' => 'KADENCE_BLOCKS_VERSION'],
-        // Custom fields and content modeling.
-        ['label' => 'Advanced Custom Fields', 'category' => 'content', 'class' => 'ACF'],
-        ['label' => 'JetEngine', 'category' => 'content', 'function' => 'jet_engine'],
-        ['label' => 'Meta Box', 'category' => 'content', 'constant' => 'RWMB_VER'],
-        ['label' => 'Pods', 'category' => 'content', 'constant' => 'PODS_VERSION'],
-        ['label' => 'ACPT', 'category' => 'content', 'constant' => 'ACPT_PLUGIN_VERSION'],
-        ['label' => 'ASE', 'category' => 'content', 'constant' => 'ASENHA_VERSION'],
-        // SEO.
-        ['label' => 'Yoast SEO', 'category' => 'seo', 'constant' => 'WPSEO_VERSION'],
-        ['label' => 'Rank Math SEO', 'category' => 'seo', 'constant' => 'RANK_MATH_VERSION'],
-        ['label' => 'All in One SEO', 'category' => 'seo', 'constant' => 'AIOSEO_VERSION'],
-        ['label' => 'SeoPress', 'category' => 'seo', 'constant' => 'SEOPRESS_VERSION'],
-        // Forms.
-        ['label' => 'Contact Form 7', 'category' => 'forms', 'constant' => 'WPCF7_VERSION'],
-        ['label' => 'WPForms', 'category' => 'forms', 'constant' => 'WPFORMS_VERSION'],
-        ['label' => 'Gravity Forms', 'category' => 'forms', 'class' => 'GFForms'],
-        ['label' => 'Fluent Forms', 'category' => 'forms', 'constant' => 'FLUENTFORM_VERSION'],
-        ['label' => 'Formidable Forms', 'category' => 'forms', 'class' => 'FrmAppHelper'],
-        ['label' => 'Ninja Forms', 'category' => 'forms', 'class' => 'Ninja_Forms'],
-        // Commerce, dev tools, dynamic content.
-        ['label' => 'WooCommerce', 'category' => 'commerce', 'class' => 'WooCommerce'],
-        ['label' => 'Code Snippets', 'category' => 'dev', 'constant' => 'CODE_SNIPPETS_VERSION'],
-        ['label' => 'Dynamic Shortcodes', 'category' => 'dynamic', 'constant' => 'DYNAMIC_SHORTCODES_VERSION'],
-    ];
-}
-
-/**
- * Whether the integration's plugin or theme is active, detected by the presence of the constant,
- * class, or function its catalog entry declares.
- *
- * @param array{label: string, category: string, constant?: string, class?: string, function?: string} $integration
- */
-function novamira_pro_integration_active(array $integration): bool
-{
-    $constant = $integration['constant'] ?? '';
-    $class = $integration['class'] ?? '';
-    $function = $integration['function'] ?? '';
-
-    return (
-        $constant !== ''
-        && defined($constant)
-        || $class !== ''
-        && class_exists($class)
-        || $function !== ''
-        && function_exists($function)
-    );
-}
-
-/**
- * Labels of catalog integrations whose plugin or theme is active on this site,
- * in catalog order.
+ * The list itself is not kept here: it is generated from the Pro manifest and
+ * published with every Pro release (see includes/specializations.php), so this
+ * plugin cannot fall behind the specializations Pro actually ships.
  *
  * @return list<string>
  */
 function novamira_pro_active_integrations(): array
 {
+    $folders = novamira_active_folders();
+
     $active = [];
-    foreach (novamira_pro_integration_catalog() as $integration) {
-        if (!novamira_pro_integration_active($integration)) {
+    foreach (novamira_specializations() as $specialization) {
+        if (!novamira_specialization_is_active($specialization, $folders)) {
             continue;
         }
-        $active[] = $integration['label'];
+        $active[] = $specialization['label'];
     }
     return $active;
 }
 
 /**
- * Short, category-level summary of what Pro specializes in, for the generic (no-match) copy:
- * e.g. "page builders, custom fields plugins, SEO plugins, form plugins, and more". Kept brief so
- * the fallback blurb never enumerates all the integrations; the single-entry categories
- * (WooCommerce, Code Snippets, Dynamic Shortcodes) and future specializations fall under "more".
+ * The generic (no-match) copy: what Pro specializes in, said in groups rather
+ * than by naming forty-odd products. Deliberately a plain sentence — the
+ * published list always contains every group, so deriving this from it would
+ * compute the same string every time.
  */
 function novamira_pro_integration_groups(): string
 {
-    $group_labels = [
-        'builder' => __('page builders', domain: 'novamira'),
-        'content' => __('custom fields plugins', domain: 'novamira'),
-        'seo' => __('SEO plugins', domain: 'novamira'),
-        'forms' => __('form plugins', domain: 'novamira'),
-    ];
-
-    $present = [];
-    foreach (novamira_pro_integration_catalog() as $integration) {
-        $present[$integration['category']] = true;
-    }
-
-    $names = [];
-    foreach ($group_labels as $category => $label) {
-        if (!($present[$category] ?? false)) {
-            continue;
-        }
-        $names[] = $label;
-    }
-    $names[] = __('more', domain: 'novamira');
-
-    return wp_sprintf('%l', $names);
+    return __(
+        'page builders, themes and block libraries, custom fields plugins, SEO plugins, form plugins, and more',
+        domain: 'novamira',
+    );
 }
 
 /**
