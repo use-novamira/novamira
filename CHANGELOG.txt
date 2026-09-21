@@ -1,3 +1,6 @@
+Unreleased
+* Tweak: The sandbox safe mode notice now explains in plain words what happened and includes a ready-to-paste prompt for your AI to fix the problem, with a link to the Sandbox page for those who prefer to do it by hand.
+
 v1.12.5 - 2026/09/18
 * Fix: The OAuth sign-in addresses answer as not found while AI Abilities are off, and page caches no longer keep that answer: enabling the abilities now takes effect immediately, instead of requiring the cache to be emptied by hand.
 * Minor Fixes

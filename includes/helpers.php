@@ -1379,3 +1379,45 @@ function novamira_render_admin_header(
         </div>
     </div>
     <?php }
+
+/**
+ * Prompt a site owner can paste into their AI client to get out of sandbox safe mode.
+ */
+function novamira_sandbox_safe_mode_prompt(): string
+{
+    return 'Novamira is in safe mode: a sandbox file caused a fatal error. Read the error details in wp-content/novamira-sandbox/.crashed, fix the file, then delete .crashed to exit safe mode and confirm the site works.';
+}
+
+/**
+ * Body of the safe-mode notice, shared by the dashboard-wide notice and the Sandbox page.
+ */
+function novamira_sandbox_safe_mode_notice_html(): string
+{
+    return sprintf(
+        '<p>%s</p><p>%s</p><p><code>%s</code></p>',
+        esc_html__(
+            'A file written by your AI in the sandbox caused a fatal error, so all sandbox files are paused to keep the site working.',
+            domain: 'novamira',
+        ),
+        esc_html__('The easiest fix is to send this to your AI:', domain: 'novamira'),
+        esc_html(novamira_sandbox_safe_mode_prompt()),
+    );
+}
+
+/**
+ * Closing line of the dashboard-wide safe-mode notice, pointing at the Sandbox page.
+ */
+function novamira_sandbox_safe_mode_notice_link_html(): string
+{
+    $link = sprintf(
+        '<a href="%s">%s</a>',
+        esc_url(admin_url('admin.php?page=novamira-sandbox')),
+        esc_html__('Sandbox page', domain: 'novamira'),
+    );
+
+    return sprintf('<p>%s</p>', sprintf(
+        /* translators: %s: link to the Sandbox admin page */
+        esc_html__('You can also review the files and exit safe mode from the %s.', domain: 'novamira'),
+        $link,
+    ));
+}

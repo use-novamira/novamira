@@ -571,13 +571,8 @@ function novamira_render_sandbox_page(): void
 
         <?php if ($is_crashed): ?>
             <div class="notice notice-error">
-                <p>
-                    <strong><?php esc_html_e('Safe mode is active.', domain: 'novamira'); ?></strong>
-                    <?php esc_html_e(
-                        'A sandbox file caused a fatal error on a previous request. All sandbox files are suspended until you fix or delete the broken file and exit safe mode.',
-                        domain: 'novamira',
-                    ); ?>
-                </p>
+                <p><strong><?php esc_html_e('Safe mode is active.', domain: 'novamira'); ?></strong></p>
+                <?php echo wp_kses_post(novamira_sandbox_safe_mode_notice_html()); ?>
                 <p>
                     <?php
 

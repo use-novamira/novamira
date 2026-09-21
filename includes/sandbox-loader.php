@@ -141,16 +141,15 @@ function novamira_sandbox_crash_handler(string $crashed_file, ?string $current_s
         if (file_exists($crashed_file)) {
             wp_admin_notice(
                 sprintf(
-                    '<strong>%s</strong> %s',
-                    esc_html__('Novamira Sandbox: Safe mode is active.', domain: 'novamira'),
-                    esc_html__(
-                        'A sandbox plugin caused a fatal error. All sandbox plugins are disabled. Fix or delete the broken plugin, then delete wp-content/novamira-sandbox/.crashed to resume.',
-                        domain: 'novamira',
-                    ),
+                    '<p><strong>%s</strong></p>%s%s',
+                    esc_html__('Novamira Sandbox: safe mode is active.', domain: 'novamira'),
+                    novamira_sandbox_safe_mode_notice_html(),
+                    novamira_sandbox_safe_mode_notice_link_html(),
                 ),
                 [
                     'type' => 'error',
                     'dismissible' => false,
+                    'paragraph_wrap' => false,
                 ],
             );
         }
