@@ -711,6 +711,10 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     // @mago-expect analysis:mixed-assignment
     $body = json_decode(wp_remote_retrieve_body($response), associative: true);
     if ($code !== 200 || $media_type !== 'application/json' || !is_array($body)) {
+        $htaccess_failure = well_known_htaccess_failure($probe, $label, $code);
+        if ($htaccess_failure !== null) {
+            return ['ok' => false, 'failure' => $htaccess_failure];
+        }
         return [
             'ok' => false,
             'failure' => fail(
@@ -754,6 +758,51 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     }
     $headers = normalize_headers(wp_remote_retrieve_headers($response));
     return ['ok' => true, 'failure' => null];
+}
+
+/**
+ * Report a discovery URL swallowed by a physical `.well-known/` directory that carries its own
+ * `.htaccess`.
+ *
+ * Hosts that validate SSL certificates or Cloudflare custom hostnames often create `.well-known/`
+ * as a real directory in the document root. When that directory also holds an `.htaccess` with
+ * `RewriteEngine On`, Apache stops inheriting the root rewrite rules inside it, so every request
+ * under `/.well-known/` is answered by Apache alone (404 for a file that does not exist) and never
+ * reaches `index.php`. The generic "cache or firewall" remedy sends the site owner to the wrong
+ * party: the fix is a one-line passthrough in that same `.htaccess`, which is what the copyable
+ * snippet carries.
+ *
+ * @param array{url: string, field: string, expected: string, requirement: string, group: string, label: string} $probe
+ * @return ?array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+ */
+function well_known_htaccess_failure(array $probe, string $label, int $code): ?array
+{
+    $htaccess = ABSPATH . '.well-known/.htaccess';
+    if (!is_file($htaccess)) {
+        return null;
+    }
+    $home_path = rtrim((string) parse_url(home_url(), PHP_URL_PATH), characters: '/');
+    return fail(
+        'discovery',
+        $label,
+        sprintf(
+            /* translators: 1: discovery URL, 2: HTTP status code, 3: path of the .htaccess file */
+            __(
+                '%1$s answered HTTP %2$d. This site has a real .well-known directory with its own .htaccess file (%3$s). Apache does not apply the WordPress rewrite rules inside a directory that carries its own .htaccess, so requests under /.well-known/ are answered by the web server directly and never reach WordPress. AI clients cannot find the sign-in endpoints.',
+                domain: 'novamira',
+            ),
+            $probe['url'],
+            $code,
+            $htaccess,
+        ),
+        __(
+            'Add the lines below to that .htaccess file (via FTP or the hosting file manager), keeping everything already in it, then run these checks again. The rule only forwards the OAuth discovery URLs to WordPress; certificate validation files in the same directory keep being served as they are.',
+            domain: 'novamira',
+        ),
+        copy: "RewriteEngine On\nRewriteRule ^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$ "
+        . $home_path
+        . "/index.php [L]\n",
+    );
 }
 
 /**
