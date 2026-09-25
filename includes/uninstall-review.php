@@ -31,12 +31,9 @@ function novamira_clear_uninstall_plan(): void
 
 function novamira_register_uninstall_review_page(): void
 {
-    add_submenu_page(
-        parent_slug: '',
-        page_title: __('Before deactivating Novamira', domain: 'novamira'),
-        menu_title: '',
-        capability: novamira_manage_capability(),
-        menu_slug: NOVAMIRA_UNINSTALL_PAGE_SLUG,
+    novamira_add_hidden_admin_page(
+        __('Before deactivating Novamira', domain: 'novamira'),
+        NOVAMIRA_UNINSTALL_PAGE_SLUG,
         callback: 'novamira_render_uninstall_review_page',
     );
 }

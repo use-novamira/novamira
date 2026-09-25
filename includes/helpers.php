@@ -814,6 +814,35 @@ function novamira_manage_capability(): string
 }
 
 /**
+ * Register an admin page that has no menu entry, reachable only via admin.php?page={slug}.
+ *
+ * WordPress cannot derive the title of a page registered without a parent, so the page title is
+ * set on the load hook, which fires before the admin header is sent.
+ *
+ * @return string|false The page hook, or false when the current user lacks the capability.
+ */
+function novamira_add_hidden_admin_page(string $page_title, string $menu_slug, callable $callback): string|false
+{
+    $hook = add_submenu_page(
+        parent_slug: '',
+        page_title: $page_title,
+        menu_title: '',
+        capability: novamira_manage_capability(),
+        menu_slug: $menu_slug,
+        callback: $callback,
+    );
+    if (is_string($hook) && $hook !== '') {
+        add_action('load-' . $hook, static function () use ($page_title): void {
+            // @mago-expect lint:no-global -- $title is the global admin-header.php reads.
+            global $title;
+            $title = $page_title;
+        });
+    }
+
+    return $hook;
+}
+
+/**
  * Whether an Application Password belongs to Novamira.
  *
  * @param array<string, mixed> $password Application Password record.

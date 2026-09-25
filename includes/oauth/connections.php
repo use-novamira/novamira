@@ -48,13 +48,10 @@ function format_utc_datetime(string $value): string
 
 function register(): void
 {
-    $hook = add_submenu_page(
-        parent_slug: '',
-        page_title: __('Manage Connections', domain: 'novamira'),
-        menu_title: '',
-        capability: \novamira_manage_capability(),
-        menu_slug: PAGE_SLUG,
-        callback: __NAMESPACE__ . '\\render',
+    $hook = \novamira_add_hidden_admin_page(
+        __('Manage Connections', domain: 'novamira'),
+        PAGE_SLUG,
+        __NAMESPACE__ . '\\render',
     );
 
     // The Revoke POST must redirect back before any admin HTML is sent. The page callback runs

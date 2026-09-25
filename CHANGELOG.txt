@@ -1,6 +1,7 @@
 Unreleased
 * Tweak: The sandbox safe mode notice now explains in plain words what happened and includes a ready-to-paste prompt for your AI to fix the problem, with a link to the Sandbox page for those who prefer to do it by hand.
 * Fix: Troubleshoot now recognizes when a real .well-known directory with its own .htaccess file keeps the OAuth discovery addresses from reaching WordPress, and shows the rewrite rule to add to that file, where it previously pointed at caches and firewalls.
+* Fix: The Deactivate review page, Manage Connections and the OAuth approval screens now carry their own title, so sites that display PHP notices no longer show a strip_tags() deprecation from wp-admin/admin-header.php at the top of those pages, and the browser tab shows the page name.
 
 v1.12.5 - 2026/09/18
 * Fix: The OAuth sign-in addresses answer as not found while AI Abilities are off, and page caches no longer keep that answer: enabling the abilities now takes effect immediately, instead of requiring the cache to be emptied by hand.

@@ -30,14 +30,7 @@ const PAGE_SLUG = 'novamira-oauth-authorize';
  */
 function register(): void
 {
-    $hook = add_submenu_page(
-        parent_slug: '',
-        page_title: 'Authorize Application',
-        menu_title: '',
-        capability: \novamira_manage_capability(),
-        menu_slug: PAGE_SLUG,
-        callback: __NAMESPACE__ . '\\render',
-    );
+    $hook = \novamira_add_hidden_admin_page('Authorize Application', PAGE_SLUG, __NAMESPACE__ . '\\render');
     if (is_string($hook) && $hook !== '') {
         add_action('load-' . $hook, __NAMESPACE__ . '\\handle');
     }

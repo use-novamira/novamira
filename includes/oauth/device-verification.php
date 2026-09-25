@@ -32,14 +32,7 @@ if (!defined('ABSPATH')) {
  */
 function register(): void
 {
-    $hook = add_submenu_page(
-        parent_slug: '',
-        page_title: 'Authorize Device',
-        menu_title: '',
-        capability: \novamira_manage_capability(),
-        menu_slug: Device\PAGE_SLUG,
-        callback: __NAMESPACE__ . '\\render',
-    );
+    $hook = \novamira_add_hidden_admin_page('Authorize Device', Device\PAGE_SLUG, __NAMESPACE__ . '\\render');
 
     // Approve/Deny redirects, so it must run before the admin header is sent. See consent.php.
     if (is_string($hook) && $hook !== '') {
