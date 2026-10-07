@@ -305,8 +305,5 @@ function is_discovery_path(string $path): bool
 {
     $paths = Discovery\discovery_paths(home_url(), \Novamira\OAuth\resource_identifier());
 
-    return (
-        in_array($path, $paths['protected_resource'], strict: true)
-        || in_array($path, $paths['authorization_server'], strict: true)
-    );
+    return Discovery\document_for_path($path, $paths) !== null;
 }

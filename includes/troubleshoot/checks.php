@@ -848,6 +848,29 @@ function discovery_redirect_failure(array $probe, string $label, int $code, arra
         );
     }
 
+    if (is_trailing_slash_redirect($probe['url'], $location)) {
+        $home_path = rtrim((string) parse_url(home_url(), PHP_URL_PATH), characters: '/');
+        return fail(
+            'discovery',
+            $label,
+            sprintf(
+                /* translators: 1: discovery URL, 2: HTTP status code, 3: redirect target URL */
+                __(
+                    '%1$s is redirected by the server (HTTP %2$d to %3$s), which adds a trailing slash to the URL. Novamira answers both forms, so clients that follow the redirect still work, but a client that does not follow it cannot find the sign-in endpoints. The redirect is decided before WordPress runs, so it is a server rule, not something a plugin on this site controls.',
+                    domain: 'novamira',
+                ),
+                $probe['url'],
+                $code,
+                $location,
+            ),
+            __(
+                'Exclude /.well-known/ from the trailing slash rule of the server. On Apache, add the line below directly above the RewriteRule that adds the slash, in the .htaccess file (via FTP or the hosting file manager): the condition applies only to the rule that follows it. If the slash comes from nginx or a hosting setting, ask your hosting support to exclude /.well-known/ from it. Then run these checks again.',
+                domain: 'novamira',
+            ),
+            copy: 'RewriteCond %{REQUEST_URI} !^' . preg_quote($home_path, delimiter: '#') . '/\.well-known/' . "\n",
+        );
+    }
+
     return fail(
         'discovery',
         $label,
@@ -866,6 +889,22 @@ function discovery_redirect_failure(array $probe, string $label, int $code, arra
             domain: 'novamira',
         ),
     );
+}
+
+/**
+ * Whether a redirect only adds a trailing slash to the probed URL: same host (or a relative
+ * Location) and the same path plus "/". The Location header may be absolute or relative.
+ */
+function is_trailing_slash_redirect(string $url, string $location): bool
+{
+    $from = parse_url($url);
+    $to = parse_url($location);
+    if (!is_array($from) || !is_array($to) || !isset($from['path'], $to['path'])) {
+        return false;
+    }
+    $same_host = !isset($to['host']) || strcasecmp($to['host'], $from['host'] ?? '') === 0;
+
+    return $same_host && $to['path'] === $from['path'] . '/';
 }
 
 /**

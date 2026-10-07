@@ -1,5 +1,6 @@
 Unreleased
 * Fix: The Claude Desktop bundle now installs on Windows when the site title contains characters such as | or :, which are replaced with a hyphen in the connector name.
+* Fix: The OAuth discovery addresses now also answer when a server adds a trailing slash to them, where they previously returned a page not found. Troubleshoot recognizes that redirect and shows the line to add to .htaccess, instead of pointing at hosting support.
 
 v1.12.7 - 2026/10/01
 * Tweak: Novamira Design now tells AI agents when a design is active as soon as they connect, so they read it before starting visual work.

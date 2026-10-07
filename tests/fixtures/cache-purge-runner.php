@@ -25,6 +25,7 @@ declare(strict_types=1);
  * - early-write:         the option changes before `plugins_loaded`, when caches have not hooked yet.
  * - discovery-request:   a request for a discovery path, with abilities off (nothing serves it).
  * - subdirectory-request: the same, on an install living under a path.
+ * - trailing-slash-request: the same path as discovery-request, with the trailing slash a server may add.
  * - unrelated-request:   a request for another path.
  *
  * Usage: php cache-purge-runner.php <plugin-root> <scenario>
@@ -39,6 +40,7 @@ namespace {
         'early-write',
         'discovery-request',
         'subdirectory-request',
+        'trailing-slash-request',
         'unrelated-request',
     ];
 
@@ -225,6 +227,10 @@ namespace {
             break;
         case 'subdirectory-request':
             $_SERVER['REQUEST_URI'] = '/subsite/.well-known/openid-configuration';
+            do_action('init');
+            break;
+        case 'trailing-slash-request':
+            $_SERVER['REQUEST_URI'] = '/.well-known/oauth-protected-resource/';
             do_action('init');
             break;
         case 'unrelated-request':

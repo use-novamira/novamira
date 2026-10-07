@@ -251,6 +251,59 @@ final class CheckDiscoveryTest extends TestCase
         self::assertStringNotContainsString('hosting support', $result['remedy']);
     }
 
+    public function testServerTrailingSlashRedirectGetsItsOwnDiagnosis(): void
+    {
+        // The server adds a trailing slash before WordPress runs. The site owner can fix that with a
+        // one-line exclusion, so sending them to hosting support is the wrong remedy.
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = $this->redirect(location: self::PR_APPEND . '/');
+        $result = $this->run_check($map);
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('trailing slash', $result['message']);
+        self::assertStringContainsString('.well-known', $result['remedy']);
+        self::assertSame("RewriteCond %{REQUEST_URI} !^/\\.well-known/\n", $result['copy']);
+    }
+
+    public function testRelativeTrailingSlashLocationIsRecognized(): void
+    {
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = $this->redirect(location: '/.well-known/oauth-protected-resource/');
+        $result = $this->run_check($map);
+
+        self::assertStringContainsString('trailing slash', $result['message']);
+    }
+
+    public function testTrailingSlashExclusionCarriesTheSubdirectory(): void
+    {
+        $GLOBALS['novamira_test_home'] = 'https://example.test/subsite';
+        $url = 'https://example.test/subsite/.well-known/oauth-protected-resource';
+        $result = $this->run_check([$url => $this->redirect(location: $url . '/')]);
+
+        self::assertSame("RewriteCond %{REQUEST_URI} !^/subsite/\\.well-known/\n", $result['copy']);
+    }
+
+    public function testRedirectToAnotherPathIsNotMistakenForATrailingSlash(): void
+    {
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = $this->redirect(location: self::PR_APPEND . '/other/');
+        $result = $this->run_check($map);
+
+        self::assertStringContainsString('redirected by the server', $result['message']);
+        self::assertStringContainsString('hosting support', $result['remedy']);
+        self::assertSame('', $result['copy']);
+    }
+
+    public function testTrailingSlashRedirectFromWordPressStillBlamesThePlugin(): void
+    {
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = $this->redirect(redirect_by: 'WordPress', location: self::PR_APPEND . '/');
+        $result = $this->run_check($map);
+
+        self::assertStringContainsString('from inside WordPress', $result['message']);
+        self::assertSame('', $result['copy']);
+    }
+
     public function testTransportErrorOnRequiredFails(): void
     {
         $map = $this->valid_map();
@@ -282,11 +335,11 @@ final class CheckDiscoveryTest extends TestCase
      *
      * @return array<string, mixed>
      */
-    private function redirect(string $redirect_by = ''): array
+    private function redirect(string $redirect_by = '', string $location = 'https://example.test/'): array
     {
         $response = [
             'code' => 301,
-            'location' => 'https://example.test/',
+            'location' => $location,
             'content-type' => 'text/html',
             'body' => '',
             'headers' => [],

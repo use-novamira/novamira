@@ -119,6 +119,14 @@ final class CachePurgeTest extends TestCase
         self::assertSame(['Cache-Control: no-store, max-age=0'], $result['headers']);
     }
 
+    public function testDiscoveryRequestsWithATrailingSlashAreKeptOutOfPageCaches(): void
+    {
+        $result = $this->runScenario('trailing-slash-request');
+
+        self::assertTrue($result['donotcachepage']);
+        self::assertSame(['Cache-Control: no-store, max-age=0'], $result['headers']);
+    }
+
     public function testOtherRequestsKeepTheirCaching(): void
     {
         $result = $this->runScenario('unrelated-request');

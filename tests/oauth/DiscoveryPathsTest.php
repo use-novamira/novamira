@@ -4,6 +4,7 @@
 
 declare(strict_types=1);
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 if (!defined('ABSPATH')) {
@@ -13,6 +14,7 @@ if (!defined('ABSPATH')) {
 require_once __DIR__ . '/../../includes/oauth/endpoints/discovery.php';
 
 use function Novamira\OAuth\Endpoints\Discovery\discovery_paths;
+use function Novamira\OAuth\Endpoints\Discovery\document_for_path;
 use function Novamira\OAuth\Endpoints\Discovery\discovery_probes;
 
 final class DiscoveryPathsTest extends TestCase
@@ -88,6 +90,45 @@ final class DiscoveryPathsTest extends TestCase
             '/subsite/.well-known/oauth-protected-resource/extra',
             $paths['protected_resource'],
         );
+    }
+
+    #[DataProvider('requestPaths')]
+    public function testResolvesTheDocumentAPathAsksFor(string $path, ?string $expected): void
+    {
+        $paths = discovery_paths(
+            'https://example.com/subsite',
+            'https://example.com/subsite/wp-json/mcp/novamira-oauth',
+        );
+
+        self::assertSame($expected, document_for_path($path, $paths));
+    }
+
+    /** @return iterable<string, array{string, ?string}> */
+    public static function requestPaths(): iterable
+    {
+        yield 'protected resource' => ['/subsite/.well-known/oauth-protected-resource', 'protected_resource'];
+        yield 'protected resource, trailing slash' => [
+            '/subsite/.well-known/oauth-protected-resource/',
+            'protected_resource',
+        ];
+        yield 'protected resource insert form, trailing slash' => [
+            '/.well-known/oauth-protected-resource/subsite/wp-json/mcp/novamira-oauth/',
+            'protected_resource',
+        ];
+        yield 'openid configuration' => ['/subsite/.well-known/openid-configuration', 'authorization_server'];
+        yield 'openid configuration, trailing slash' => [
+            '/subsite/.well-known/openid-configuration/',
+            'authorization_server',
+        ];
+        yield 'authorization server, trailing slash' => [
+            '/subsite/.well-known/oauth-authorization-server/',
+            'authorization_server',
+        ];
+        yield 'two trailing slashes' => ['/subsite/.well-known/oauth-protected-resource//', null];
+        yield 'another resource, trailing slash' => ['/.well-known/oauth-protected-resource/some-other-tenant/', null];
+        yield 'unrelated well-known file' => ['/.well-known/apple-app-site-association/', null];
+        yield 'site root' => ['/', null];
+        yield 'empty path' => ['', null];
     }
 
     public function testRootInstallDeduplicatesCollapsedForms(): void

@@ -217,17 +217,41 @@ function serve(array $document): void
     exit();
 }
 
+/**
+ * Which discovery document a request path asks for, or null when it is not a discovery path.
+ *
+ * A single trailing slash is ignored. Hosts that enforce trailing slashes redirect these URLs before
+ * WordPress runs, so the client lands on the slashed form and would otherwise get a 404 page. The
+ * match stays exact apart from that: any other suffix is still not ours.
+ *
+ * @param array{protected_resource: list<string>, authorization_server: list<string>} $paths
+ * @return 'protected_resource'|'authorization_server'|null
+ */
+function document_for_path(string $path, array $paths): ?string
+{
+    if (str_ends_with($path, '/')) {
+        $path = substr($path, offset: 0, length: -1);
+    }
+    if (in_array($path, $paths['protected_resource'], strict: true)) {
+        return 'protected_resource';
+    }
+    if (in_array($path, $paths['authorization_server'], strict: true)) {
+        return 'authorization_server';
+    }
+    return null;
+}
+
 function maybe_serve(): void
 {
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
     if (!is_string($path)) {
         return;
     }
-    $paths = discovery_paths(home_url(), \Novamira\OAuth\resource_identifier());
-    if (in_array($path, $paths['protected_resource'], strict: true)) {
+    $document = document_for_path($path, discovery_paths(home_url(), \Novamira\OAuth\resource_identifier()));
+    if ($document === 'protected_resource') {
         serve(protected_resource_document());
     }
-    if (in_array($path, $paths['authorization_server'], strict: true)) {
+    if ($document === 'authorization_server') {
         serve(authorization_server_document());
     }
 }
