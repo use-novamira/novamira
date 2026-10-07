@@ -524,6 +524,32 @@ function novamira_is_disabled_file($path)
 }
 
 /**
+ * The host AI Abilities are locked to.
+ *
+ * Reads the stored home option first, so per-request home_url filters cannot make the host that was
+ * saved differ from the host read back on the next request.
+ */
+function novamira_ai_abilities_site_host(): string
+{
+    $stored_home = trim((string) get_option('home'));
+    $host = $stored_home !== '' ? (string) wp_parse_url($stored_home, PHP_URL_HOST) : '';
+
+    return $host !== '' ? $host : (string) wp_parse_url(home_url(), PHP_URL_HOST);
+}
+
+/**
+ * Whether a saved lock still names this site: the stored home host, or the host home_url() reports,
+ * which is what earlier versions saved.
+ */
+function novamira_ai_abilities_domain_matches(string $locked_domain): bool
+{
+    return (
+        $locked_domain === novamira_ai_abilities_site_host()
+        || $locked_domain === (string) wp_parse_url(home_url(), PHP_URL_HOST)
+    );
+}
+
+/**
  * Check whether the AI abilities are enabled via the settings option.
  *
  * @return bool
@@ -539,9 +565,8 @@ function novamira_is_enabled()
     // Abilities are locked to the domain they were enabled on.
     /** @var string $locked_domain */
     $locked_domain = get_option('novamira_ai_abilities_domain', default_value: '');
-    $current_domain = (string) wp_parse_url(home_url(), PHP_URL_HOST);
 
-    return $locked_domain === $current_domain;
+    return novamira_ai_abilities_domain_matches($locked_domain);
 }
 
 /**
@@ -1109,9 +1134,8 @@ function novamira_is_domain_mismatch()
 
     /** @var string $locked_domain */
     $locked_domain = get_option('novamira_ai_abilities_domain', default_value: '');
-    $current_domain = (string) wp_parse_url(home_url(), PHP_URL_HOST);
 
-    return $locked_domain !== $current_domain;
+    return !novamira_ai_abilities_domain_matches($locked_domain);
 }
 
 /**

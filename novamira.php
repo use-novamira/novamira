@@ -692,7 +692,7 @@ if (!$is_enabled && novamira_is_domain_mismatch()) {
             ),
             meta_key: 'novamira_domain_mismatch_notice_dismissed',
             dismiss_value: md5($locked),
-            args: ['type' => 'warning'],
+            args: ['type' => 'warning', 'additional_classes' => ['novamira-keep']],
         );
     });
 }

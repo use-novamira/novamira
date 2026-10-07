@@ -1,4 +1,7 @@
 Unreleased
+* Fix: AI Abilities now stay on on sites where a host or plugin rewrites the site address for individual requests, where they previously switched off after being turned on.
+* Fix: The notice shown when AI Abilities switch off because the site domain changed now also appears on the Configuration page, where it was previously hidden.
+* Fix: The buttons on the Configuration page for AI Abilities, application passwords and the production site notice now save reliably, where the page previously reloaded with nothing changed on some sites.
 * Fix: The Claude Desktop bundle now installs on Windows when the site title contains characters such as | or :, which are replaced with a hyphen in the connector name.
 * Fix: The OAuth discovery addresses now also answer when a server adds a trailing slash to them, where they previously returned a page not found. Troubleshoot recognizes that redirect and shows the line to add to .htaccess, instead of pointing at hosting support.
 

@@ -25,7 +25,7 @@ function novamira_enable_ai_abilities(): bool
     }
 
     update_option(option: 'novamira_ai_abilities_enabled', value: '1');
-    update_option(option: 'novamira_ai_abilities_domain', value: (string) wp_parse_url(home_url(), PHP_URL_HOST));
+    update_option(option: 'novamira_ai_abilities_domain', value: novamira_ai_abilities_site_host());
     return true;
 }
 
@@ -107,6 +107,7 @@ function novamira_render_enable_toggle(): void
     </h2>
     <form method="post" action="" id="novamira-settings-form" style="margin: 16px 0 0;">
         <?php wp_nonce_field('novamira_settings'); ?>
+        <input type="hidden" name="novamira_submit" value="1" />
         <label style="display:flex; align-items:center; gap:10px; font-size:16px; font-weight:600; color:#1d2327; margin:0 0 12px;">
             <input type="checkbox" name="novamira_ai_abilities_enabled" value="1" id="novamira-enable-checkbox" style="width:18px; height:18px;" <?php checked(
                 checked: $enabled,
@@ -189,6 +190,7 @@ function novamira_render_production_warning(): void
         </p>
         <form method="post" style="margin:0;">
             <?php wp_nonce_field('novamira_dismiss_production_warning'); ?>
+            <input type="hidden" name="novamira_dismiss_production_warning" value="1" />
             <button type="submit" name="novamira_dismiss_production_warning" class="button button-small">
                 <?php esc_html_e('Dismiss', domain: 'novamira'); ?>
             </button>
@@ -467,6 +469,7 @@ function novamira_render_password_row(array $pw, string $dt_format): void
             ; ?>');">
                 <input type="hidden" name="novamira_revoke_uuid" value="<?php echo esc_attr($uuid); ?>" />
                 <input type="hidden" name="_wpnonce" value="<?php echo esc_attr($revoke_nonce); ?>" />
+                <input type="hidden" name="novamira_revoke_password" value="1" />
                 <button type="submit" name="novamira_revoke_password" class="button button-small novamira-revoke-btn"><?php esc_html_e(
                     'Revoke',
                     domain: 'novamira',
@@ -1867,6 +1870,7 @@ function novamira_render_password_step(
 
     <form method="post" style="margin: 0;">
         <?php wp_nonce_field('novamira_create_password'); ?>
+        <input type="hidden" name="novamira_create_password" value="1" />
         <?php if (!$has_existing): ?>
             <p style="margin:0 0 10px;">
                 <button
@@ -1933,6 +1937,7 @@ function novamira_render_password_step(
     >
         <form method="post" style="margin:0;">
             <?php wp_nonce_field('novamira_use_existing_password'); ?>
+            <input type="hidden" name="novamira_use_existing_password" value="1" />
             <label for="novamira-existing-password" style="display:block; margin-bottom:4px;">
                 <strong><?php esc_html_e('Paste the password value', domain: 'novamira'); ?></strong>
             </label>
