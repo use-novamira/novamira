@@ -899,10 +899,10 @@ function is_trailing_slash_redirect(string $url, string $location): bool
 {
     $from = parse_url($url);
     $to = parse_url($location);
-    if (!is_array($from) || !is_array($to) || !isset($from['path'], $to['path'])) {
+    if (!is_array($from) || !is_array($to) || ($from['path'] ?? null) === null || ($to['path'] ?? null) === null) {
         return false;
     }
-    $same_host = !isset($to['host']) || strcasecmp($to['host'], $from['host'] ?? '') === 0;
+    $same_host = ($to['host'] ?? null) === null || strcasecmp($to['host'], $from['host'] ?? '') === 0;
 
     return $same_host && $to['path'] === $from['path'] . '/';
 }
