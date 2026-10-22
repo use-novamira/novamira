@@ -1,3 +1,6 @@
+Unreleased
+* Fix: On hosting with PHP open_basedir restrictions, looking for WP-CLI no longer prints PHP warnings that broke AI client connections.
+
 v1.12.12 - 2026/10/21
 * New: Site integrity check skill. AI agents can check a site's plugins, themes and core for known vulnerabilities, and look for unknown administrators, modified or injected files, malicious code in the database, and form recipients that send data elsewhere. They report what they found and how confident they are, and change nothing without approval. The skill is also available in Read Mode.
 * Tweak: PHP versions older than 8.5.12, 8.4.27, 8.3.36 and 8.2.35 (released by the PHP project on 2026/10/21) are now flagged to AI agents, so they can recommend updating PHP through the hosting provider.

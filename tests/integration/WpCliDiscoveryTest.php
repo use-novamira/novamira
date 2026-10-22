@@ -458,4 +458,202 @@ final class WpCliDiscoveryTest extends TestCase
             self::assertFalse(novamira_is_php_cli_binary($path), $path);
         }
     }
+
+    public function testDiscoveryUnderOpenBasedirStaysSilentAndKeepsAllowedResults(): void
+    {
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::markTestSkipped('The fixed discovery paths and symlinks exercised here are the Unix ones.');
+        }
+
+        $root = dirname(__DIR__, levels: 2);
+        $base = self::makeTempDirectory();
+
+        try {
+            $site = $base . '/site';
+            $outside = $base . '/outside';
+            $nested = $base . '/nested/sub';
+            foreach ([$site, $outside, $nested] as $directory) {
+                mkdir($directory, permissions: 0777, recursive: true);
+            }
+            file_put_contents($site . '/wp.bat', '@php "%~dp0wp-cli.phar" %*');
+            file_put_contents($site . '/wp-cli.phar', '');
+            file_put_contents($outside . '/php', '');
+            file_put_contents($base . '/nested/inside.txt', '');
+            file_put_contents($base . '/stray.txt', '');
+            // A link inside the site pointing out of it, which PHP refuses once it resolves it.
+            symlink($outside . '/php', $site . '/php-link');
+            // A link outside the site pointing into it, which PHP admits once it resolves it.
+            symlink($site, $base . '/site-alias');
+            // An entry whose ".." applies after a symlink: PHP resolves it to $base/nested, while
+            // dropping the last segment as text would give $base and admit stray.txt.
+            symlink($nested, $base . '/sub-alias');
+
+            $result = self::runOpenBasedirDiscovery(
+                $root,
+                $site,
+                $site . PATH_SEPARATOR . $base . '/sub-alias/..' . PATH_SEPARATOR . $root,
+                $root,
+                ['WP_CLI_PHP' => $site . '/php-link'],
+                [
+                    $site . '/wp-cli.phar',
+                    $site . '/php-link',
+                    $outside . '/php',
+                    $base . '/site-alias/wp-cli.phar',
+                    $base . '/nested/inside.txt',
+                    $base . '/stray.txt',
+                    '/usr/local/bin/wp',
+                ],
+            );
+        } finally {
+            self::removeTree($base);
+        }
+
+        // Locations outside open_basedir read as absent, including the symlinked WP_CLI_PHP;
+        // the phar inside it is still found.
+        self::assertNull($result['discovery']['unix']);
+        self::assertNull($result['discovery']['php_binary']);
+        self::assertNull($result['discovery']['php_ini']);
+        self::assertNull($result['discovery']['phar_outside']);
+        self::assertSame($site . '/wp-cli.phar', $result['discovery']['phar_inside']);
+
+        self::assertSame(
+            [
+                $site . '/wp-cli.phar' => true,
+                $site . '/php-link' => false,
+                $outside . '/php' => false,
+                $base . '/site-alias/wp-cli.phar' => true,
+                $base . '/nested/inside.txt' => true,
+                $base . '/stray.txt' => false,
+                '/usr/local/bin/wp' => false,
+            ],
+            $result['found'],
+        );
+    }
+
+    public function testDiscoveryUnderRelativeOpenBasedirAcceptsRelativeCandidates(): void
+    {
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::markTestSkipped('The fixed discovery paths exercised here are the Unix ones.');
+        }
+
+        $root = dirname(__DIR__, levels: 2);
+        $base = self::makeTempDirectory();
+
+        try {
+            $site = $base . '/site';
+            mkdir($site);
+            file_put_contents($site . '/wp.bat', '@php "%~dp0wp-cli.phar" %*');
+            file_put_contents($site . '/wp-cli.phar', '');
+            file_put_contents($site . '/php', '');
+            file_put_contents($base . '/stray.txt', '');
+
+            // "." is the working directory, and so is the base of a relative WP_CLI_PHP.
+            $result = self::runOpenBasedirDiscovery(
+                $root,
+                $site,
+                '.' . PATH_SEPARATOR . $root,
+                $site,
+                ['WP_CLI_PHP' => 'php'],
+                ['wp-cli.phar', '../stray.txt', 'missing.phar'],
+            );
+        } finally {
+            self::removeTree($base);
+        }
+
+        self::assertSame('php', $result['discovery']['php_binary']);
+        self::assertSame($site . '/wp-cli.phar', $result['discovery']['phar_inside']);
+        self::assertSame(
+            ['wp-cli.phar' => true, '../stray.txt' => false, 'missing.phar' => false],
+            $result['found'],
+        );
+    }
+
+    /**
+     * Run discovery in a child process under the given open_basedir with display_errors on.
+     *
+     * With exec disabled, discovery skips `which` and probes the fixed install locations, as it
+     * does on hosts where the PATH lookup finds nothing.
+     *
+     * @param array<string, string> $env
+     * @param list<string>          $probes
+     * @return array{discovery: array<string, mixed>, found: array<string, bool>}
+     */
+    private static function runOpenBasedirDiscovery(
+        string $root,
+        string $site,
+        string $open_basedir,
+        string $cwd,
+        array $env,
+        array $probes,
+    ): array {
+        $command = [
+            PHP_BINARY,
+            '-d',
+            'open_basedir=' . $open_basedir,
+            '-d',
+            'display_errors=1',
+            '-d',
+            'error_reporting=-1',
+            '-d',
+            'log_errors=0',
+            '-d',
+            'disable_functions=exec',
+            $root . '/tests/fixtures/wp-cli-open-basedir-runner.php',
+            $root,
+            $site,
+            ...$probes,
+        ];
+        $process = proc_open(
+            $command,
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+            $cwd,
+            array_merge(getenv(), $env),
+        );
+        self::assertIsResource($process);
+
+        $stdout = (string) stream_get_contents($pipes[1]);
+        $stderr = (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $exit_code = proc_close($process);
+
+        self::assertSame(0, $exit_code, "stdout:\n{$stdout}\nstderr:\n{$stderr}");
+        self::assertStringNotContainsString('open_basedir', $stdout . $stderr);
+        self::assertSame('', $stderr, $stderr);
+
+        /** @var array{discovery: array<string, mixed>, found: array<string, bool>}|null $result */
+        $result = json_decode($stdout, associative: true);
+        self::assertIsArray($result, $stdout);
+
+        return $result;
+    }
+
+    private static function makeTempDirectory(): string
+    {
+        // Resolved, so the paths the child reports compare equal to the ones built here even
+        // where the temporary directory sits behind a symlink, as on macOS.
+        $base = realpath(sys_get_temp_dir()) . '/novamira-basedir-' . bin2hex(random_bytes(6));
+        mkdir($base);
+
+        return $base;
+    }
+
+    private static function removeTree(string $path): void
+    {
+        if (is_link($path) || is_file($path)) {
+            unlink($path);
+            return;
+        }
+        if (!is_dir($path)) {
+            return;
+        }
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            self::removeTree($path . '/' . $entry);
+        }
+        rmdir($path);
+    }
 }

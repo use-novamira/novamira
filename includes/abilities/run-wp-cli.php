@@ -16,7 +16,8 @@ declare(strict_types=1);
  *    `['C:/.../php.exe', '-c', 'C:/.../php.ini', 'C:/.../wp-cli.phar']`, or a string holding the
  *    path of a single executable. It is never parsed as a shell command line.
  * 2. Automatic discovery for the current platform (`where` on Windows, `which`/`command -v`
- *    elsewhere) plus the well-known install locations.
+ *    elsewhere) plus the well-known install locations. A location PHP's open_basedir refuses
+ *    counts as absent, without the warning that probing it would print into the response.
  * 3. The `novamira_wp_cli_command` filter, which receives the resolved argv list (or null when
  *    nothing was found) and may replace it outright. This runs last, so it wins over everything.
  *
@@ -476,7 +477,10 @@ function novamira_find_wp_cli_command_unix(): ?array
         '/usr/sbin/wp',
     ];
     foreach ($common_paths as $path) {
-        if (is_file($path) && is_executable($path)) {
+        if (novamira_wp_cli_probe_path(
+            $path,
+            static fn(string $file): bool => is_file($file) && is_executable($file),
+        )) {
             return [$path];
         }
     }
@@ -507,7 +511,7 @@ function novamira_find_wp_cli_command_windows(): ?array
     }
 
     foreach ($candidates as $candidate) {
-        if (!is_file($candidate)) {
+        if (!novamira_wp_cli_probe_path($candidate, check: 'is_file')) {
             continue;
         }
 
@@ -593,7 +597,7 @@ function novamira_wp_cli_phar_beside_launcher(string $launcher): ?string
 
     foreach ([$base . '-cli.phar', $base . '.phar', 'wp-cli.phar'] as $name) {
         $candidate = $directory . DIRECTORY_SEPARATOR . $name;
-        if (is_file($candidate)) {
+        if (novamira_wp_cli_probe_path($candidate, check: 'is_file')) {
             return $candidate;
         }
     }
@@ -699,7 +703,7 @@ function novamira_find_php_binary(): ?string
     }
 
     foreach ($candidates as $candidate) {
-        if (is_file($candidate)) {
+        if (novamira_wp_cli_probe_path($candidate, check: 'is_file')) {
             return $candidate;
         }
     }
@@ -726,11 +730,54 @@ function novamira_find_wp_cli_php_ini(): ?string
     }
 
     $loaded = php_ini_loaded_file();
-    if ($loaded !== false && $loaded !== '' && is_file($loaded)) {
+    if ($loaded !== false && $loaded !== '' && novamira_wp_cli_probe_path($loaded, check: 'is_file')) {
         return $loaded;
     }
 
     return null;
+}
+
+/**
+ * Run a filesystem check on a path that may lie outside open_basedir, treating a refused path as absent.
+ *
+ * Probing a path outside open_basedir emits an "open_basedir restriction in effect" warning, which
+ * lands in the HTTP response when display_errors is on and corrupts any JSON body after it. Only
+ * PHP knows whether it will refuse a path: it resolves symlinks in both the path and the entries,
+ * resolves ".." through them, and expands relative paths and the "." entry against the working
+ * directory, none of which a string comparison can reproduce without touching the path. So the
+ * check runs as usual and that one warning is swallowed for its duration; a refused probe already
+ * returns false. Any other error still reaches the previous handler or PHP's own.
+ *
+ * @param string                $path  Path to probe.
+ * @param callable(string):bool $check Filesystem check to run on it, such as is_file().
+ * @return bool
+ */
+function novamira_wp_cli_probe_path(string $path, callable $check): bool
+{
+    if ((string) ini_get('open_basedir') === '') {
+        return $check($path);
+    }
+
+    // Assigned below; the handler reads it by reference so it can defer to whatever was there.
+    /** @var null|callable(int, string, string, int): mixed $previous */
+    $previous = null;
+    $previous = set_error_handler(
+        static function (int $errno, string $message, string $file = '', int $line = 0) use (&$previous): bool {
+            if (str_contains($message, 'open_basedir restriction in effect')) {
+                return true;
+            }
+
+            // As PHP itself does, only an explicit false hands the error on to the standard handler.
+            return $previous !== null && $previous($errno, $message, $file, $line) !== false;
+        },
+        E_WARNING,
+    );
+
+    try {
+        return $check($path);
+    } finally {
+        restore_error_handler();
+    }
 }
 
 /**
