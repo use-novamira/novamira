@@ -35,7 +35,7 @@ function novamira_shell_quote(string $value): string
 function novamira_resolve_path($path, $must_exist = false)
 {
     // Prepend ABSPATH to relative paths.
-    if (!str_starts_with($path, '/') && !str_starts_with($path, '\\')) {
+    if (!novamira_path_is_absolute($path)) {
         $path = ABSPATH . $path;
     }
 
@@ -80,6 +80,21 @@ function novamira_resolve_path($path, $must_exist = false)
     }
 
     return $resolved;
+}
+
+/**
+ * Check whether a path is absolute on POSIX or Windows.
+ *
+ * Recognises a leading slash or backslash (which covers UNC paths) and Windows drive paths with either separator
+ * (C:\ or C:/). WordPress core's path_is_absolute() only recognises C:\.
+ */
+function novamira_path_is_absolute(string $path): bool
+{
+    return (
+        str_starts_with($path, '/')
+        || str_starts_with($path, '\\')
+        || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1
+    );
 }
 
 /**
@@ -135,8 +150,12 @@ function novamira_normalize_missing_path(string $path): string
  */
 function novamira_normalize_absolute_path(string $path): string
 {
-    $path = str_replace(search: '\\', replace: DIRECTORY_SEPARATOR, subject: $path);
-    $is_absolute = str_starts_with($path, DIRECTORY_SEPARATOR);
+    $path = str_replace(search: ['\\', '/'], replace: DIRECTORY_SEPARATOR, subject: $path);
+
+    // Keep the root apart so ".." cannot climb above it.
+    $root = novamira_path_root($path);
+    $path = substr($path, offset: strlen($root));
+
     /** @var list<string> $parts */
     $parts = [];
 
@@ -153,12 +172,27 @@ function novamira_normalize_absolute_path(string $path): string
         $parts[] = $segment;
     }
 
-    $normalized = implode(DIRECTORY_SEPARATOR, $parts);
-    if ($is_absolute) {
-        return DIRECTORY_SEPARATOR . $normalized;
-    }
+    $normalized = $root . implode(DIRECTORY_SEPARATOR, $parts);
 
     return $normalized === '' ? '.' : $normalized;
+}
+
+/**
+ * Get the root of a path with DIRECTORY_SEPARATOR separators: "/", a UNC "\\" on Windows, or a drive such as "C:\".
+ */
+function novamira_path_root(string $path): string
+{
+    if (DIRECTORY_SEPARATOR === '\\' && str_starts_with($path, '\\\\')) {
+        return '\\\\';
+    }
+
+    if (preg_match('#^[A-Za-z]:#', $path) === 1) {
+        $drive = substr($path, offset: 0, length: 2);
+
+        return str_starts_with(substr($path, offset: 2), DIRECTORY_SEPARATOR) ? $drive . DIRECTORY_SEPARATOR : $drive;
+    }
+
+    return str_starts_with($path, DIRECTORY_SEPARATOR) ? DIRECTORY_SEPARATOR : '';
 }
 
 /**

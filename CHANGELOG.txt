@@ -1,6 +1,7 @@
 Unreleased
 * Fix: On hosting with PHP open_basedir restrictions, looking for WP-CLI no longer prints PHP warnings that broke AI client connections.
 * Fix: After authorizing or denying a device on the Authorize Device page, the page now shows only the result, instead of also asking for another code.
+* Fix: On Windows servers, upload links and file abilities now accept absolute paths with a drive letter (such as C:\...), where uploads previously failed with a directory creation error.
 
 v1.12.12 - 2026/10/21
 * New: Site integrity check skill. AI agents can check a site's plugins, themes and core for known vulnerabilities, and look for unknown administrators, modified or injected files, malicious code in the database, and form recipients that send data elsewhere. They report what they found and how confident they are, and change nothing without approval. The skill is also available in Read Mode.
