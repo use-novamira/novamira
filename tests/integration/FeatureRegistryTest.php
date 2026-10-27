@@ -261,6 +261,13 @@ final class FeatureRegistryTest extends TestCase
                 new WP_Ability('woocommerce/order-add-note', 'woocommerce'),
                 $legacyRules,
             );
+            $memoryRow = novamira_build_registered_ability_row(
+                new WP_Ability('novamira/memory-list', 'memory'),
+                [],
+            );
+            ob_start();
+            novamira_render_ability_managed_owner_meta([$memoryRow]);
+            $memoryOwnerHtml = (string) ob_get_clean();
             ob_start();
             novamira_render_ability_hub_row($row);
             $html = (string) ob_get_clean();
@@ -300,6 +307,8 @@ final class FeatureRegistryTest extends TestCase
                 'disable_category_action_html' => $disableCategoryActionHtml,
                 'managed_category_html' => $managedCategoryHtml,
                 'provider_action_html' => $providerActionHtml,
+                'memory_label' => novamira_ability_row_management_label($memoryRow),
+                'memory_owner_html' => $memoryOwnerHtml,
                 'group_action_labels' => [
                     novamira_ability_group_action_label('disable', 'category'),
                     novamira_ability_group_action_label('enable', 'configurable'),
@@ -336,6 +345,9 @@ final class FeatureRegistryTest extends TestCase
         self::assertStringContainsString('data-tooltip=', $result['managed_category_html']);
         self::assertStringNotContainsString('Disable category', $result['managed_category_html']);
         self::assertStringContainsString('Enable all abilities', $result['provider_action_html']);
+        self::assertSame('Managed by Novamira Pro', $result['memory_label']);
+        self::assertStringContainsString('Managed by Novamira Pro', $result['memory_owner_html']);
+        self::assertStringContainsString('managed by Novamira Pro and', $result['memory_owner_html']);
         self::assertSame(
             ['Disable category', 'Enable configurable abilities', 'Disable all abilities'],
             $result['group_action_labels'],
@@ -560,6 +572,16 @@ final class FeatureRegistryTest extends TestCase
                     'skills' => [],
                     'abilities' => [],
                     'ability_categories' => ['woocommerce'],
+                ];
+                $value['novamira-pro/memory'] = [
+                    'kind' => 'feature',
+                    'provider' => 'Novamira Pro',
+                    'label' => 'Memory',
+                    'default_active' => true,
+                    'depends_on' => [],
+                    'skills' => [],
+                    'abilities' => [],
+                    'ability_categories' => ['memory'],
                 ];
                 if ($GLOBALS['include_invalid_feature']) {
                     $value['novamira-pro/invalid'] = [
