@@ -99,6 +99,14 @@ function render(): void
     echo '<h1>' . esc_html__('Authorize Device', domain: 'novamira') . '</h1>';
     render_notice();
 
+    // After Authorize or Deny the redirect lands here with nothing left to do, so offering the code
+    // form under that outcome would read as a request for another code. A lookup POST still wins,
+    // even one whose code is blank, so it gets the form back rather than nothing.
+    if (!is_lookup_post() && in_array(read_get('device_result'), ['approved', 'denied'], strict: true)) {
+        echo '</div>';
+        return;
+    }
+
     $device_codes = new DeviceCodeRepository();
     $authorization = $user_code === '' ? null : $device_codes->find_by_user_code($user_code);
     if ($authorization === null || $device_codes->is_expired($authorization['expires_at'])) {
@@ -137,14 +145,16 @@ function render(): void
  */
 function submitted_user_code(): string
 {
-    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-        return '';
-    }
-    if (read_post('novamira_action') !== 'lookup') {
+    if (!is_lookup_post()) {
         return '';
     }
     check_admin_referer('novamira_oauth_device_lookup');
     return Device\normalize_user_code(read_post('user_code'));
+}
+
+function is_lookup_post(): bool
+{
+    return ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && read_post('novamira_action') === 'lookup';
 }
 
 /** Step one: enter the code the command line printed. */
