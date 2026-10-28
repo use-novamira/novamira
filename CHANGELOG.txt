@@ -1,3 +1,6 @@
+Unreleased
+* Fix: Sites that hide or rename the WordPress login page, with plugins such as WPS Hide Login or Solid Security, can now approve new connections, where the authorization page previously showed a "page not found" error to visitors who were not logged in.
+
 v1.12.13 - 2026/10/27
 * Fix: On hosting with PHP open_basedir restrictions, looking for WP-CLI no longer prints PHP warnings that broke AI client connections.
 * Fix: After authorizing or denying a device on the Authorize Device page, the page now shows only the result, instead of also asking for another code.

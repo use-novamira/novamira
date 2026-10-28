@@ -48,6 +48,12 @@ if (!function_exists('rest_url')) {
         return home_url('/wp-json/' . ltrim($path, characters: '/'));
     }
 }
+if (!function_exists('wp_login_url')) {
+    function wp_login_url(string $redirect = ''): string
+    {
+        return home_url('/wp-login.php');
+    }
+}
 if (!function_exists('admin_url')) {
     function admin_url(string $path = ''): string
     {

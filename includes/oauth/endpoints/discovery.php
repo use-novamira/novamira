@@ -22,6 +22,9 @@ const AUTHORIZATION_SERVER = '/.well-known/oauth-authorization-server';
 
 const OPENID_CONFIGURATION = '/.well-known/openid-configuration';
 
+/** Front-end authorization entry, `/?novamira_oauth=authorize`, for sites with a custom login URL. */
+const FRONT_AUTHORIZE_QUERY_VAR = 'novamira_oauth';
+
 function register(): void
 {
     add_action('init', __NAMESPACE__ . '\\maybe_serve', priority: 1);
@@ -198,6 +201,23 @@ function protected_resource_document(): array
 }
 
 /**
+ * Login-hiding plugins (WPS Hide Login, Solid Security and similar) answer wp-admin requests from
+ * logged-out visitors with a 404, so the browser never reaches their custom login page. Those sites
+ * get a front-end entry that sends the visitor through wp_login_url(), which such plugins rewrite.
+ * Every other site keeps the wp-admin address, which a coming-soon page or a page cache in front
+ * of the home page cannot intercept.
+ */
+function authorization_endpoint(string $login_url): string
+{
+    $login_path = parse_url($login_url, PHP_URL_PATH);
+    if (is_string($login_path) && str_ends_with($login_path, '/wp-login.php')) {
+        return admin_url('admin.php?page=novamira-oauth-authorize');
+    }
+
+    return add_query_arg([FRONT_AUTHORIZE_QUERY_VAR => 'authorize'], home_url('/'));
+}
+
+/**
  * @return array<string, mixed>
  */
 function authorization_server_document(): array
@@ -209,7 +229,7 @@ function authorization_server_document(): array
     // disabled. The remaining endpoints stay on REST.
     return [
         'issuer' => home_url(),
-        'authorization_endpoint' => admin_url('admin.php?page=novamira-oauth-authorize'),
+        'authorization_endpoint' => authorization_endpoint(wp_login_url()),
         'token_endpoint' => $base . '/token',
         'registration_endpoint' => $base . '/register',
         'revocation_endpoint' => $base . '/revoke',

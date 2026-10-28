@@ -57,6 +57,11 @@ function endpoint_for_request(string $request_uri, string $method): ?string
 
 function maybe_serve(): void
 {
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+    if (is_front_authorize_request($_GET, $_SERVER['REQUEST_METHOD'] ?? 'GET')) {
+        redirect_to_authorization_page();
+    }
+
     // Do not take these deliberately generic slugs away from a page, plugin, theme, or custom
     // rewrite rule. The fallback exists only for paths WordPress could not otherwise resolve.
     if (!is_404()) {
@@ -76,22 +81,76 @@ function maybe_serve(): void
 }
 
 /**
+ * Whether the request is the front-end authorization entry advertised to sites with a custom login
+ * URL. A client that appends its parameters with "?" folds them into the value
+ * (novamira_oauth=authorize?response_type=...), which authorization_parameters() recovers.
+ *
+ * @param array<array-key, mixed> $query
+ */
+function is_front_authorize_request(array $query, string $method): bool
+{
+    $entry = string_parameter($query, \Novamira\OAuth\Endpoints\Discovery\FRONT_AUTHORIZE_QUERY_VAR);
+    if (strtoupper($method) !== 'GET' || $entry === null) {
+        return false;
+    }
+
+    return $entry === 'authorize' || str_starts_with($entry, 'authorize?');
+}
+
+/**
+ * The parameters forwarded to the authorization page: only those it consumes, including any a
+ * client folded into the front-end entry's value.
+ *
+ * @param array<array-key, mixed> $query
+ * @return array<string, string>
+ */
+function authorization_parameters(array $query): array
+{
+    $entry = string_parameter($query, \Novamira\OAuth\Endpoints\Discovery\FRONT_AUTHORIZE_QUERY_VAR) ?? '';
+    $folded = [];
+    if (str_starts_with($entry, 'authorize?')) {
+        parse_str(substr($entry, strlen('authorize?')), $folded);
+    }
+
+    $parameters = [];
+    foreach (AUTHORIZATION_QUERY_PARAMETERS as $name) {
+        $value = string_parameter($query, $name) ?? string_parameter($folded, $name);
+        if ($value !== null) {
+            $parameters[$name] = wp_unslash($value);
+        }
+    }
+
+    return $parameters;
+}
+
+/**
+ * @param array<array-key, mixed> $query
+ */
+function string_parameter(array $query, string $name): ?string
+{
+    if (!array_key_exists($name, $query) || !is_string($query[$name])) {
+        return null;
+    }
+
+    return $query[$name];
+}
+
+/**
  * Move the browser into wp-admin so WordPress can authenticate the user with its normal admin
  * cookie. Only parameters consumed by the authorization endpoint are forwarded.
  */
 function redirect_to_authorization_page(): void
 {
-    $parameters = [];
-    foreach (AUTHORIZATION_QUERY_PARAMETERS as $name) {
-        // OAuth authorization requests are cross-site GETs and intentionally carry no WP nonce.
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        $value = $_GET[$name] ?? null;
-        if (is_string($value)) {
-            $parameters[$name] = wp_unslash($value);
-        }
-    }
+    // OAuth authorization requests are cross-site GETs and intentionally carry no WP nonce.
+    // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+    $parameters = authorization_parameters($_GET);
 
     $url = add_query_arg($parameters, admin_url('admin.php?page=novamira-oauth-authorize'));
+    // Logged-out visitors go through wp_login_url(), which login-hiding plugins rewrite to their
+    // custom page; requesting wp-admin directly would get their 404 instead of a login form.
+    if (!is_user_logged_in()) {
+        $url = wp_login_url($url);
+    }
     nocache_headers();
     if (!wp_safe_redirect($url)) {
         wp_die(esc_html__('Could not open the Novamira authorization page.', domain: 'novamira'), title: '', args: [
