@@ -51,8 +51,20 @@ wp_register_ability('novamira/execute-php', [
                         'message' => ['type' => 'string'],
                         'file' => ['type' => 'string'],
                         'line' => ['type' => 'integer'],
+                        'count' => [
+                            'type' => 'integer',
+                            'description' => 'How many times this exact warning occurred.',
+                        ],
+                        'suppressed' => [
+                            'type' => 'boolean',
+                            'description' => 'Raised under the @ operator or excluded by error_reporting().',
+                        ],
                     ],
                 ],
+            ],
+            'errors_omitted' => [
+                'type' => 'integer',
+                'description' => 'Further distinct warnings not listed once the limit was reached.',
             ],
             'error_message' => ['type' => 'string', 'description' => 'Error message if execution failed.'],
             'error_class' => [
@@ -114,28 +126,18 @@ function novamira_execute_php($input)
     }
 
     $code = (string) $input['code'];
-    $errors = [];
 
     // Save and set time limit.
     $original_time_limit = (int) ini_get('max_execution_time');
     set_time_limit(NOVAMIRA_MAX_EXECUTION_TIME);
 
     // Set up error handler to capture warnings/notices.
-    $error_types = [
-        E_WARNING => 'Warning',
-        E_NOTICE => 'Notice',
-        E_DEPRECATED => 'Deprecated',
-        E_USER_WARNING => 'User Warning',
-        E_USER_NOTICE => 'User Notice',
-        E_USER_DEPRECATED => 'User Deprecated',
-    ];
-    set_error_handler(static function ($errno, $errstr, $errfile, $errline) use (&$errors, $error_types) {
-        $errors[] = [
-            'type' => $error_types[$errno] ?? 'Unknown (' . (int) $errno . ')',
-            'message' => $errstr,
-            'file' => $errfile,
-            'line' => $errline,
-        ];
+    /** @var array{errors: list<array<string, mixed>>, index: array<string, int>, omitted: int} $captured */
+    $captured = ['errors' => [], 'index' => [], 'omitted' => 0];
+    set_error_handler(static function (int $errno, string $errstr, string $errfile, int $errline) use (
+        &$captured,
+    ): bool {
+        novamira_execute_php_capture_error($captured, $errno, $errstr, $errfile, $errline);
         return true;
     });
 
@@ -172,9 +174,13 @@ function novamira_execute_php($input)
         'success' => $success,
         'return_value' => $return_value,
         'output' => $output,
-        'errors' => $errors,
+        'errors' => $captured['errors'],
         'execution_time_ms' => $execution_time_ms,
     ];
+
+    if ($captured['omitted'] > 0) {
+        $result['errors_omitted'] = $captured['omitted'];
+    }
 
     if ($error_message !== null) {
         $result['error_message'] = $error_message;
@@ -182,4 +188,50 @@ function novamira_execute_php($input)
     }
 
     return $result;
+}
+
+/**
+ * Record one warning, notice or deprecation raised by the executed code.
+ *
+ * Identical warnings are grouped so a callee that repeats one thousands of times (a recursive
+ * delete under @, a notice in a loop) cannot flood the response; nothing is dropped silently.
+ *
+ * @param array{errors: list<array<string, mixed>>, index: array<string, int>, omitted: int} $captured
+ */
+function novamira_execute_php_capture_error(
+    array &$captured,
+    int $errno,
+    string $errstr,
+    string $errfile,
+    int $errline,
+): void {
+    $error_types = [
+        E_WARNING => 'Warning',
+        E_NOTICE => 'Notice',
+        E_DEPRECATED => 'Deprecated',
+        E_USER_WARNING => 'User Warning',
+        E_USER_NOTICE => 'User Notice',
+        E_USER_DEPRECATED => 'User Deprecated',
+    ];
+
+    $key = $errno . '|' . $errfile . '|' . $errline . '|' . $errstr;
+    $position = $captured['index'][$key] ?? null;
+    if ($position !== null) {
+        $captured['errors'][$position]['count'] = (int) ($captured['errors'][$position]['count'] ?? 0) + 1;
+        return;
+    }
+    if (count($captured['errors']) >= 100) {
+        $captured['omitted']++;
+        return;
+    }
+    $captured['index'][$key] = count($captured['errors']);
+    $captured['errors'][] = [
+        'type' => $error_types[$errno] ?? 'Unknown (' . $errno . ')',
+        'message' => $errstr,
+        'file' => $errfile,
+        'line' => $errline,
+        'count' => 1,
+        // Under @ PHP 8 masks error_reporting() down to the fatal levels, so the bit is cleared.
+        'suppressed' => (error_reporting() & $errno) === 0,
+    ];
 }
