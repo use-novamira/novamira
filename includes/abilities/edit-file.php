@@ -164,7 +164,7 @@ function novamira_edit_file($input)
         ? str_replace($old_string, $new_string, $content)
         : novamira_edit_replace_first($content, $old_string, $new_string);
 
-    $bytes_written = file_put_contents($resolved, $new_content, LOCK_EX);
+    $bytes_written = novamira_replace_file_contents($resolved, $new_content);
     if ($bytes_written === false) {
         return new WP_Error('write_failed', sprintf('Failed to write file: %s', $resolved));
     }

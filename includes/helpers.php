@@ -549,6 +549,70 @@ function novamira_ensure_parent_dir(string $parent_dir): array|WP_Error
 }
 
 /**
+ * Replace a file's content so a request reading it at the same time sees either the old content or
+ * the new, never a partly written file. A PHP file required mid-write otherwise loads truncated: a
+ * parse error, or valid code missing its second half.
+ *
+ * The new content is staged in a hidden file beside the target and renamed over it. Wherever that
+ * would change more than the content, or the staging step fails, the file is written in place.
+ *
+ * @return int|false Bytes written, or false when the write failed.
+ */
+function novamira_replace_file_contents(string $path, string $content): int|false
+{
+    if (!novamira_can_replace_file_by_rename($path)) {
+        return file_put_contents($path, $content, LOCK_EX);
+    }
+
+    $staging = dirname($path) . DIRECTORY_SEPARATOR . '.' . basename($path) . '.tmp-' . bin2hex(random_bytes(6));
+    $bytes_written = file_put_contents($staging, $content, LOCK_EX);
+    if ($bytes_written === false) {
+        if (file_exists($staging)) {
+            unlink($staging);
+        }
+        return file_put_contents($path, $content, LOCK_EX);
+    }
+
+    $permissions = file_exists($path) ? fileperms($path) : false;
+    if ($permissions !== false) {
+        chmod(filename: $staging, permissions: $permissions & 0777);
+    }
+
+    if (!rename($staging, $path)) {
+        unlink($staging);
+        return file_put_contents($path, $content, LOCK_EX);
+    }
+
+    // Hosts that skip timestamp checks would otherwise keep running the compiled previous version.
+    if (function_exists('opcache_invalidate')) {
+        opcache_invalidate($path, force: true);
+    }
+
+    return $bytes_written;
+}
+
+/**
+ * Whether renaming a staged file over $path changes nothing but its content: a link would be
+ * replaced by a plain file, and a file owned by another user would pass to the web server's user.
+ */
+function novamira_can_replace_file_by_rename(string $path): bool
+{
+    if (is_link($path) || !is_writable(dirname($path))) {
+        return false;
+    }
+    if (!file_exists($path)) {
+        return true;
+    }
+
+    $stat = stat($path);
+    if ($stat === false || $stat['nlink'] > 1) {
+        return false;
+    }
+
+    return !function_exists('posix_geteuid') || $stat['uid'] === posix_geteuid();
+}
+
+/**
  * Check whether a filename ends with the ".disabled" suffix.
  *
  * @param string $path File path to check.

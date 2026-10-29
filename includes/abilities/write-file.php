@@ -174,12 +174,9 @@ function novamira_write_file($input)
         return $directories_created;
     }
 
-    $flags = LOCK_EX;
-    if ($mode === 'append') {
-        $flags |= FILE_APPEND;
-    }
-
-    $bytes_written = file_put_contents($resolved, $content, $flags);
+    $bytes_written = $mode === 'append'
+        ? file_put_contents($resolved, $content, LOCK_EX | FILE_APPEND)
+        : novamira_replace_file_contents($resolved, $content);
     if ($bytes_written === false) {
         return new WP_Error('write_failed', sprintf('Failed to write file: %s', $resolved));
     }
