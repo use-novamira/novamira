@@ -34,8 +34,8 @@ function novamira_cli_agents(): array
         'antigravity' => ['label' => 'Antigravity', 'scope' => 'global'],
         'antigravity-cli' => ['label' => 'Antigravity CLI', 'scope' => 'global'],
         'astrbot' => ['label' => 'AstrBot', 'scope' => 'global'],
-        'autohand-code' => ['label' => 'Autohand Code CLI', 'scope' => 'global'],
         'augment' => ['label' => 'Augment', 'scope' => 'global'],
+        'autohand-code' => ['label' => 'Autohand Code CLI', 'scope' => 'global'],
         'bob' => ['label' => 'IBM Bob', 'scope' => 'global'],
         'claude-code' => ['label' => 'Claude Code', 'scope' => 'global'],
         'cline' => ['label' => 'Cline', 'scope' => 'global'],
@@ -56,21 +56,25 @@ function novamira_cli_agents(): array
         'eve' => ['label' => 'Eve', 'scope' => 'project'],
         'firebender' => ['label' => 'Firebender', 'scope' => 'global'],
         'forgecode' => ['label' => 'ForgeCode', 'scope' => 'global'],
+        'fx' => ['label' => 'fx', 'scope' => 'global'],
         'gemini-cli' => ['label' => 'Gemini CLI', 'scope' => 'global'],
         'github-copilot' => ['label' => 'GitHub Copilot', 'scope' => 'global'],
         'goose' => ['label' => 'Goose', 'scope' => 'global'],
+        'grok' => ['label' => 'Grok Build', 'scope' => 'global'],
         'hermes-agent' => ['label' => 'Hermes Agent', 'scope' => 'global'],
         'iflow-cli' => ['label' => 'iFlow CLI', 'scope' => 'global'],
         'inference-sh' => ['label' => 'inference.sh', 'scope' => 'global'],
         'jazz' => ['label' => 'Jazz', 'scope' => 'global'],
         'junie' => ['label' => 'Junie', 'scope' => 'global'],
         'kilo' => ['label' => 'Kilo Code', 'scope' => 'global'],
+        'kimchi' => ['label' => 'Kimchi', 'scope' => 'global'],
         'kimi-code-cli' => ['label' => 'Kimi Code CLI', 'scope' => 'global'],
         'kiro-cli' => ['label' => 'Kiro CLI', 'scope' => 'global'],
         'kode' => ['label' => 'Kode', 'scope' => 'global'],
         'lingma' => ['label' => 'Lingma', 'scope' => 'global'],
         'loaf' => ['label' => 'Loaf', 'scope' => 'global'],
         'mcpjam' => ['label' => 'MCPJam', 'scope' => 'global'],
+        'minimax-code' => ['label' => 'MiniMax Code', 'scope' => 'global'],
         'mistral-vibe' => ['label' => 'Mistral Vibe', 'scope' => 'global'],
         'moxby' => ['label' => 'Moxby', 'scope' => 'global'],
         'mux' => ['label' => 'Mux', 'scope' => 'global'],
@@ -81,6 +85,7 @@ function novamira_cli_agents(): array
         'openhands' => ['label' => 'OpenHands', 'scope' => 'global'],
         'pi' => ['label' => 'Pi', 'scope' => 'global'],
         'pochi' => ['label' => 'Pochi', 'scope' => 'global'],
+        'posit-assistant' => ['label' => 'Posit Assistant', 'scope' => 'global'],
         'promptscript' => ['label' => 'PromptScript', 'scope' => 'project'],
         'qoder' => ['label' => 'Qoder', 'scope' => 'global'],
         'qoder-cn' => ['label' => 'Qoder CN', 'scope' => 'global'],
@@ -89,6 +94,7 @@ function novamira_cli_agents(): array
         'replit' => ['label' => 'Replit', 'scope' => 'global'],
         'roo' => ['label' => 'Roo Code', 'scope' => 'global'],
         'rovodev' => ['label' => 'Rovo Dev', 'scope' => 'global'],
+        'sarvam-code' => ['label' => 'Sarvam Code', 'scope' => 'global'],
         'tabnine-cli' => ['label' => 'Tabnine CLI', 'scope' => 'global'],
         'terramind' => ['label' => 'Terramind', 'scope' => 'global'],
         'tinycloud' => ['label' => 'Tinycloud', 'scope' => 'global'],
@@ -106,12 +112,17 @@ function novamira_cli_agents(): array
 /**
  * Translate a visible Configuration-page client key to its skills installer key.
  * Most names match; these aliases keep product distinctions visible without
- * leaking incompatible implementation slugs into the UI.
+ * leaking incompatible implementation slugs into the UI. The installer's grok is
+ * Grok Build, so the grok.com client has no installer key.
  */
 function novamira_cli_agent_for_client(string $client): ?string
 {
+    if ($client === 'grok') {
+        return null;
+    }
     $agent = match ($client) {
         'codex-cli' => 'codex',
+        'grok-build' => 'grok',
         'kilo-code' => 'kilo',
         'roo-code' => 'roo',
         default => $client,
@@ -176,7 +187,7 @@ function novamira_cli_unix_install_command(string $agent, string $scope): string
     if ($scope === 'project') {
         return implode("\n", [
             'npm install --global --ignore-scripts @novamira/cli',
-            'DISABLE_TELEMETRY=1 npm_config_ignore_scripts=true npx --yes skills@1.5.18 add "$(npm root --global)/@novamira/cli"'
+            'DISABLE_TELEMETRY=1 npm_config_ignore_scripts=true npx --yes skills@1.7.2 add "$(npm root --global)/@novamira/cli"'
                 . ' --skill novamira --agent '
                 . novamira_cli_shell_quote($agent)
                 . ' --yes',
@@ -203,7 +214,7 @@ function novamira_cli_windows_install_command(string $agent, string $scope): str
             'npm install --global --ignore-scripts @novamira/cli',
             '$skillSource = Join-Path (npm root --global) \'@novamira/cli\'',
             '$env:DISABLE_TELEMETRY = \'1\'; $env:npm_config_ignore_scripts = \'true\'',
-            'npx --yes skills@1.5.18 add $skillSource --skill novamira --agent ' . $quoted_agent . ' --yes',
+            'npx --yes skills@1.7.2 add $skillSource --skill novamira --agent ' . $quoted_agent . ' --yes',
             'novamira doctor --offline',
         ]);
     }

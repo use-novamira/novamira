@@ -30,6 +30,8 @@ final class CliSetupTest extends TestCase
         self::assertSame('cursor', novamira_cli_agent_for_client('cursor'));
         self::assertNull(novamira_cli_agent_for_client('claude-desktop'));
         self::assertNull(novamira_cli_agent_for_client('chatgpt'));
+        self::assertSame('grok', novamira_cli_agent_for_client('grok-build'));
+        self::assertNull(novamira_cli_agent_for_client('grok'));
     }
 
     public function testGlobalInstallerPassesAgentToTheInstallerShell(): void

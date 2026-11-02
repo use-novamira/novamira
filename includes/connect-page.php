@@ -535,6 +535,7 @@ function novamira_ai_clients(): array
     foreach (novamira_cli_agents() as $agent => $details) {
         $client = match ($agent) {
             'codex' => 'codex-cli',
+            'grok' => 'grok-build',
             'kilo' => 'kilo-code',
             'roo' => 'roo-code',
             default => $agent,
@@ -548,6 +549,26 @@ function novamira_ai_clients(): array
 }
 
 /**
+ * Give each CLI-only agent the Other MCP client setup, so the Novamira CLI adds a way in
+ * instead of being the only one.
+ *
+ * @template T of array<string, mixed>
+ * @param array<string, T> $configs
+ * @return array<string, T>
+ */
+function novamira_with_generic_fallback(array $configs): array
+{
+    if (!array_key_exists('generic', $configs)) {
+        return $configs;
+    }
+    $cli_only_clients = array_diff_key(novamira_ai_clients(), novamira_mcp_clients());
+    foreach (array_keys($cli_only_clients) as $client) {
+        $configs[$client] ??= $configs['generic'];
+    }
+    return $configs;
+}
+
+/**
  * Render the AI client chooser before the authentication-method step.
  */
 // Inherent: each rendered tool carries its server-resolved OAuth, password, CLI, scope,
@@ -556,15 +577,18 @@ function novamira_ai_clients(): array
 function novamira_render_ai_client_chooser(): void
 {
     $name_placeholder = '__NOVAMIRA_MCP_NAME__';
-    $oauth_configs = novamira_build_oauth_configs(rest_url('mcp/novamira-oauth'), $name_placeholder);
-    $password_configs = novamira_build_configs(
+    $oauth_configs = novamira_with_generic_fallback(novamira_build_oauth_configs(
+        rest_url('mcp/novamira-oauth'),
+        $name_placeholder,
+    ));
+    $password_configs = novamira_with_generic_fallback(novamira_build_configs(
         rest_url: rest_url('mcp/novamira'),
         username: wp_get_current_user()->user_login,
         // This is the visible documentation placeholder, never a credential.
         // @mago-expect lint:no-literal-password
         display_password: 'YOUR-APP-PASSWORD',
         mcp_name: $name_placeholder,
-    );
+    ));
     $clients = novamira_ai_clients();
     $cli_transport_available = novamira_cli_transport_allowed(home_url('/'), wp_get_environment_type());
     // Preserve the concise chooser users already know; CLI-only agents remain
@@ -1178,7 +1202,7 @@ function novamira_render_oauth_config_section(string $rest_url): void
     }
     $default_name = novamira_get_mcp_server_name_default();
     $name_placeholder = '__NOVAMIRA_MCP_NAME__';
-    $configs = novamira_build_oauth_configs($rest_url, $name_placeholder);
+    $configs = novamira_with_generic_fallback(novamira_build_oauth_configs($rest_url, $name_placeholder));
     $configs_json = (string) wp_json_encode($configs);
 
     $clients = array_intersect_key(novamira_ai_clients(), $configs);
@@ -2622,7 +2646,12 @@ function novamira_render_config_section(string $rest_url, string $username, stri
     $name_placeholder = '__NOVAMIRA_MCP_NAME__';
     $pw_slot = '__NOVAMIRA_PW_SLOT__';
     $password_is_placeholder = hash_equals('YOUR-APP-PASSWORD', $display_password);
-    $configs = novamira_build_configs($rest_url, $username, $display_password, $name_placeholder);
+    $configs = novamira_with_generic_fallback(novamira_build_configs(
+        $rest_url,
+        $username,
+        $display_password,
+        $name_placeholder,
+    ));
     $configs_json = (string) wp_json_encode($configs);
 
     $clients = array_intersect_key(novamira_ai_clients(), $configs);
@@ -2813,7 +2842,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         var usernameValue = <?php echo wp_json_encode($username); ?>;
 
         function hasManualConfig(key) {
-            return key !== 'grok-bot' && key !== 'generic';
+            return !!(configs[key] && configs[key].code);
         }
 
         function renderPaste() {
