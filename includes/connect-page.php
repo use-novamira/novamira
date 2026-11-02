@@ -544,7 +544,7 @@ function novamira_ai_clients(): array
         }
     }
     uasort($cli_only_clients, static fn(string $left, string $right): int => strnatcasecmp($left, $right));
-    return $clients + $cli_only_clients;
+    return $clients + $cli_only_clients + ['generic' => __('Other MCP client', domain: 'novamira')];
 }
 
 /**
@@ -633,6 +633,7 @@ function novamira_render_ai_client_chooser(): void
                 data-cli-agent="<?php echo esc_attr($cli_agent ?? ''); ?>"
                 data-cli-scope="<?php echo esc_attr($cli_details['scope'] ?? ''); ?>"
                 data-common="<?php echo $is_common ? 'true' : 'false'; ?>"
+                data-fallback="<?php echo $key === 'generic' ? 'true' : 'false'; ?>"
                 aria-pressed="false"
                 <?php echo $is_common ? '' : 'hidden'; ?>
                 onclick="novamiraChooseAiClient('<?php echo esc_js($key); ?>', this)"
@@ -646,7 +647,7 @@ function novamira_render_ai_client_chooser(): void
         <?php endforeach; ?>
     </div>
     <p id="novamira-client-no-results" class="description" hidden><?php esc_html_e(
-        'No matching AI tool found.',
+        'No matching AI tool found. Choose Other MCP client: it works with any AI tool that supports MCP servers.',
         domain: 'novamira',
     ); ?></p>
 
@@ -681,6 +682,7 @@ function novamira_render_ai_client_chooser(): void
             var query = search.value.trim().toLowerCase();
             var selectedClient = window.novamiraSelectedAiClient || '';
             var visibleCount = 0;
+            var fallbackChoice = null;
             document.querySelectorAll('.novamira-ai-client-choice').forEach(function (choice) {
                 var matches = choice.textContent.toLowerCase().indexOf(query) !== -1;
                 var common = choice.getAttribute('data-common') === 'true';
@@ -688,7 +690,10 @@ function novamira_render_ai_client_chooser(): void
                 var visible = query !== '' ? matches : (showingAllClients || common || selected);
                 choice.hidden = !visible;
                 if (visible) { visibleCount += 1; }
+                if (choice.getAttribute('data-fallback') === 'true') { fallbackChoice = choice; }
             });
+            // A search with no match offers the generic client instead of a dead end.
+            if (fallbackChoice && query !== '' && visibleCount === 0) { fallbackChoice.hidden = false; }
 
             var list = document.getElementById('novamira-client-list');
             list.classList.toggle('is-filtering', query !== '');
@@ -2023,10 +2028,26 @@ function novamira_build_paste_to_agent_paragraph(
         '',
         'Don\'t ask me to confirm choices already specified above. After writing the config, restart or reload the MCP session (most clients require it), then verify by listing the server\'s tools. If it fails, show me the stderr from the npx process before proposing changes.',
         '',
-        'If you cannot modify the config of this AI tool from here, tell me to expand "Manual configuration for your AI tool" on the Novamira Configuration page and copy the snippet manually.',
+        novamira_paste_manual_fallback_line(),
     ];
 
     return implode("\n", $lines);
+}
+
+/**
+ * Closing line of the paste-to-agent paragraph that points at the manual configuration.
+ */
+function novamira_paste_manual_fallback_line(): string
+{
+    return 'If you cannot modify the config of this AI tool from here, tell me to expand "Manual configuration for your AI tool" on the Novamira Configuration page and copy the snippet manually.';
+}
+
+/**
+ * The paste-to-agent paragraph for clients without a manual configuration to point at.
+ */
+function novamira_paste_without_manual_fallback(string $paragraph): string
+{
+    return str_replace(search: "\n\n" . novamira_paste_manual_fallback_line(), replace: '', subject: $paragraph);
 }
 
 /**
@@ -2352,10 +2373,11 @@ function novamira_build_configs(string $rest_url, string $username, string $disp
             ],
             'isShell' => false,
         ],
-        // Grok Bot has no config file of its own: it reads the prompt above and connects itself,
-        // so there is no manual snippet to show (the "Manual configuration" section stays hidden
-        // for it, see novamiraSetClient() on the Configuration page).
+        // Grok Bot and other MCP clients rely on the prompt above alone: there is no known config
+        // file to show, so the "Manual configuration" section stays hidden for them (see
+        // novamiraSetClient() on the Configuration page).
         'grok-bot' => ['code' => '', 'hint' => '', 'paths' => [], 'isShell' => false],
+        'generic' => ['code' => '', 'hint' => '', 'paths' => [], 'isShell' => false],
     ];
 
     return array_merge(novamira_build_standard_configs($mcp_servers_json, $vscode_servers_json), $special);
@@ -2619,6 +2641,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         $name_placeholder,
         $pw_slot,
     );
+    $paste_paragraph_template_no_manual = novamira_paste_without_manual_fallback($paste_paragraph_template);
     ?>
     <div id="novamira-connect-content" style="display:none; margin-top:16px;">
 
@@ -2780,6 +2803,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         var client = '';
         var defaultName = <?php echo wp_json_encode($default_name); ?>;
         var pasteTemplate = <?php echo wp_json_encode($paste_paragraph_template); ?>;
+        var pasteTemplateNoManual = <?php echo wp_json_encode($paste_paragraph_template_no_manual); ?>;
         var mcpName = <?php echo wp_json_encode($default_name); ?>;
         var npxlessClient = 'claude';
         var namePlaceholder = <?php echo wp_json_encode($name_placeholder); ?>;
@@ -2788,8 +2812,13 @@ function novamira_render_config_section(string $rest_url, string $username, stri
         var passwordIsPlaceholder = <?php echo wp_json_encode($password_is_placeholder); ?>;
         var usernameValue = <?php echo wp_json_encode($username); ?>;
 
+        function hasManualConfig(key) {
+            return key !== 'grok-bot' && key !== 'generic';
+        }
+
         function renderPaste() {
-            var text = pasteTemplate.split(namePlaceholder).join(mcpName);
+            var template = hasManualConfig(client) ? pasteTemplate : pasteTemplateNoManual;
+            var text = template.split(namePlaceholder).join(mcpName);
             var container = document.getElementById('novamira-paste-text');
             container.textContent = '';
             var idx = text.indexOf(passwordSentinel);
@@ -2835,7 +2864,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
             if (mergeNote) { mergeNote.style.display = cfg.isShell ? 'none' : ''; }
 
             var isDesktop = client === 'claude-desktop';
-            var noManualConfig = client === 'grok-bot';
+            var noManualConfig = !hasManualConfig(client);
             var mcpbEl = document.getElementById('novamira-mcpb-download');
             if (mcpbEl) { mcpbEl.style.display = isDesktop ? '' : 'none'; }
             var pasteBlock = document.getElementById('novamira-paste-block');
@@ -2885,6 +2914,7 @@ function novamira_render_config_section(string $rest_url, string $username, stri
                 ; ?> + ' ' + clientLabels[key];
             }
             renderConfig();
+            renderPaste();
         };
 
         window.novamiraSetNpxlessClient = function (key, btn) {

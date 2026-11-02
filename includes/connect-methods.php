@@ -671,6 +671,7 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
                 'chatgpt' => novamira_oauth_cloud_only_notice('ChatGPT.com'),
                 'grok' => novamira_oauth_cloud_only_notice('Grok.com'),
                 'grok-bot' => novamira_oauth_cloud_only_notice('Grok Bot'),
+                'generic' => novamira_oauth_generic_entry($mcp_name, $mcp_url),
             ]
         );
     }
@@ -701,6 +702,7 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
                 'isShell' => false,
                 'steps' => novamira_oauth_grok_steps($mcp_name, $mcp_url),
             ],
+            'generic' => novamira_oauth_generic_entry($mcp_name, $mcp_url),
         ]
     );
 }
@@ -1129,4 +1131,31 @@ function novamira_build_oauth_bridge_standard(string $mcp_servers_json, string $
             ),
         ]),
     ];
+}
+
+/**
+ * Setup for an AI tool without its own entry: the remote server URL, for tools that run OAuth
+ * themselves.
+ *
+ * @return array<string, mixed>
+ */
+function novamira_oauth_generic_entry(string $mcp_name, string $mcp_url): array
+{
+    $steps = [
+        [
+            'title' => __('Add a remote MCP server', domain: 'novamira'),
+            'body' => __(
+                'In your AI tool, add a remote MCP server (some tools call it a custom connector) and give it this name:',
+                domain: 'novamira',
+            ),
+            'copy' => $mcp_name,
+        ],
+        [
+            'title' => __('Enter the server URL', domain: 'novamira'),
+            'body' => __('Paste the URL below and save, then sign in when the browser opens.', domain: 'novamira'),
+            'copy' => $mcp_url,
+        ],
+    ];
+
+    return ['kind' => 'code', 'code' => '', 'hint' => '', 'paths' => [], 'isShell' => false, 'steps' => $steps];
 }
