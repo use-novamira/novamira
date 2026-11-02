@@ -1,4 +1,8 @@
 Unreleased
+* Tweak: AI tools on the Configuration page that could only be connected with the Novamira CLI, such as ZCode, now also offer OAuth and Application Password.
+* Tweak: The Configuration page now offers Other MCP client for AI tools missing from the list, with the server URL for OAuth and a prompt to paste for Application Password.
+* Tweak: The Novamira CLI can now be set up from the Configuration page for Grok Build, MiniMax Code, Posit Assistant, Kimchi, fx and Sarvam Code.
+* Tweak: The Configuration page now marks Claude.ai, ChatGPT.com and Grok.com as websites, and lists Codex in ChatGPT Desktop before ChatGPT.com.
 * Fix: Sites that hide or rename the WordPress login page, with plugins such as WPS Hide Login or Solid Security, can now approve new connections, where the authorization page previously showed a "page not found" error to visitors who were not logged in.
 * Fix: PHP code run by AI agents now reports a warning repeated many times as a single entry with how often it occurred, where a plugin that raised it thousands of times previously filled the response with copies.
 * Fix: Files written or edited by AI agents are now replaced in a single step, so a page that loads one at that moment no longer reads it half written, which could switch the sandbox to safe mode.
