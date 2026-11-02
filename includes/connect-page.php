@@ -590,7 +590,6 @@ function novamira_render_ai_client_chooser(): void
         mcp_name: $name_placeholder,
     ));
     $clients = novamira_ai_clients();
-    $cli_transport_available = novamira_cli_transport_allowed(home_url('/'), wp_get_environment_type());
     // Preserve the concise chooser users already know; CLI-only agents remain
     // available through search and the explicit expanded view.
     $common_clients = array_fill_keys(keys: array_keys(novamira_mcp_clients()), value: true);
@@ -642,7 +641,7 @@ function novamira_render_ai_client_chooser(): void
                 : '';
             $cli_agent = novamira_cli_agent_for_client($key);
             $cli_details = $cli_agent !== null ? novamira_cli_agents()[$cli_agent] : null;
-            $cli_supported = $cli_agent !== null && $cli_transport_available;
+            $cli_supported = $cli_agent !== null;
             $is_common = array_key_exists($key, $common_clients);
             ?>
             <button
@@ -733,6 +732,9 @@ function novamira_render_ai_client_chooser(): void
         function updateAuthenticationAvailability(choice) {
             var clientLabel = choice.getAttribute('data-label') || choice.textContent.trim();
             var availableMethods = 0;
+            var cliCard = document.querySelector('.novamira-method-card[data-method="cli"]');
+            var cliUsable = choice.getAttribute('data-cli-supported') === 'true'
+                && !!cliCard && cliCard.getAttribute('data-transport-available') !== 'false';
             document.querySelectorAll('.novamira-method-card[data-method]').forEach(function (card) {
                 var method = card.getAttribute('data-method');
                 var transportAvailable = card.getAttribute('data-transport-available') !== 'false';
@@ -745,11 +747,12 @@ function novamira_render_ai_client_chooser(): void
                 }
 
                 card.disabled = !transportAvailable || !supported;
-                card.hidden = card.disabled;
+                // A supported CLI stays visible without HTTPS, so the requirement is explained, not hidden.
+                card.hidden = card.disabled && !(method === 'cli' && supported);
                 card.setAttribute('aria-disabled', card.disabled ? 'true' : 'false');
                 if (!card.disabled) { availableMethods += 1; }
                 if (recommendation) {
-                    recommendation.hidden = !supported || (method !== 'cli' && choice.getAttribute('data-cli-supported') === 'true');
+                    recommendation.hidden = !supported || (method !== 'cli' && cliUsable);
                 }
 
                 if (description && !supported) {
@@ -895,6 +898,7 @@ function novamira_render_method_chooser(
     // OAuth is only offered where its transport is safe (HTTPS, or a local site). On a public
     // HTTP site it is not selectable; WordPress already blocks application passwords there too.
     $oauth_available = novamira_oauth_transport_allowed();
+    $cli_available = novamira_cli_transport_allowed(home_url('/'), wp_get_environment_type());
     $password_available = novamira_app_passwords_status()['available'];
     $hosting = \Novamira\Hosting\Detector::current();
     $hosting_name = is_array($hosting) ? $hosting['name'] : '';
@@ -932,6 +936,7 @@ function novamira_render_method_chooser(
     </p>
 
     <div class="novamira-method-cards">
+        <?php if ($cli_available): ?>
         <button
             type="button"
             class="novamira-method-card"
@@ -953,6 +958,30 @@ function novamira_render_method_chooser(
                 domain: 'novamira',
             ); ?></span>
         </button>
+        <?php endif; ?>
+        <?php if (!$cli_available): ?>
+        <button
+            type="button"
+            class="novamira-method-card"
+            data-method="cli"
+            data-transport-available="false"
+            hidden
+            disabled
+            aria-disabled="true"
+        >
+            <span class="novamira-method-title">
+                <?php esc_html_e('Novamira CLI', domain: 'novamira'); ?>
+                <span
+                    class="novamira-recommended-badge"
+                    style="color:#8a6d1a; background:#fcf3d7;"
+                ><?php esc_html_e('Requires HTTPS', domain: 'novamira'); ?></span>
+            </span>
+            <span class="description"><?php esc_html_e(
+                'The Novamira CLI connects over the network, so it needs HTTPS. Enable HTTPS on your site to use it.',
+                domain: 'novamira',
+            ); ?></span>
+        </button>
+        <?php endif; ?>
         <?php if ($oauth_available): ?>
         <button
             type="button"
