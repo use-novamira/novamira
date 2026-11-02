@@ -491,8 +491,8 @@ function novamira_mcp_clients(): array
         'claude-code' => 'Claude Code',
         'claude-desktop' => 'Claude Desktop',
         'claude-ai' => 'Claude.ai',
-        'chatgpt' => 'ChatGPT.com',
         'codex-app' => 'Codex in ChatGPT Desktop',
+        'chatgpt' => 'ChatGPT.com',
         'grok' => 'Grok.com',
         'grok-bot' => 'Grok Bot',
         'codex-cli' => 'Codex CLI',
@@ -509,6 +509,16 @@ function novamira_mcp_clients(): array
         'kilo-code' => 'Kilo Code',
         'opencode' => 'OpenCode',
     ];
+}
+
+/**
+ * Clients used through their website rather than an installed app.
+ *
+ * @return list<string>
+ */
+function novamira_web_clients(): array
+{
+    return ['claude-ai', 'chatgpt', 'grok'];
 }
 
 /**
@@ -615,6 +625,7 @@ function novamira_render_ai_client_chooser(): void
                 type="button"
                 class="novamira-client-tab novamira-top-client-tab novamira-ai-client-choice"
                 data-client="<?php echo esc_attr($key); ?>"
+                data-label="<?php echo esc_attr($label); ?>"
                 data-oauth-supported="<?php echo $oauth_supported ? 'true' : 'false'; ?>"
                 data-oauth-reason="<?php echo esc_attr($oauth_reason); ?>"
                 data-password-supported="<?php echo array_key_exists($key, $password_configs) ? 'true' : 'false'; ?>"
@@ -625,7 +636,13 @@ function novamira_render_ai_client_chooser(): void
                 aria-pressed="false"
                 <?php echo $is_common ? '' : 'hidden'; ?>
                 onclick="novamiraChooseAiClient('<?php echo esc_js($key); ?>', this)"
-            ><?php echo esc_html($label); ?></button>
+            ><?php
+
+            echo esc_html($label);
+            if (in_array($key, novamira_web_clients(), strict: true)) {
+                echo ' ' . esc_html__('(web)', domain: 'novamira');
+            }
+            ?></button>
         <?php endforeach; ?>
     </div>
     <p id="novamira-client-no-results" class="description" hidden><?php esc_html_e(
@@ -685,7 +702,7 @@ function novamira_render_ai_client_chooser(): void
         }
 
         function updateAuthenticationAvailability(choice) {
-            var clientLabel = choice.textContent.trim();
+            var clientLabel = choice.getAttribute('data-label') || choice.textContent.trim();
             var availableMethods = 0;
             document.querySelectorAll('.novamira-method-card[data-method]').forEach(function (card) {
                 var method = card.getAttribute('data-method');
