@@ -9,6 +9,7 @@ namespace Novamira\OAuth\Consent;
 
 use League\OAuth2\Server\Exception\OAuthServerException;
 use Novamira\OAuth\Bridge;
+use Novamira\OAuth\ClientValidation;
 use Novamira\OAuth\Keys\KeyBootstrapError;
 use Novamira\OAuth\Repositories\ClientRepository;
 use Novamira\OAuth\Repositories\PendingAuthorizationRepository;
@@ -136,6 +137,14 @@ function resolve_pending(): ?array
 function render_post(string $token, array $pending, string $redirect_uri, string $state): void
 {
     check_admin_referer('novamira_oauth_consent_' . $token);
+
+    if (!ClientValidation\is_allowed_redirect_uri(
+        $redirect_uri,
+        defined('WP_DEBUG') && constant('WP_DEBUG') === true,
+    )) {
+        wp_die(esc_html__('redirect_uri not allowed.', domain: 'novamira'), title: '', args: ['response' => 400]);
+        return;
+    }
 
     $pending_authorizations = new PendingAuthorizationRepository();
     if (!$pending_authorizations->consume($token)) {

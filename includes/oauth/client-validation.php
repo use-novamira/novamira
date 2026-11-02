@@ -91,11 +91,9 @@ function is_allowed_redirect_uri(string $uri, bool $dev_mode = false): bool
     // SSRF is not a concern here: redirect_uris are used only in 302 responses
     // to the user's browser — our server never fetches them. The DNS check
     // prevents redirect_uris with private-IP hostnames (e.g. "internal.corp").
-    // Fail open when DNS is unavailable (some restricted or managed hosting environments),
-    // since raw private-IP literals are already blocked above and PKCE S256 is mandatory.
     $resolved_ips = resolve_host_ips($host);
     if ($resolved_ips === null) {
-        return true;
+        return false;
     }
     foreach ($resolved_ips as $ip) {
         if (is_blocked_ip($ip, $dev_mode)) {

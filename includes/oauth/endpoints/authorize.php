@@ -7,7 +7,9 @@ declare(strict_types=1);
 
 namespace Novamira\OAuth\Endpoints\Authorize;
 
+use League\OAuth2\Server\Entities\ClientEntityInterface;
 use League\OAuth2\Server\RedirectUriValidators\RedirectUriValidator;
+use Novamira\OAuth\ClientValidation;
 use Novamira\OAuth\Repositories\ClientRepository;
 use Novamira\OAuth\Repositories\PendingAuthorizationRepository;
 
@@ -114,29 +116,7 @@ function handle(): void
         return;
     }
 
-    // A device client registers no redirect URI, so it can never complete this flow. Say so plainly
-    // instead of reporting an unregistered redirect_uri, which reads as a misconfiguration.
-    if ($client->getRedirectUri() === [] || $client->getRedirectUri() === '') {
-        wp_die(
-            esc_html__(
-                'This application is registered for device authorization. Approve it under Authorize Device instead.',
-                domain: 'novamira',
-            ),
-            title: '',
-            args: ['response' => 400],
-        );
-        return;
-    }
-
-    // RFC 8252 §7.3: a native/desktop client binds an ephemeral loopback port that can differ from
-    // the one it registered, so league's validator matches 127.0.0.1/[::1] ignoring the port (and
-    // requires an exact match otherwise). This is the same check league runs at the consent step, so
-    // validating it the same way here keeps the two consistent.
-    $uri_validator = new RedirectUriValidator($client->getRedirectUri());
-    if (!$uri_validator->validateRedirectUri($redirect_uri)) {
-        wp_die(esc_html__('redirect_uri not registered for this client.', domain: 'novamira'), title: '', args: [
-            'response' => 400,
-        ]);
+    if (!validate_client_redirect($client, $redirect_uri)) {
         return;
     }
 
@@ -160,6 +140,45 @@ function handle(): void
 
     wp_safe_redirect(admin_url('admin.php?page=novamira-oauth-consent&token=' . rawurlencode($token)));
     exit();
+}
+
+function validate_client_redirect(ClientEntityInterface $client, string $redirect_uri): bool
+{
+    // A device client registers no redirect URI, so it can never complete this flow. Say so plainly
+    // instead of reporting an unregistered redirect_uri, which reads as a misconfiguration.
+    if ($client->getRedirectUri() === [] || $client->getRedirectUri() === '') {
+        wp_die(
+            esc_html__(
+                'This application is registered for device authorization. Approve it under Authorize Device instead.',
+                domain: 'novamira',
+            ),
+            title: '',
+            args: ['response' => 400],
+        );
+        return false;
+    }
+
+    // RFC 8252 §7.3: a native/desktop client binds an ephemeral loopback port that can differ from
+    // the one it registered, so league's validator matches 127.0.0.1/[::1] ignoring the port (and
+    // requires an exact match otherwise). This is the same check league runs at the consent step, so
+    // validating it the same way here keeps the two consistent.
+    $uri_validator = new RedirectUriValidator($client->getRedirectUri());
+    if (!$uri_validator->validateRedirectUri($redirect_uri)) {
+        wp_die(esc_html__('redirect_uri not registered for this client.', domain: 'novamira'), title: '', args: [
+            'response' => 400,
+        ]);
+        return false;
+    }
+
+    if (!ClientValidation\is_allowed_redirect_uri(
+        $redirect_uri,
+        defined('WP_DEBUG') && constant('WP_DEBUG') === true,
+    )) {
+        wp_die(esc_html__('redirect_uri not allowed.', domain: 'novamira'), title: '', args: ['response' => 400]);
+        return false;
+    }
+
+    return true;
 }
 
 /**
