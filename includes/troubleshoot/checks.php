@@ -569,7 +569,7 @@ function check_rest_reachable(): array
                 $code,
             ),
             __(
-                'In your security plugin, allow unauthenticated access to the REST API (at minimum the novamira/v1 and mcp namespaces), then run these checks again.',
+                'In your security plugin, do not require a prior login for the WordPress REST API (/wp-json/ and its subpaths). Do not cache or redirect those paths, serve bot challenges, JavaScript or CAPTCHA checks, block requests by IP reputation or bot score, or apply rate limits that reject these requests (403 or 429). Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again.',
                 domain: 'novamira',
             ),
         );
@@ -939,7 +939,7 @@ function discovery_redirect_failure(array $probe, string $label, int $code, arra
                 $redirect_by,
             ),
             __(
-                'Open the redirect rules of the redirection, SEO and security plugins on this site, delete any rule matching this path, and exclude /.well-known/ from their 404 handling and automatic redirects. Then run these checks again. Hosting cannot help with this one: a server, CDN or firewall rule would not carry an X-Redirect-By header.',
+                'Open the redirect rules of the redirection, SEO and security plugins on this site, remove only the rule matching this path, and configure /.well-known/ not to trigger 404 handling or automatic redirects. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again. Hosting cannot help with this one: a server, CDN or firewall rule would not carry an X-Redirect-By header.',
                 domain: 'novamira',
             ),
         );
@@ -982,7 +982,7 @@ function discovery_redirect_failure(array $probe, string $label, int $code, arra
             $location,
         ),
         __(
-            'Ask your hosting support to let this path, including any subpath, pass through to WordPress ("proxy pass as dynamic"), then run these checks again.',
+            'Ask your hosting support to remove the redirect for this path and its subpaths, keep them uncached, and pass them to WordPress as dynamic requests. On these paths, do not serve bot challenges, JavaScript or CAPTCHA checks, block by IP reputation or bot score, or apply rate limits that reject these requests (403 or 429). Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again.',
             domain: 'novamira',
         ),
     );
@@ -1029,7 +1029,7 @@ function discovery_generic_failure(string $label): array
             domain: 'novamira',
         ),
         __(
-            'Exclude the /.well-known/oauth-* paths from page caching and firewall challenges, then run these checks again.',
+            'On the /.well-known/oauth-* paths, do not cache or redirect responses, serve bot challenges, JavaScript or CAPTCHA checks, block by IP reputation or bot score, or apply rate limits that reject these requests (403 or 429). Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again.',
             domain: 'novamira',
         ),
     );
@@ -1132,7 +1132,7 @@ function check_registration(): array
                 domain: 'novamira',
             ),
             __(
-                'Look at the "OAuth storage" check above: an incomplete table there is the cause (its message for your host contains the exact SQL), and the PHP error log carries the database error behind it. If storage is reported as installed, allow anonymous POST requests to /wp-json/novamira/v1/oauth/register. Once storage is fixed and this check passes, remove the AI connector from your AI client and add it again, so it registers afresh instead of reusing a registration that failed.',
+                'Look at the "OAuth storage" check above: an incomplete table there is the cause (its message for your host contains the exact SQL), and the PHP error log carries the database error behind it. If storage is reported as installed, require no prior authentication for POST requests to /wp-json/novamira/v1/oauth/register; do not cache or redirect them, serve bot challenges, JavaScript or CAPTCHA checks, block by IP reputation or bot score, or apply rate limits that reject these requests (403 or 429). Keep SQL injection, XSS, exploit-signature inspection, and every other protection active. Once storage is fixed and this check passes, remove the AI connector from your AI client and add it again, so it registers afresh instead of reusing a registration that failed.',
                 domain: 'novamira',
             ),
         );
@@ -1150,7 +1150,7 @@ function check_registration(): array
             $code,
         ),
         __(
-            'Allow anonymous POST requests to /wp-json/novamira/v1/oauth/register, then run these checks again.',
+            'For POST requests to /wp-json/novamira/v1/oauth/register, require no prior authentication; do not cache or redirect them, serve bot challenges, JavaScript or CAPTCHA checks, block by IP reputation or bot score, or apply rate limits that reject these requests (403 or 429). Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again.',
             domain: 'novamira',
         ),
     );
@@ -1332,13 +1332,13 @@ function check_security_edge(): array
         sprintf(
             /* translators: %s: comma-separated list of detected security/edge layer names */
             __(
-                'Detected in front of your site: %s. These protect your site — keep them. Our checks pass from here, but such layers can still filter AI clients from the outside. If a client cannot connect, ask for the MCP paths to be allowed through — do not turn the security off.',
+                'Detected in front of your site: %s. These protect your site — keep them. Our checks pass from here, but such layers can still filter AI clients from the outside. If a client cannot connect, ask the host to apply the changes below on the whole /wp-json/ path and its subpaths, plus /.well-known/oauth-*. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active.',
                 domain: 'novamira',
             ),
             implode(', ', $found),
         ),
         __(
-            'Allow these paths through the CDN/WAF/security layer, by path (not by User-Agent): /wp-json/mcp/novamira and /.well-known/oauth-* . Keep every other protection on.',
+            'On the whole /wp-json/ REST path and its subpaths, plus /.well-known/oauth-*, do not cache or redirect responses, serve bot challenges, JavaScript or CAPTCHA checks, block by IP reputation or bot score, or apply rate limits that reject these requests (403 or 429). Make these changes by path (not by User-Agent or IP). Keep SQL injection, XSS, exploit-signature inspection, and every other protection active.',
             domain: 'novamira',
         ),
     );
@@ -1396,13 +1396,13 @@ function check_bot_filter(): array
             implode(', ', $list),
         ),
         __(
-            'Ask your hosting support to allow this traffic for your site. The message below is ready to copy into a support ticket.',
+            'Ask your hosting support to make the path-based changes listed in the message below. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active. The message is ready to copy into a support ticket.',
             domain: 'novamira',
         ),
         copy: sprintf(
             /* translators: 1: site URL, 2: probed discovery URL, 3: blocked user agent, 4: response it received */
             __(
-                'Hello, my WordPress site %1$s runs Novamira, a plugin that lets AI clients (Claude, ChatGPT and similar services) connect to the site through OAuth. Your edge layer is rejecting those clients\' requests before they reach WordPress, so the connection cannot complete. I can reproduce it: a request to %2$s with the user agent "%3$s" is rejected (%4$s), while the same request with a regular user agent goes through. Could you allow this traffic for my site? The affected paths are /.well-known/oauth-* and /wp-json/. Thank you.',
+                'Hello, my WordPress site %1$s runs Novamira, a plugin that lets AI clients (Claude, ChatGPT and similar services) connect to the site through OAuth. Your edge layer is rejecting those clients\' requests before they reach WordPress, so the connection cannot complete. I can reproduce it: a request to %2$s with the user agent "%3$s" is rejected (%4$s), while the same request with a regular user agent goes through. Could you keep the whole /wp-json/ REST path and its subpaths, plus /.well-known/oauth-*, dynamic and uncached, with no redirects, bot challenges, JavaScript or CAPTCHA checks, IP-reputation or bot-score blocking, or rate limits that reject these requests (403 or 429)? Please make these changes by path, not by User-Agent or IP. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active. Thank you.',
                 domain: 'novamira',
             ),
             home_url(),
@@ -1512,7 +1512,7 @@ function check_environment(array $headers): array
         $note =
             ' '
             . __(
-                'Cloudflare is in front of this site: its bot protection can challenge AI clients connecting from datacenter addresses even though this server-side probe passes. If registration keeps failing for clients only, review the Cloudflare security settings for this zone.',
+                'Cloudflare is in front of this site: its bot protection can challenge AI clients connecting from datacenter addresses even though this server-side probe passes. If registration keeps failing for clients only, configure the whole /wp-json/ REST path and its subpaths, plus /.well-known/oauth-*, with no caching, redirects, bot challenges, JavaScript or CAPTCHA checks, IP-reputation or bot-score blocking, or rate limits that reject these requests (403 or 429). Make these changes by path, not by User-Agent or IP. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active.',
                 domain: 'novamira',
             );
     }

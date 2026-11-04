@@ -144,7 +144,7 @@ function render_panel(string $context, string $method = '', bool $with_method_pi
                     <div class="novamira-ts-fix-option">
                         <h4><?php esc_html_e('OAuth only? Contact hosting support', domain: 'novamira'); ?></h4>
                         <p><?php esc_html_e(
-                            'Claude.ai only supports OAuth. Ask your hosting provider or CDN to allow the AI provider’s traffic to /.well-known/oauth-* and /wp-json/ without bot filtering.',
+                            'Claude.ai only supports OAuth. Ask your hosting provider or CDN to keep /.well-known/oauth-* and the whole /wp-json/ path dynamic and uncached, with no redirects, bot challenges, JavaScript or CAPTCHA checks, IP-reputation or bot-score blocking, or rate limits that reject these requests (403 or 429). Apply this by path, not by User-Agent or IP. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active.',
                             domain: 'novamira',
                         ); ?></p>
                         <details class="novamira-ts-support-email">
@@ -156,7 +156,7 @@ function render_panel(string $context, string $method = '', bool $with_method_pi
                                     data-novamira-ts="support-subject"
                                     value="<?php echo
                                         esc_attr__(
-                                            'Request to allow AI client connections over the WordPress REST API',
+                                            'Request to fix AI client connections to the WordPress REST API',
                                             domain: 'novamira',
                                         )
                                     ; ?>"
