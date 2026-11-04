@@ -188,6 +188,14 @@ function validate_client_redirect(ClientEntityInterface $client, string $redirec
  * and wp-login.php's post-login return for its bare admin_url() fallback, dropping the query string
  * that carries the authorization request. Adds the site's own admin host, read from configuration
  * and never from the request; the list is returned unchanged when the host is already present.
+ *
+ * admin_url() runs the `site_url` filter, and a filter there that calls wp_get_referer() validates
+ * the referer through wp_validate_redirect(), which applies `allowed_redirect_hosts` again. Without
+ * the guard that cycle never ends on a request carrying a referer. A re-entered call returns the
+ * list unchanged and the outer call completes it. admin_url() stays the source of the host, rather
+ * than the `siteurl` option, so that the host allowed is the one on the addresses Novamira redirects
+ * to, including when a filter changes it. The host is not memoized because switch_to_blog() can
+ * change it within a request.
  */
 function allow_admin_host(mixed $hosts): mixed
 {
@@ -196,7 +204,19 @@ function allow_admin_host(mixed $hosts): mixed
         return $hosts;
     }
 
-    $admin_host = (string) wp_parse_url(admin_url(), PHP_URL_HOST);
+    /** @var bool $resolving_admin_host */
+    static $resolving_admin_host = false;
+    if ($resolving_admin_host) {
+        return $hosts;
+    }
+
+    $resolving_admin_host = true;
+    try {
+        $admin_host = (string) wp_parse_url(admin_url(), PHP_URL_HOST);
+    } finally {
+        $resolving_admin_host = false;
+    }
+
     if ($admin_host === '' || in_array($admin_host, $hosts, strict: true)) {
         return $hosts;
     }

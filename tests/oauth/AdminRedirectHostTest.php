@@ -59,6 +59,12 @@ final class AdminRedirectHostTest extends TestCase
         self::assertSame(['example.test'], Authorize\allow_admin_host(['example.test']));
     }
 
+    public function testPassesThroughAValueThatIsNotAList(): void
+    {
+        self::assertSame('example.test', Authorize\allow_admin_host('example.test'));
+        self::assertNull(Authorize\allow_admin_host(null));
+    }
+
     public function testNeverTrustsTheRequestHost(): void
     {
         $GLOBALS['novamira_test_home'] = 'https://example.test';
