@@ -41,6 +41,8 @@ const ACTIVE_CLIENT_TTL = 14 * 86_400;
 
 const MAX_REDIRECT_URI_LENGTH = 2048;
 
+const MAX_REDIRECT_URIS = 10;
+
 /**
  * Returns true if a redirect_uri may be registered.
  * Rejects schemes not in ALLOWED_SCHEMES and https URIs whose host resolves

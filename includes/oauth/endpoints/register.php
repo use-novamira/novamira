@@ -199,8 +199,10 @@ function handle(WP_REST_Request $req): WP_REST_Response|WP_Error
     if (!is_array($redirect_uris) || $redirect_uris === []) {
         return new WP_Error('invalid_request', 'redirect_uris must be a non-empty array', ['status' => 400]);
     }
-    if (count($redirect_uris) > 5) {
-        return new WP_Error('invalid_request', 'Max 5 redirect_uris', ['status' => 400]);
+    if (count($redirect_uris) > ClientValidation\MAX_REDIRECT_URIS) {
+        return new WP_Error('invalid_request', sprintf('Max %d redirect_uris', ClientValidation\MAX_REDIRECT_URIS), [
+            'status' => 400,
+        ]);
     }
 
     // @mago-expect analysis:mixed-operand
