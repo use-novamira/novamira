@@ -1,4 +1,6 @@
 Unreleased
+* Fix: REST API and MCP requests no longer search the server for WP-CLI every time. The result is remembered between requests, which removes a delay of up to several hundred milliseconds per request on hosts where starting a process is slow, such as Windows. A newly installed WP-CLI appears within 15 minutes, and running a WP-CLI command always checks for WP-CLI again.
+* Fix: A NOVAMIRA_WP_CLI_COMMAND constant pointing at a missing or non-executable program, or at a missing phar, now reports WP-CLI as unavailable and names the constant and the path, where the WP-CLI abilities were previously listed and then failed with "Failed to start process."
 * Fix: Sites using the custom login URL of SureMembers, or another plugin that checks the previous page whenever WordPress builds a site address, no longer crash with memory errors on pages reached from a link.
 * Fix: Troubleshoot no longer asks to add the .well-known rule again when it is already in place. On hosting with a known firewall, such as SiteGround or Cloudflare, a 403 on the OAuth discovery URLs now points to hosting support, unless the .well-known rule is missing or the site itself produced the error.
 * Fix: On sites with a page cache plugin such as WP-Optimize, AI clients can now connect with OAuth, where the plugin's note added to the sign-in details made them unreadable.

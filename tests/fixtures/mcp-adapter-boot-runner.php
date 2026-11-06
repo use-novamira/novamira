@@ -92,6 +92,8 @@ $novamira_scenario = $argv[2];
 
 define('ABSPATH', '/');
 define('NOVAMIRA_MAX_EXECUTION_TIME', 30);
+define('MINUTE_IN_SECONDS', 60);
+define('DAY_IN_SECONDS', 86_400);
 if ($novamira_scenario === 'wp-cli') {
     define('WP_CLI', true);
 }
@@ -298,6 +300,18 @@ function is_user_logged_in(): bool
 function current_user_can(string $capability): bool
 {
     return $GLOBALS['novamira_test_logged_in'] ?? false;
+}
+
+function get_transient(string $transient): mixed
+{
+    return $GLOBALS['novamira_test_transients'][$transient] ?? false;
+}
+
+function set_transient(string $transient, mixed $value, int $expiration = 0): bool
+{
+    unset($expiration);
+    $GLOBALS['novamira_test_transients'][$transient] = $value;
+    return true;
 }
 
 function register_rest_route(string $route_namespace, string $route, array $args = []): bool

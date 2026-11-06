@@ -10,9 +10,10 @@ if (!defined('ABSPATH')) {
 
 // The explicit escape hatch documented in run-wp-cli.php. Defining it here also keeps the
 // resolution tests independent of whatever WP-CLI (if any) exists on the machine running the suite.
+// A bare program name is the one form validation leaves unchecked without any file on disk.
 if (!defined('NOVAMIRA_WP_CLI_COMMAND')) {
     define('NOVAMIRA_WP_CLI_COMMAND', [
-        '/opt/novamira-test/php',
+        'novamira-test-php',
         '-c',
         '/opt/novamira-test/php.ini',
         '/opt/novamira-test/wp-cli.phar',
@@ -177,7 +178,7 @@ final class WpCliDiscoveryTest extends TestCase
     {
         self::assertSame(
             [
-                '/opt/novamira-test/php',
+                'novamira-test-php',
                 '-c',
                 '/opt/novamira-test/php.ini',
                 '/opt/novamira-test/wp-cli.phar',
@@ -245,7 +246,7 @@ final class WpCliDiscoveryTest extends TestCase
         }
         self::assertSame(
             [
-                '/opt/novamira-test/php',
+                'novamira-test-php',
                 '-c',
                 '/opt/novamira-test/php.ini',
                 '/opt/novamira-test/wp-cli.phar',

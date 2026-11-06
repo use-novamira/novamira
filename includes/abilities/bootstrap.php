@@ -32,7 +32,10 @@ function novamira_wp_cli_status(): array
     if (novamira_find_wp_cli_command() === null) {
         return $status = [
             'available' => false,
-            'reason' => __('WP-CLI was not found on this server.', domain: 'novamira'),
+            'reason' => novamira_wp_cli_constant_problem() ?? __(
+                'WP-CLI was not found on this server.',
+                domain: 'novamira',
+            ),
         ];
     }
 
