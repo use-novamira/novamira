@@ -599,6 +599,39 @@ function novamira_oauth_grok_steps(string $mcp_name, string $mcp_url): array
 }
 
 /**
+ * Steps for Gemini Desktop's custom connected app: open Customise, add a Custom app, paste the
+ * server URL. The dialog asks only for the link, so there is no name step. Gemini reaches the
+ * server from Google's cloud, so this is only offered on a publicly reachable site (see
+ * novamira_build_oauth_configs()).
+ *
+ * @return list<array<string, string>>
+ */
+function novamira_oauth_gemini_desktop_steps(string $mcp_url): array
+{
+    return [
+        [
+            'title' => __('Open Connectors', domain: 'novamira'),
+            'body' => __('In Gemini Desktop, open Customise, then the Connectors tab.', domain: 'novamira'),
+        ],
+        [
+            'title' => __('Add a custom app', domain: 'novamira'),
+            'body' => __(
+                'Click "+ Custom", paste the URL below as the custom app link, and press Next.',
+                domain: 'novamira',
+            ),
+            'copy' => $mcp_url,
+        ],
+        [
+            'title' => __('Allow the connection', domain: 'novamira'),
+            'body' => __(
+                'Scroll to the bottom of the window, tick "I understand and accept the security and privacy risks of connecting this custom app", press Allow, and complete the sign-in when prompted.',
+                domain: 'novamira',
+            ),
+        ],
+    ];
+}
+
+/**
  * One-line instruction that an agentic client with its own connector UI can carry out on its own,
  * instead of a step-by-step form walkthrough.
  */
@@ -664,8 +697,9 @@ function novamira_oauth_cloud_only_notice(string $client_label): array
  * uses the bridge (which also carries the self-signed TLS bypass). Browser-only cloud clients
  * receive an explanatory notice because they cannot reach a local URL.
  *
- * ChatGPT, Grok, and Grok Bot are cloud-only like Claude.ai but always kept in the list: publicly
- * they get their own connector steps, locally a notice explaining they need a public site.
+ * ChatGPT, Grok, Grok Bot, and Gemini Desktop are cloud-only like Claude.ai but always kept in the
+ * list: publicly they get their own connector steps, locally a notice explaining they need a public
+ * site.
  *
  * @return array<string, array<string, mixed>>
  */
@@ -682,6 +716,7 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
                 'chatgpt' => novamira_oauth_cloud_only_notice('ChatGPT.com'),
                 'grok' => novamira_oauth_cloud_only_notice('Grok.com'),
                 'grok-bot' => novamira_oauth_cloud_only_notice('Grok Bot'),
+                'gemini-desktop' => novamira_oauth_cloud_only_notice('Gemini Desktop'),
                 'generic' => novamira_oauth_generic_entry($mcp_name, $mcp_url),
             ]
         );
@@ -712,6 +747,14 @@ function novamira_build_oauth_configs(string $mcp_url, string $mcp_name): array
                 'paths' => [],
                 'isShell' => false,
                 'steps' => novamira_oauth_grok_steps($mcp_name, $mcp_url),
+            ],
+            'gemini-desktop' => [
+                'kind' => 'code',
+                'code' => '',
+                'hint' => '',
+                'paths' => [],
+                'isShell' => false,
+                'steps' => novamira_oauth_gemini_desktop_steps($mcp_url),
             ],
             'generic' => novamira_oauth_generic_entry($mcp_name, $mcp_url),
         ]

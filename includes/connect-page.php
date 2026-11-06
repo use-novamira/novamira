@@ -495,6 +495,7 @@ function novamira_mcp_clients(): array
         'chatgpt' => 'ChatGPT.com',
         'grok' => 'Grok.com',
         'grok-bot' => 'Grok Bot',
+        'gemini-desktop' => 'Gemini Desktop',
         'codex-cli' => 'Codex CLI',
         'antigravity' => 'Antigravity',
         'antigravity-cli' => 'Antigravity CLI',

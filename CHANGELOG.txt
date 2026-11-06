@@ -1,4 +1,5 @@
 Unreleased
+* New: Gemini Desktop support. Connect Gemini Desktop to your site with OAuth sign-in through its custom connector.
 * Fix: REST API and MCP requests no longer search the server for WP-CLI every time. The result is remembered between requests, which removes a delay of up to several hundred milliseconds per request on hosts where starting a process is slow, such as Windows. A newly installed WP-CLI appears within 15 minutes, and running a WP-CLI command always checks for WP-CLI again.
 * Fix: A NOVAMIRA_WP_CLI_COMMAND constant pointing at a missing or non-executable program, or at a missing phar, now reports WP-CLI as unavailable and names the constant and the path, where the WP-CLI abilities were previously listed and then failed with "Failed to start process."
 * Fix: Sites using the custom login URL of SureMembers, or another plugin that checks the previous page whenever WordPress builds a site address, no longer crash with memory errors on pages reached from a link.
