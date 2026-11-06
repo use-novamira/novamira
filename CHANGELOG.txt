@@ -1,5 +1,6 @@
 Unreleased
 * Fix: Sites using the custom login URL of SureMembers, or another plugin that checks the previous page whenever WordPress builds a site address, no longer crash with memory errors on pages reached from a link.
+* Fix: On sites with a page cache plugin such as WP-Optimize, AI clients can now connect with OAuth, where the plugin's note added to the sign-in details made them unreadable.
 
 v1.12.14 - 2026/11/02
 * Tweak: AI tools on the Configuration page that could only be connected with the Novamira CLI, such as ZCode, now also offer OAuth and Application Password.

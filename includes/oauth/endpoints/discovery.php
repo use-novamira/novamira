@@ -245,10 +245,35 @@ function authorization_server_document(): array
 
 function serve(array $document): void
 {
+    discard_output_buffers();
     header('Content-Type: application/json; charset=UTF-8');
     // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
     echo wp_json_encode($document);
     exit();
+}
+
+/**
+ * Close every output buffer open when a discovery document is about to be sent, discarding what it
+ * holds.
+ *
+ * Page-cache plugins wrap the whole response in an ob_start() callback. Asked not to cache (the
+ * discovery paths define DONOTCACHEPAGE, see cache-purge.php), some of them append an HTML comment
+ * explaining why, and that comment lands after the JSON and makes the document unparseable.
+ * Cleaning a buffer drops its callback's output along with the buffered content, so the document
+ * goes out as written. Nothing legitimate precedes it: these paths are answered on `init`, before
+ * any template output, so there is nothing to flush.
+ *
+ * A buffer started without PHP_OUTPUT_HANDLER_REMOVABLE cannot be closed (trying raises a notice),
+ * and neither can any buffer beneath it, so unwinding stops there.
+ */
+function discard_output_buffers(): void
+{
+    while (ob_get_level() > 0) {
+        $status = ob_get_status();
+        if (($status['flags'] & PHP_OUTPUT_HANDLER_REMOVABLE) === 0 || !ob_end_clean()) {
+            break;
+        }
+    }
 }
 
 /**
