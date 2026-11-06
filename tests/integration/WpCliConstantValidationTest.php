@@ -290,15 +290,49 @@ final class WpCliConstantValidationTest extends TestCase
     public function testRelativeProgramRunsFromAbspathThroughTheRealRunPath(): void
     {
         $program = $this->site . '/bin/fake-wp';
-        file_put_contents($program, "#!/bin/sh\npwd\necho \"args: \$*\"\n");
+        file_put_contents($program, "#!/bin/sh\npwd\necho \"program: \$0\"\necho \"args: \$*\"\n");
         chmod($program, 0755);
 
         $result = $this->runChild(['constant' => 'bin/fake-wp', 'execute' => ['plugin', 'list']]);
 
         self::assertSame(['bin/fake-wp'], $result['command']);
         self::assertSame(0, $result['execution']['exit_code'], (string) json_encode($result['execution']));
-        self::assertStringStartsWith($this->site . "\nargs: ", $result['execution']['stdout']);
+        // Started by its absolute path: macOS posix_spawn() can report ENOENT for a relative program
+        // started with a working directory, which fails the run on hosts with that bug.
+        self::assertStringStartsWith(
+            $this->site . "\nprogram: " . $program . "\nargs: ",
+            $result['execution']['stdout'],
+        );
         self::assertStringEndsWith("plugin list\n", $result['execution']['stdout']);
+    }
+
+    public function testRelativeProgramRunsWithStringFunctionsDisabled(): void
+    {
+        $program = $this->site . '/bin/fake-wp';
+        file_put_contents($program, "#!/bin/sh\npwd\necho \"program: \$0\"\necho \"args: \$*\"\n");
+        chmod($program, 0755);
+
+        // Without rtrim() the program is still joined to ABSPATH; without str_contains() it is passed on
+        // as configured. Either way the run completes, where a fatal error would exit the child with 255.
+        foreach (
+            [
+                'rtrim' => $program,
+                'str_contains' => 'bin/fake-wp',
+                'rtrim,str_contains' => 'bin/fake-wp',
+            ] as $disabled => $started
+        ) {
+            $result = $this->runChild(['constant' => 'bin/fake-wp', 'execute' => ['plugin', 'list']], [
+                'disable_functions=' . $disabled,
+            ]);
+
+            self::assertSame(['bin/fake-wp'], $result['command'], $disabled);
+            self::assertSame(0, $result['execution']['exit_code'], $disabled);
+            self::assertSame(
+                $this->site . "\nprogram: " . $started . "\nargs: plugin list\n",
+                $result['execution']['stdout'],
+                $disabled,
+            );
+        }
     }
 
     public function testDisabledFunctionsLeaveTheValueUnchecked(): void

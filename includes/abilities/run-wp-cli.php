@@ -1535,6 +1535,23 @@ function novamira_is_current_user_root(): bool
  */
 function novamira_run_wp_cli_sync(array $wp_command, array $args): array
 {
+    // A relative program resolves against ABSPATH, the working directory below, but it is joined to
+    // ABSPATH here instead: with a working directory, macOS posix_spawn() can start a relative program
+    // and still report ENOENT, so proc_open() fails. Windows resolves a relative program differently,
+    // and a bare name is looked up on the PATH, so both are left alone. ABSPATH ends with a slash, as
+    // WordPress core relies on, so the join calls no function that disable_functions can remove. Without
+    // str_contains() the program is passed on as configured rather than ending the run with a fatal error.
+    $program = $wp_command[0] ?? '';
+    if (
+        PHP_OS_FAMILY !== 'Windows'
+        && $program !== ''
+        && $program[0] !== '/'
+        && function_exists('str_contains')
+        && str_contains($program, '/')
+    ) {
+        $wp_command[0] = ABSPATH . $program;
+    }
+
     // proc_open receives an argv array, so it escapes every element itself.
     $cmd = array_merge($wp_command, $args);
 
