@@ -1,5 +1,6 @@
 Unreleased
 * Fix: Sites using the custom login URL of SureMembers, or another plugin that checks the previous page whenever WordPress builds a site address, no longer crash with memory errors on pages reached from a link.
+* Fix: Troubleshoot no longer asks to add the .well-known rule again when it is already in place. On hosting with a known firewall, such as SiteGround or Cloudflare, a 403 on the OAuth discovery URLs now points to hosting support, unless the .well-known rule is missing or the site itself produced the error.
 * Fix: On sites with a page cache plugin such as WP-Optimize, AI clients can now connect with OAuth, where the plugin's note added to the sign-in details made them unreadable.
 
 v1.12.14 - 2026/11/02

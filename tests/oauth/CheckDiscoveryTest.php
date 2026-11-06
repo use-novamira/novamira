@@ -77,6 +77,21 @@ if (!class_exists('WP_Error')) {
 // The self-probe HTTP layer, driven by $GLOBALS['novamira_test_http']: a URL => response-array map.
 // A response-array carries code/content-type/body/headers; ['error' => msg] models a transport
 // failure; a URL absent from the map answers HTTP 404, as an unconfigured domain root would.
+// Hosting\Detector reads these; the stubs return the value unfiltered, so detection follows only the
+// runtime signals each test sets (a Cloudflare request header, here).
+if (!function_exists('apply_filters')) {
+    function apply_filters(string $hook, mixed $value, mixed ...$args): mixed
+    {
+        return $value;
+    }
+}
+if (!function_exists('wp_parse_url')) {
+    function wp_parse_url(string $url, int $component = -1): mixed
+    {
+        return parse_url($url, $component);
+    }
+}
+
 if (!function_exists('wp_remote_get')) {
     function wp_remote_get(string $url, array $args = []): mixed
     {
@@ -127,8 +142,12 @@ if (!function_exists('wp_remote_retrieve_headers')) {
 require_once __DIR__ . '/../../includes/oauth/bootstrap.php';
 require_once __DIR__ . '/../../includes/oauth/endpoints/discovery.php';
 require_once __DIR__ . '/../../includes/troubleshoot/checks.php';
+require_once __DIR__ . '/../../includes/hosting/detector.php';
 
 use function Novamira\Troubleshoot\Checks\check_discovery;
+use function Novamira\Troubleshoot\Checks\discovery_edge_block_failure;
+use function Novamira\Troubleshoot\Checks\has_discovery_passthrough;
+use function Novamira\Troubleshoot\Checks\well_known_htaccess_failure;
 
 /**
  * Behavioral tests for check_discovery() on a root install, where the served forms line up with the
@@ -142,6 +161,17 @@ final class CheckDiscoveryTest extends TestCase
     private const AS_OAUTH = 'https://example.test/.well-known/oauth-authorization-server';
     private const RESOURCE = 'https://example.test/wp-json/mcp/novamira-oauth';
     private const ISSUER = 'https://example.test';
+    private const SITEGROUND = [
+        'id' => 'siteground',
+        'name' => 'SiteGround',
+        'recommendation' => 'password',
+        'edge' => 'SiteGround IDS/IPS and custom NGINX security layer',
+    ];
+
+    private const PASSTHROUGH = "RewriteEngine On\nRewriteRule ^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$ /index.php [L]\n";
+
+    /** A throwaway document root holding a physical `.well-known/` directory, when a test needs one. */
+    private string $root = '';
 
     protected function setUp(): void
     {
@@ -151,7 +181,18 @@ final class CheckDiscoveryTest extends TestCase
 
     protected function tearDown(): void
     {
-        unset($GLOBALS['novamira_test_home'], $GLOBALS['novamira_test_http'], $GLOBALS['novamira_test_discovery_requests']);
+        unset(
+            $GLOBALS['novamira_test_home'],
+            $GLOBALS['novamira_test_http'],
+            $GLOBALS['novamira_test_discovery_requests'],
+            $_SERVER['HTTP_CF_RAY'],
+        );
+        if ($this->root !== '') {
+            @unlink($this->root . '/.well-known/.htaccess');
+            @rmdir($this->root . '/.well-known');
+            @rmdir($this->root);
+            $this->root = '';
+        }
     }
 
     public function testAllDocumentsPresentPasses(): void
@@ -379,6 +420,21 @@ final class CheckDiscoveryTest extends TestCase
         self::assertSame('', $result['copy']);
     }
 
+    public function testForbiddenBehindCloudflareReadsAsAHostingBlock(): void
+    {
+        $result = discovery_edge_block_failure(self::PR_APPEND, 'OAuth discovery', 403, [
+            'id' => 'cloudflare',
+            'name' => 'Cloudflare-protected hosting',
+            'recommendation' => 'password',
+            'edge' => 'Cloudflare WAF or bot protection',
+        ]);
+
+        self::assertNotNull($result);
+        self::assertStringContainsString('Cloudflare WAF or bot protection', $result['message']);
+        self::assertStringContainsString('or whoever manages Cloudflare for this site', $result['remedy']);
+        self::assertStringNotContainsString('Cloudflare-protected hosting support', $result['remedy']);
+    }
+
     public function testTrailingSlashRedirectFromWordPressStillBlamesThePlugin(): void
     {
         $map = $this->valid_map();
@@ -389,11 +445,212 @@ final class CheckDiscoveryTest extends TestCase
         self::assertSame('', $result['copy']);
     }
 
+    public function testForbiddenWithoutDetectedHostingKeepsTheGenericDiagnosis(): void
+    {
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = ['code' => 403, 'content-type' => 'text/html', 'body' => 'Forbidden', 'headers' => []];
+        $result = $this->run_check($map);
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('did not return HTTP 200', $result['message']);
+    }
+
+    public function testForbiddenOnAKnownEdgePointsAtHostingSupport(): void
+    {
+        $result = discovery_edge_block_failure(self::PR_APPEND, 'OAuth discovery', 403, self::SITEGROUND);
+
+        self::assertNotNull($result);
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('SiteGround IDS/IPS', $result['message']);
+        self::assertStringContainsString('Ask your hosting support to keep', $result['remedy']);
+        self::assertStringNotContainsString('Cloudflare', $result['remedy']);
+        self::assertSame('', $result['copy']);
+    }
+
+    public function testEdgeDiagnosisIsLimitedToForbiddenOnAKnownEdge(): void
+    {
+        self::assertNull(discovery_edge_block_failure(self::PR_APPEND, 'OAuth discovery', 404, self::SITEGROUND));
+        self::assertNull(discovery_edge_block_failure(self::PR_APPEND, 'OAuth discovery', 403, null));
+        self::assertNull(discovery_edge_block_failure(
+            self::PR_APPEND,
+            'OAuth discovery',
+            403,
+            ['id' => 'custom', 'name' => 'Custom', 'recommendation' => 'oauth', 'edge' => ''],
+        ));
+    }
+
+    public function testPassthroughIsRecognizedInTheSuggestedForms(): void
+    {
+        $rule = '^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$';
+        self::assertTrue(has_discovery_passthrough("RewriteEngine On\nRewriteRule {$rule} /index.php [L]\n"));
+        self::assertTrue(has_discovery_passthrough("# certs\nRewriteEngine On\n  rewriterule {$rule} /blog/index.php [L]"));
+    }
+
+    public function testPassthroughIsNotRecognizedWhenAbsentOrCommentedOut(): void
+    {
+        $rule = '^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$';
+        self::assertFalse(has_discovery_passthrough("RewriteEngine On\n# RewriteRule {$rule} /index.php [L]\n"));
+        self::assertFalse(has_discovery_passthrough("RewriteEngine On\nRewriteRule ^acme-challenge/ - [L]\n"));
+        self::assertFalse(has_discovery_passthrough(''));
+    }
+
+    public function testPassthroughAcceptsAnchoredBareAndSubPathPatterns(): void
+    {
+        self::assertTrue(has_discovery_passthrough("RewriteRule ^oauth-protected-resource$ index.php [L]"));
+        self::assertTrue(has_discovery_passthrough("RewriteRule oauth-protected-resource /index.php"));
+        self::assertTrue(has_discovery_passthrough("RewriteRule ^oauth-protected-resource(/.*)?$ /sub/dir/index.php [L,QSA]\r\n"));
+        self::assertTrue(has_discovery_passthrough('RewriteRule ^(?:openid-configuration|oauth-protected-resource)/?$ /index.php'));
+        self::assertTrue(has_discovery_passthrough("REWRITERULE ^OAUTH-PROTECTED-RESOURCE /INDEX.PHP [L]"));
+    }
+
+    public function testPassthroughRejectsLookalikeDestinationsAndPatterns(): void
+    {
+        $rule = '^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$';
+        self::assertFalse(has_discovery_passthrough("RewriteRule {$rule} /index.php.bak [L]"));
+        self::assertFalse(has_discovery_passthrough("RewriteRule {$rule} /index.php-old [L]"));
+        self::assertFalse(has_discovery_passthrough("RewriteRule {$rule} /maintenance.php [L]"));
+        self::assertFalse(has_discovery_passthrough("RewriteRule {$rule} /notindex.php [L]"));
+        self::assertFalse(has_discovery_passthrough("RewriteRule {$rule} https://other.example/index.php [R=301,L]"));
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^not-oauth-protected-resource$ /index.php [L]'));
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^oauth-protected-resource-v2$ /index.php [L]'));
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^(openid-configuration|oauth-authorization-server)$ /index.php [L]'));
+    }
+
+    public function testPassthroughRejectsPatternsThatRequireATrailingSlash(): void
+    {
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^oauth-protected-resource/$ /index.php [L]'));
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^oauth-protected-resource/.*$ /index.php [L]'));
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^(?:openid-configuration|oauth-protected-resource)/.*$ /index.php'));
+        self::assertFalse(has_discovery_passthrough('RewriteRule ^/oauth-protected-resource$ /index.php [L]'));
+    }
+
+    public function testPassthroughAcceptsQuotedPatternsAndDestinations(): void
+    {
+        $rule = '^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$';
+        self::assertTrue(has_discovery_passthrough("RewriteRule \"{$rule}\" /index.php [L]"));
+        self::assertTrue(has_discovery_passthrough("RewriteRule \"{$rule}\" /blog/index.php [L]"));
+        self::assertTrue(has_discovery_passthrough("RewriteRule '{$rule}' \"/blog/index.php\" [L]"));
+        self::assertTrue(has_discovery_passthrough("RewriteRule \"{$rule}\" \"/index.php\""));
+        // Quotes must pair up.
+        self::assertFalse(has_discovery_passthrough("RewriteRule \"{$rule}' /index.php [L]"));
+        self::assertFalse(has_discovery_passthrough("RewriteRule \"{$rule} /index.php [L]"));
+        self::assertFalse(has_discovery_passthrough("RewriteRule {$rule} \"/index.php [L]"));
+    }
+
+    public function testValidPassthroughOnDiskFallsThroughToTheResponseDiagnosis(): void
+    {
+        $root = $this->document_root(self::PASSTHROUGH);
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = ['code' => 404, 'content-type' => 'text/html', 'body' => 'Not Found', 'headers' => []];
+        $GLOBALS['novamira_test_http'] = $map;
+
+        self::assertNull(well_known_htaccess_failure(['url' => self::PR_APPEND], 'OAuth discovery', 404, $root));
+
+        $headers = [];
+        $result = check_discovery($headers, $root);
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('HTTP 404', $result['message']);
+        self::assertStringNotContainsString('.htaccess', $result['message']);
+        self::assertSame('', $result['copy']);
+    }
+
+    public function testMissingPassthroughOnDiskStillOffersTheHtaccessRemedy(): void
+    {
+        $root = $this->document_root("# certificate validation\nRewriteEngine On\nRewriteRule ^acme-challenge/ - [L]\n");
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = ['code' => 404, 'content-type' => 'text/html', 'body' => 'Not Found', 'headers' => []];
+        $GLOBALS['novamira_test_http'] = $map;
+
+        $headers = [];
+        $result = check_discovery($headers, $root);
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString($root . '/.well-known/.htaccess', $result['message']);
+        self::assertStringContainsString('/index.php [L]', $result['copy']);
+        self::assertTrue(has_discovery_passthrough($result['copy']));
+    }
+
+    public function testMissingPassthroughOutranksAKnownEdgeOnAForbidden(): void
+    {
+        // A detected host does not prove its edge produced the 403; a .well-known/.htaccess missing
+        // the passthrough is a proven fault the site owner fixes, so its remedy wins.
+        $root = $this->document_root("RewriteEngine On\n");
+        $_SERVER['HTTP_CF_RAY'] = '8f00000000000000-MXP';
+        $result = $this->run_forbidden($root, 'Forbidden');
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('.htaccess file', $result['message']);
+        self::assertStringNotContainsString('Cloudflare', $result['message']);
+        self::assertTrue(has_discovery_passthrough($result['copy']));
+    }
+
+    public function testKnownEdgeExplainsAForbiddenOnceThePassthroughIsInPlace(): void
+    {
+        $root = $this->document_root(self::PASSTHROUGH);
+        $_SERVER['HTTP_CF_RAY'] = '8f00000000000000-MXP';
+        $result = $this->run_forbidden($root, 'Forbidden');
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('Cloudflare WAF or bot protection', $result['message']);
+        self::assertStringContainsString('whoever manages Cloudflare', $result['remedy']);
+        self::assertSame('', $result['copy']);
+    }
+
+    public function testKnownEdgeExplainsAForbiddenWithoutAWellKnownDirectory(): void
+    {
+        $root = $this->document_root(null);
+        $_SERVER['HTTP_CF_RAY'] = '8f00000000000000-MXP';
+        $result = $this->run_forbidden($root, 'Forbidden');
+
+        self::assertStringContainsString('Cloudflare WAF or bot protection', $result['message']);
+    }
+
+    public function testPhpGeneratedForbiddenKeepsTheResponseDiagnosisOnAKnownEdge(): void
+    {
+        // PHP diagnostic output proves WordPress answered, so the edge did not refuse the request.
+        $root = $this->document_root(self::PASSTHROUGH);
+        $_SERVER['HTTP_CF_RAY'] = '8f00000000000000-MXP';
+        $result = $this->run_forbidden($root, '<br /><b>Warning</b>: something in a plugin<br />Forbidden');
+
+        self::assertSame('fail', $result['status']);
+        self::assertStringContainsString('PHP diagnostic output', $result['message']);
+        self::assertStringNotContainsString('Cloudflare', $result['message']);
+        self::assertStringNotContainsString('hosting support', $result['remedy']);
+    }
+
     public function testTransportErrorOnRequiredFails(): void
     {
         $map = $this->valid_map();
         $map[self::PR_APPEND] = ['error' => 'cURL error 7: connection refused'];
         self::assertSame('fail', $this->run_discovery($map));
+    }
+
+    /**
+     * Create a temporary document root whose physical `.well-known/.htaccess` holds $htaccess, or
+     * that has no `.well-known/` directory at all when $htaccess is null.
+     */
+    private function document_root(?string $htaccess): string
+    {
+        $this->root = sys_get_temp_dir() . '/novamira-discovery-' . bin2hex(random_bytes(6));
+        mkdir($this->root, recursive: true);
+        if ($htaccess !== null) {
+            mkdir($this->root . '/.well-known');
+            file_put_contents($this->root . '/.well-known/.htaccess', $htaccess);
+        }
+        return $this->root;
+    }
+
+    /**
+     * Run the discovery check with the required protected-resource URL answering HTTP 403.
+     *
+     * @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+     */
+    private function run_forbidden(string $root, string $body): array
+    {
+        $map = $this->valid_map();
+        $map[self::PR_APPEND] = ['code' => 403, 'content-type' => 'text/html', 'body' => $body, 'headers' => []];
+        $GLOBALS['novamira_test_http'] = $map;
+        $headers = [];
+        return check_discovery($headers, $root);
     }
 
     /**

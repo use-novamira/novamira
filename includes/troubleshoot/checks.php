@@ -622,7 +622,7 @@ function normalize_headers(mixed $raw): array
  *                                       the environment check.
  * @return array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
  */
-function check_discovery(array &$headers): array
+function check_discovery(array &$headers, string $root = ABSPATH): array
 {
     $label = __('OAuth discovery', domain: 'novamira');
     // Single source for the URL set, shared with the request handler (endpoints/discovery.php). URLs
@@ -636,7 +636,7 @@ function check_discovery(array &$headers): array
     $group_failure = [];
 
     foreach ($probes as $probe) {
-        $outcome = probe_discovery_document($probe, $label, $headers);
+        $outcome = probe_discovery_document($probe, $label, $headers, $root);
         if ($outcome['ok']) {
             if ($probe['group'] !== '') {
                 $group_satisfied[$probe['group']] = true;
@@ -682,7 +682,7 @@ function check_discovery(array &$headers): array
  * @param array<string, string> $headers
  * @return array{ok: bool, failure: ?array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}}
  */
-function probe_discovery_document(array $probe, string $label, array &$headers): array
+function probe_discovery_document(array $probe, string $label, array &$headers, string $root = ABSPATH): array
 {
     // Redirects are NOT followed: a redirect on these URLs is itself the finding. Hosting platforms
     // (seen on WP Engine) ship edge rules that 301 the OAuth well-known paths to the homepage;
@@ -722,11 +722,17 @@ function probe_discovery_document(array $probe, string $label, array &$headers):
     // @mago-expect analysis:mixed-assignment
     $body = json_decode(wp_remote_retrieve_body($response), associative: true);
     if ($code !== 200 || $media_type !== 'application/json' || !is_array($body)) {
-        $htaccess_failure = well_known_htaccess_failure($probe, $label, $code);
-        if ($htaccess_failure !== null) {
-            return ['ok' => false, 'failure' => $htaccess_failure];
+        // Most specific evidence first. A .well-known/.htaccess missing the passthrough is a proven,
+        // site-owner fix, so it wins even on a known host. A detected host does not prove its edge
+        // produced the 403, so the hosting-support diagnosis also yields when the body shows PHP
+        // generated the response; sending the owner to hosting for a fault on the site wastes a
+        // support round-trip (see 0ee29b7 and #45).
+        $failure = well_known_htaccess_failure($probe, $label, $code, $root);
+        if (!has_php_diagnostic_output(discovery_body_prefix($response))) {
+            $failure ??= discovery_edge_block_failure($probe['url'], $label, $code, detected_hosting());
         }
-        return ['ok' => false, 'failure' => discovery_response_failure($probe['url'], $label, $response)];
+        $failure ??= discovery_response_failure($probe['url'], $label, $response);
+        return ['ok' => false, 'failure' => $failure];
     }
     // The document must be ours: the identifying field present AND carrying the exact resource or
     // issuer this site advertises, so a stray OAuth document from another plugin is caught.
@@ -762,8 +768,7 @@ function discovery_response_failure(string $url, string $label, array $response)
 {
     $code = (int) wp_remote_retrieve_response_code($response);
     $type = discovery_media_type(wp_remote_retrieve_header($response, header: 'content-type'));
-    $prefix = strip_tags(substr(wp_remote_retrieve_body($response), offset: 0, length: 4096));
-    [$detail, $remedy] = discovery_response_problem($code, $type, $prefix);
+    [$detail, $remedy] = discovery_response_problem($code, $type, discovery_body_prefix($response));
 
     $hits = discovery_cache_hits(normalize_headers(wp_remote_retrieve_headers($response)));
     if ($hits !== []) {
@@ -797,16 +802,31 @@ function discovery_response_failure(string $url, string $label, array $response)
     );
 }
 
-/** @return array{string, string} Diagnosis and remedy, without any untrusted response content. */
-function discovery_response_problem(int $code, string $type, string $prefix): array
+/**
+ * The start of a response body with markup removed, enough to recognize PHP diagnostic output.
+ *
+ * @param array<array-key, mixed> $response
+ */
+function discovery_body_prefix(array $response): string
 {
-    $php_output =
+    return strip_tags(substr(wp_remote_retrieve_body($response), offset: 0, length: 4096));
+}
+
+/** Whether a body prefix opens with a PHP diagnostic, which proves PHP produced the response. */
+function has_php_diagnostic_output(string $prefix): bool
+{
+    return (
         preg_match(
             '/\A\s*(?:PHP\s+)?(?:Deprecated|Warning|Notice|Fatal error|Parse error|Recoverable fatal error|Strict Standards):/i',
             $prefix,
-        ) === 1;
+        ) === 1
+    );
+}
 
-    if ($php_output) {
+/** @return array{string, string} Diagnosis and remedy, without any untrusted response content. */
+function discovery_response_problem(int $code, string $type, string $prefix): array
+{
+    if (has_php_diagnostic_output($prefix)) {
         $detail = __(
             'PHP diagnostic output precedes the OAuth metadata, so the response is not valid JSON.',
             domain: 'novamira',
@@ -872,10 +892,14 @@ function discovery_cache_hits(array $headers): array
  * @param array{url: string, field: string, expected: string, requirement: string, group: string, label: string} $probe
  * @return ?array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
  */
-function well_known_htaccess_failure(array $probe, string $label, int $code): ?array
+function well_known_htaccess_failure(array $probe, string $label, int $code, string $root = ABSPATH): ?array
 {
-    $htaccess = ABSPATH . '.well-known/.htaccess';
+    $htaccess = rtrim($root, characters: '/') . '/.well-known/.htaccess';
     if (!is_file($htaccess)) {
+        return null;
+    }
+    $contents = is_readable($htaccess) ? file_get_contents($htaccess) : false;
+    if (is_string($contents) && has_discovery_passthrough($contents)) {
         return null;
     }
     $home_path = rtrim((string) parse_url(home_url(), PHP_URL_PATH), characters: '/');
@@ -899,6 +923,93 @@ function well_known_htaccess_failure(array $probe, string $label, int $code): ?a
         copy: "RewriteEngine On\nRewriteRule ^(oauth-protected-resource|oauth-authorization-server|openid-configuration)(/.*)?$ "
         . $home_path
         . "/index.php [L]\n",
+    );
+}
+
+/**
+ * Whether a `.well-known/.htaccess` already forwards the OAuth discovery URLs to WordPress, so the
+ * passthrough is not offered again when the failure lies elsewhere. Commented-out lines do not count.
+ *
+ * Only a rule shaped like the one well_known_htaccess_failure() suggests is recognized: its pattern
+ * must match the bare `oauth-protected-resource` path (the name alone or as one branch of a group,
+ * optionally anchored, optionally followed by an optional `(/.*)?` or `/?` sub-path), and its
+ * destination must be exactly an `index.php` path, optionally followed by flags. Either may be
+ * quoted, as Apache allows. A rule rewriting to `index.php.bak`, matching
+ * `not-oauth-protected-resource`, or requiring a trailing slash does not forward the discovery URL
+ * and must not hide the remedy.
+ */
+function has_discovery_passthrough(string $htaccess): bool
+{
+    $branch = '[\\w.\\\\-]+';
+    $target =
+        '(?:oauth-protected-resource|\\((?:\\?:)?(?:'
+        . $branch
+        . '\\|)*oauth-protected-resource(?:\\|'
+        . $branch
+        . ')*\\))';
+    // Only suffixes that are themselves optional, so the bare discovery path still matches.
+    $suffix = '(?:\\(/\\.\\*\\)\\?|/\\?)?\\$?';
+    $pattern = '(["\']?)\\^?' . $target . $suffix . '\\1';
+    $destination = '(["\']?)/?(?:[\\w.~%-]+/)*index\\.php\\2';
+    $flags = '(?:[ \\t]+\\[[^\\]\\r\\n]*\\])?';
+
+    return (
+        preg_match(
+            '#^[ \\t]*RewriteRule[ \\t]+' . $pattern . '[ \\t]+' . $destination . $flags . '[ \\t\\r]*$#im',
+            $htaccess,
+        ) === 1
+    );
+}
+
+/**
+ * The detected hosting environment, or null when the detector is not loaded.
+ *
+ * @return array{id: string, name: string, recommendation: 'oauth'|'password', edge: string}|null
+ */
+function detected_hosting(): ?array
+{
+    return class_exists(\Novamira\Hosting\Detector::class) ? \Novamira\Hosting\Detector::current() : null;
+}
+
+/**
+ * Report a 403 on a discovery URL as a refusal by the hosting edge when the site runs on a host
+ * whose security layer is known to block server-to-server OAuth traffic. A refusal at that layer
+ * happens before the web server runs, so local rewrites and caches cannot change it and the remedy
+ * points at hosting support. The caller only consults this once the local evidence is exhausted:
+ * a `.well-known/.htaccess` missing the passthrough, or a body showing PHP produced the 403, is a
+ * fault on the site itself and keeps its own diagnosis.
+ *
+ * @param array{id: string, name: string, recommendation: 'oauth'|'password', edge: string}|null $hosting
+ * @return ?array{id: string, status: string, label: string, message: string, remedy: string, action: string, copy: string}
+ */
+function discovery_edge_block_failure(string $url, string $label, int $code, ?array $hosting): ?array
+{
+    if ($code !== 403 || $hosting === null || $hosting['edge'] === '') {
+        return null;
+    }
+    return fail(
+        'discovery',
+        $label,
+        sprintf(
+            /* translators: 1: discovery URL, 2: HTTP status code, 3: hosting provider name, 4: hosting edge/security layer name */
+            __(
+                '%1$s answered HTTP %2$d. This site runs on %3$s, which places %4$s in front of WordPress, and a 403 on this path typically comes from that layer refusing the request before WordPress runs. This probe runs from the server itself, so a browser or an AI client may be treated differently; an AI client that receives the same answer cannot find the sign-in endpoints. Rewrite rules in .htaccess and static files in /.well-known/ do not change a request refused at that layer.',
+                domain: 'novamira',
+            ),
+            $url,
+            $code,
+            $hosting['name'],
+            $hosting['edge'],
+        ),
+        $hosting['id'] === 'cloudflare'
+            ? __(
+                'Ask your hosting support, or whoever manages Cloudflare for this site, to keep /.well-known/oauth-* and the whole /wp-json/ path dynamic and uncached, with no redirects, bot challenges, JavaScript or CAPTCHA checks, IP-reputation or bot-score blocking, or rate limits that reject these requests (403 or 429). The change should be path-based, not User-Agent or IP-based. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again. For AI clients that support it, Application Password avoids this block.',
+                domain: 'novamira',
+            )
+            : __(
+                'Ask your hosting support to keep /.well-known/oauth-* and the whole /wp-json/ path dynamic and uncached, with no redirects, bot challenges, JavaScript or CAPTCHA checks, IP-reputation or bot-score blocking, or rate limits that reject these requests (403 or 429). The change should be path-based, not User-Agent or IP-based. Keep SQL injection, XSS, exploit-signature inspection, and every other protection active, then run these checks again. For AI clients that support it, Application Password avoids this block.',
+                domain: 'novamira',
+            ),
     );
 }
 
