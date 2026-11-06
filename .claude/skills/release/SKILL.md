@@ -9,7 +9,7 @@ Run the release as `bin/release VERSION --non-interactive`. It never waits for i
 
 ## Before starting
 
-Write the changelog entry first, at the top of `CHANGELOG.txt` with no version header — the release assigns `vVERSION - date`. Proofread it yourself; this mode does not spellcheck.
+Write the changelog entry first, at the top of `CHANGELOG.txt` with no version header or under an `Unreleased` header — the release assigns `vVERSION - date`, replacing `Unreleased` when it is there. Proofread it yourself; this mode does not spellcheck.
 
 NEVER modify `release-info.json` by hand; it is modified programmatically — `bin/release-info.js` writes it, and `--list-steps` aside, no step expects you to open it.
 
