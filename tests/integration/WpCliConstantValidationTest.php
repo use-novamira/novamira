@@ -312,15 +312,9 @@ final class WpCliConstantValidationTest extends TestCase
         file_put_contents($program, "#!/bin/sh\npwd\necho \"program: \$0\"\necho \"args: \$*\"\n");
         chmod($program, 0755);
 
-        // Without rtrim() the program is still joined to ABSPATH; without str_contains() it is passed on
-        // as configured. Either way the run completes, where a fatal error would exit the child with 255.
-        foreach (
-            [
-                'rtrim' => $program,
-                'str_contains' => 'bin/fake-wp',
-                'rtrim,str_contains' => 'bin/fake-wp',
-            ] as $disabled => $started
-        ) {
+        // The join uses no string function, so the program is started by its absolute path whichever of
+        // them are disabled, and the run completes, where a fatal error would exit the child with 255.
+        foreach (['rtrim', 'str_contains', 'strpos', 'rtrim,str_contains,strpos,strpbrk,strlen'] as $disabled) {
             $result = $this->runChild(['constant' => 'bin/fake-wp', 'execute' => ['plugin', 'list']], [
                 'disable_functions=' . $disabled,
             ]);
@@ -328,7 +322,7 @@ final class WpCliConstantValidationTest extends TestCase
             self::assertSame(['bin/fake-wp'], $result['command'], $disabled);
             self::assertSame(0, $result['execution']['exit_code'], $disabled);
             self::assertSame(
-                $this->site . "\nprogram: " . $started . "\nargs: plugin list\n",
+                $this->site . "\nprogram: " . $program . "\nargs: plugin list\n",
                 $result['execution']['stdout'],
                 $disabled,
             );
