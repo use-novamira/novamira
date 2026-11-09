@@ -141,6 +141,9 @@ function novamira_execute_php($input)
         return true;
     });
 
+    // Record the level so only the buffers opened here are unwound, as the sandbox loader does: the
+    // code may leave a buffer of its own open, or close one it never opened.
+    $ob_level = ob_get_level();
     ob_start();
     $start = microtime(true);
 
@@ -160,7 +163,10 @@ function novamira_execute_php($input)
     }
 
     $execution_time_ms = round(num: (microtime(true) - $start) * 1000, precision: 2);
-    $output = ob_get_clean();
+    $output = '';
+    while (ob_get_level() > $ob_level) {
+        $output = (string) ob_get_clean() . $output;
+    }
 
     restore_error_handler();
     set_time_limit($original_time_limit);
