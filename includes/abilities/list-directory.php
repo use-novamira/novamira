@@ -167,8 +167,22 @@ function novamira_list_directory(array $input = [])
 function novamira_collect_recursive_entries($resolved, $pattern, $include_hidden, $max_depth)
 {
     $entries = [];
-    $iterator = new RecursiveDirectoryIterator($resolved, RecursiveDirectoryIterator::SKIP_DOTS);
-    $iterator = new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::SELF_FIRST);
+    $directory = new RecursiveDirectoryIterator($resolved, RecursiveDirectoryIterator::SKIP_DOTS);
+    if (!$include_hidden) {
+        // Prune hidden directories as well as hidden entries, so nothing inside .git and the like
+        // is listed: novamira_build_entry() only sees each entry's own name.
+        $directory = new RecursiveCallbackFilterIterator(
+            $directory,
+            static fn(SplFileInfo $item): bool => !str_starts_with($item->getFilename(), '.'),
+        );
+    }
+    // A subdirectory that cannot be opened is listed without being entered, instead of throwing
+    // UnexpectedValueException and losing the whole listing.
+    $iterator = new RecursiveIteratorIterator(
+        $directory,
+        RecursiveIteratorIterator::SELF_FIRST,
+        RecursiveIteratorIterator::CATCH_GET_CHILD,
+    );
     $iterator->setMaxDepth($max_depth - 1); // setMaxDepth is 0-indexed.
 
     foreach ($iterator as $item) {
