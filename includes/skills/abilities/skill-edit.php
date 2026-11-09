@@ -139,7 +139,8 @@ function execute(array $input): array|WP_Error
             return new WP_Error('missing_description', __('Description cannot be empty.', domain: 'novamira'));
         }
         if ($new_description !== $post->post_excerpt) {
-            wp_update_post(['ID' => $post->ID, 'post_excerpt' => $new_description]);
+            // wp_update_post() unslashes its input; slash first so backslashes survive.
+            wp_update_post(['ID' => $post->ID, 'post_excerpt' => wp_slash($new_description)]);
             $changed[] = 'description';
         }
     }
@@ -150,7 +151,7 @@ function execute(array $input): array|WP_Error
             return new WP_Error('body_too_large', __('Body exceeds 1 MB.', domain: 'novamira'));
         }
         if ($new_content !== $post->post_content) {
-            wp_update_post(['ID' => $post->ID, 'post_content' => $new_content]);
+            wp_update_post(['ID' => $post->ID, 'post_content' => wp_slash($new_content)]);
             $changed[] = 'content';
         }
     }

@@ -263,12 +263,13 @@ function handle_update(): void
     $status_raw = $_POST['status'] ?? 'publish';
     $status = is_string($status_raw) && $status_raw === 'draft' ? 'draft' : 'publish';
 
+    // wp_update_post() unslashes its input, and the form values were already unslashed above.
     wp_update_post([
         'ID' => $post_id,
         'post_title' => $new_title,
         'post_name' => $new_title,
-        'post_excerpt' => $input['description'],
-        'post_content' => $content,
+        'post_excerpt' => wp_slash($input['description']),
+        'post_content' => wp_slash($content),
         'post_status' => $status,
     ]);
     update_post_meta($post_id, Cpt\META_ENABLE_PROMPT, $input['enable_prompt']);
