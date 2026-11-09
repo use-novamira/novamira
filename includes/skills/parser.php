@@ -24,11 +24,20 @@ const MAX_BODY_BYTES = 1_048_576; // 1 MB
  * instead of a real newline. The same can happen with `\t`, `\r`, etc.
  * Nobody actually wants those escape sequences as literal text in a
  * skill body, so we run `stripcslashes` on the way in — it converts
- * `\n` → LF, `\t` → tab, `\\` → `\`, `\"` → `"`, and so on, preserving
- * any other text as-is.
+ * `\n` → LF, `\t` → tab, `\\` → `\`, `\"` → `"`, and so on.
+ *
+ * `stripcslashes` also drops the backslash from every other sequence, so
+ * it would turn `\Elementor\Plugin` into `ElementorPlugin` and `\d` into
+ * `d`. Only a body that was encoded twice arrives with a literal `\n` and
+ * no real line break; any other body (an uploaded SKILL.md, the admin
+ * editor, a correctly encoded tool call) is returned unchanged.
  */
 function unescape_content(string $raw): string
 {
+    if (str_contains($raw, "\n") || !str_contains($raw, '\n')) {
+        return $raw;
+    }
+
     return stripcslashes($raw);
 }
 
