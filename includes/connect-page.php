@@ -59,6 +59,28 @@ function novamira_handle_toggle_enabled(): ?bool
 }
 
 /**
+ * Save the Configuration page toggle before any output, then redirect (Post/Redirect/Get).
+ *
+ * The domain-mismatch notice, the admin bar toggle and the ability hooks are set up while the
+ * plugin loads, from the state before the save. Rendering the response of the save itself would
+ * show that stale state; the redirected request loads with the saved options.
+ *
+ * Called from admin_init on the Configuration page.
+ */
+function novamira_handle_settings_form(): void
+{
+    $saved = novamira_handle_toggle_enabled();
+    if ($saved === null) {
+        return;
+    }
+
+    wp_safe_redirect(add_query_arg([
+        'novamira_settings_result' => $saved ? 'saved' : 'failed',
+    ], admin_url('admin.php?page=novamira-connect')));
+    exit();
+}
+
+/**
  * Handle the admin-bar AI Abilities toggle.
  */
 function novamira_handle_admin_bar_toggle(): void
@@ -3289,7 +3311,7 @@ function novamira_render_connect_page(): void
     }
 
     $mcp_dependency_error = novamira_get_mcp_dependency_error();
-    $toggle_saved = novamira_handle_toggle_enabled();
+    $toggle_saved = ($_GET['novamira_settings_result'] ?? null) === 'saved';
     $enabled = novamira_is_enabled();
     $mcp_ready = $enabled && $mcp_dependency_error === null;
 
@@ -3556,7 +3578,7 @@ function novamira_render_connect_page(): void
 
         <?php novamira_render_authorization_header_warning(); ?>
 
-        <?php if ($toggle_saved === true): ?>
+        <?php if ($toggle_saved): ?>
             <div class="notice notice-success is-dismissible"><p><?php
 
             esc_html_e('Settings saved.', domain: 'novamira');

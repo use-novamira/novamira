@@ -562,6 +562,7 @@ add_action('admin_init', static function () {
         novamira_handle_sandbox_actions();
     }
     if ($page === 'novamira-connect') {
+        novamira_handle_settings_form();
         novamira_handle_revoke_password();
         novamira_handle_dismiss_production_warning();
     }

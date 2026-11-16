@@ -1,3 +1,6 @@
+Unreleased
+* Fix: After a site address change, turning AI Abilities back on from the Configuration page now shows them as on right away, where the page kept showing the "site domain changed" warning after saving and made it look like the change had not been saved.
+
 v1.12.15 - 2026/11/06
 * New: Gemini Desktop support. Connect Gemini Desktop to your site with OAuth sign-in through its custom connector.
 * Fix: Faster responses to AI clients on some hosting.
