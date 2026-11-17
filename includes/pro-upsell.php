@@ -19,6 +19,15 @@ const NOVAMIRA_PRO_DISMISS_PREFIX = 'novamira_pro_dismissed_';
 
 const NOVAMIRA_PRO_WELCOME_KEY = 'welcome';
 
+const NOVAMIRA_PRO_PROMO_KEY = 'black_friday_2026';
+
+const NOVAMIRA_PRO_PROMO_URL = 'https://novamira.ai/black-friday/';
+
+/**
+ * End of the promo, exclusive: 2026-12-01 00:00 CET (2026-11-30 23:00 UTC).
+ */
+const NOVAMIRA_PRO_PROMO_ENDS_AT = 1_796_079_600;
+
 /**
  * True when the Novamira Pro plugin is active.
  * License state is irrelevant — if Pro is running, the upsell is.
@@ -198,6 +207,11 @@ function novamira_render_pro_welcome_notice(): void
         return;
     }
 
+    if (time() < NOVAMIRA_PRO_PROMO_ENDS_AT) {
+        novamira_render_pro_promo_notice();
+        return;
+    }
+
     $pro_url = esc_url(NOVAMIRA_PRO_URL . '?utm_source=plugin&utm_medium=welcome_notice');
     $message = sprintf(
         '<strong>%s</strong> %s &nbsp; <a href="%s" target="_blank" rel="noopener" class="button button-primary" style="background:#f8ca50;border-color:#f8ca50;color:#1a1a1a;">%s</a>',
@@ -209,6 +223,33 @@ function novamira_render_pro_welcome_notice(): void
     novamira_render_persistent_admin_notice(
         $message,
         meta_key: NOVAMIRA_PRO_DISMISS_PREFIX . NOVAMIRA_PRO_WELCOME_KEY,
+        args: [
+            'type' => 'info',
+            'additional_classes' => ['novamira-pro-notice'],
+            'attributes' => ['style' => 'border-left-color:#f8ca50;'],
+        ],
+    );
+}
+
+/**
+ * Time-limited promo notice, shown in place of the welcome notice until the promo ends.
+ */
+function novamira_render_pro_promo_notice(): void
+{
+    $promo_url = esc_url(NOVAMIRA_PRO_PROMO_URL . '?utm_source=plugin&utm_medium=promo_notice');
+    $message = sprintf(
+        '<strong>%s</strong> %s &nbsp; <a href="%s" target="_blank" rel="noopener" class="button button-primary" style="background:#f8ca50;border-color:#f8ca50;color:#1a1a1a;">%s</a>',
+        esc_html__('Novamira Pro Black Friday: up to €100 off.', domain: 'novamira'),
+        esc_html__(
+            'All plans on sale through November 30, coupon applied automatically at checkout.',
+            domain: 'novamira',
+        ),
+        $promo_url,
+        esc_html__('See the offer', domain: 'novamira'),
+    );
+    novamira_render_persistent_admin_notice(
+        $message,
+        meta_key: NOVAMIRA_PRO_DISMISS_PREFIX . NOVAMIRA_PRO_PROMO_KEY,
         args: [
             'type' => 'info',
             'additional_classes' => ['novamira-pro-notice'],
