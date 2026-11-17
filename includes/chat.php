@@ -30,6 +30,11 @@ const NOVAMIRA_CHAT_MAX_SESSIONS_PER_USER = 50;
 
 const NOVAMIRA_CHAT_CONSENT_META = 'novamira_chat_consent';
 
+// HTTP timeout, in seconds, for each Chat model request. WordPress AI Client requests
+// default to 30 seconds, but a Chat step is not streamed: the provider sends nothing
+// until the whole response, often a tool call carrying a large file, is generated.
+const NOVAMIRA_CHAT_REQUEST_TIMEOUT = 120.0;
+
 /** Whether the Novamira Chat feature is active. */
 function novamira_chat_is_enabled(): bool
 {
@@ -721,10 +726,10 @@ function novamira_chat_rest_model_step(WP_REST_Request $request): array|WP_Error
         $tools = novamira_chat_discover_tools();
         $parsed = novamira_chat_generate_native_step($session, $tools);
     } catch (Throwable $e) {
-        return novamira_chat_fail_session($session, $e->getMessage());
+        return novamira_chat_fail_session($session, novamira_chat_model_error_message($e));
     }
     if (is_wp_error($parsed)) {
-        return novamira_chat_fail_session($session, $parsed->get_error_message());
+        return novamira_chat_fail_session($session, novamira_chat_model_error_message($parsed));
     }
 
     $step = novamira_chat_append_model_step($session, $parsed, $tools);
@@ -2750,7 +2755,7 @@ function novamira_chat_generate_native_step(array $session, array $tools): array
 
     /** @var mixed $builder */
     // @mago-expect analysis:mixed-assignment
-    $builder = wp_ai_client_prompt($messages);
+    $builder = novamira_chat_prompt_builder($messages);
     if (!is_object($builder)) {
         return new WP_Error(
             'novamira_chat_bad_ai_builder',
@@ -2815,6 +2820,81 @@ function novamira_chat_generate_native_step(array $session, array $tools): array
     }
 
     return novamira_chat_parse_native_result($result);
+}
+
+/**
+ * Create the WordPress AI Client prompt builder for a Chat model step.
+ *
+ * The builder reads its default HTTP timeout from the core wp_ai_client_default_request_timeout
+ * filter when it is constructed. When nothing is attached to that filter, Chat attaches its own
+ * callback while its builder is constructed and removes it right after, so other AI Client
+ * requests keep the core default. When the site has attached any callback to the filter, at any
+ * priority, the site has taken control of the AI Client timeout and Chat leaves the filter alone.
+ *
+ * @param list<object> $messages
+ */
+function novamira_chat_prompt_builder(array $messages): mixed
+{
+    if (has_filter('wp_ai_client_default_request_timeout')) {
+        return wp_ai_client_prompt($messages);
+    }
+
+    add_filter('wp_ai_client_default_request_timeout', callback: 'novamira_chat_request_timeout');
+    try {
+        return wp_ai_client_prompt($messages);
+    } finally {
+        remove_filter('wp_ai_client_default_request_timeout', callback: 'novamira_chat_request_timeout');
+    }
+}
+
+/**
+ * The AI Client default request timeout for a Chat model step: NOVAMIRA_CHAT_REQUEST_TIMEOUT.
+ *
+ * A value that is not a number is returned unchanged, so the AI Client still reports it.
+ */
+function novamira_chat_request_timeout(mixed $timeout): mixed
+{
+    return is_numeric($timeout) ? NOVAMIRA_CHAT_REQUEST_TIMEOUT : $timeout;
+}
+
+/**
+ * The message a failed model step reports.
+ *
+ * A request to the AI provider that timed out is reworded: the transport error ("cURL error 28:
+ * Operation timed out ...") does not say that the steps already completed are kept. The original
+ * message goes to the PHP error log. Every other error keeps its own message.
+ */
+function novamira_chat_model_error_message(WP_Error|Throwable $error): string
+{
+    $message = $error instanceof WP_Error ? $error->get_error_message() : $error->getMessage();
+    if (!novamira_chat_is_request_timeout($error)) {
+        return $message;
+    }
+
+    error_log(sprintf('Novamira Chat: the AI provider request timed out. %s', $message));
+
+    return __(
+        'The AI provider took too long to respond. The steps already completed are saved: send another message to continue.',
+        domain: 'novamira',
+    );
+}
+
+/**
+ * Whether an AI Client error is a network error caused by the request timing out, as opposed to
+ * any other network failure (DNS, refused connection, TLS).
+ */
+function novamira_chat_is_request_timeout(WP_Error|Throwable $error): bool
+{
+    $is_network_error = $error instanceof WP_Error
+        ? $error->get_error_code() === 'prompt_network_error'
+        : $error instanceof \WordPress\AiClient\Providers\Http\Exception\NetworkException;
+    if (!$is_network_error) {
+        return false;
+    }
+
+    $message = $error instanceof WP_Error ? $error->get_error_message() : $error->getMessage();
+
+    return preg_match('/\bcURL error 28\b|\btimed out\b/i', $message) === 1;
 }
 
 /**
