@@ -1,4 +1,4 @@
-Unreleased
+v1.12.16 - 2026/11/17
 * Fix: After a site address change, turning AI Abilities back on from the Configuration page now shows them as on right away, where the page kept showing the "site domain changed" warning after saving and made it look like the change had not been saved.
 * Fix: Novamira Chat now waits longer for the AI provider, so long steps no longer stop with a "cURL error 28" timeout, and shows a clear message when the provider is too slow.
 * Minor Fixes
