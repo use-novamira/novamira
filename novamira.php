@@ -268,6 +268,7 @@ require_once __DIR__ . '/includes/instructions-admin.php';
 novamira_register_wordpress_compatibility_notice();
 novamira_boot_ability_rest_surface();
 novamira_register_ability_policy_hook();
+novamira_register_stock_mcp_adapter_hook();
 novamira_register_read_mode_hooks();
 
 add_action('admin_post_novamira_toggle_ai_abilities', callback: 'novamira_handle_admin_bar_toggle');

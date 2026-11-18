@@ -10,6 +10,7 @@ if (!defined('ABSPATH')) {
 }
 
 require_once dirname(__DIR__) . '/ability-metadata.php';
+require_once __DIR__ . '/stock-mcp-adapter.php';
 
 /** @return array{available: bool, reason: string} */
 function novamira_wp_cli_status(): array
@@ -93,8 +94,50 @@ function novamira_register_ability_hooks(): bool
         callback: 'novamira_own_mcp_adapter_builtin_abilities',
         priority: PHP_INT_MIN,
     );
+    add_action('init', callback: 'novamira_defer_mcp_adapter_init', priority: PHP_INT_MIN);
+    add_action('rest_api_init', callback: 'novamira_defer_mcp_adapter_init', priority: PHP_INT_MIN);
 
     return true;
+}
+
+/**
+ * Run the bundled adapter's `init()` after every other MCP Adapter copy hooked at the same priority.
+ *
+ * Novamira creates the bundled adapter at plugin load, so its `init()` is attached to `rest_api_init:15`
+ * (`init:20` under WP-CLI) before any copy of the MCP Adapter that another plugin bundles and creates
+ * later, for instance on `plugins_loaded`. Those copies attach their `register_default_abilities`
+ * callback to `wp_abilities_api_init` only from their own `init()`, on the same hook and priority. Running
+ * first, the bundled adapter builds the Novamira server, which boots the Abilities registry and fires that
+ * one-shot action before the other copies have attached their callback: their built-in Abilities are never
+ * registered and their default server cannot find them.
+ *
+ * Re-attaching the bundled adapter's callback at the start of the hook moves it after every callback
+ * already attached at its priority, which keeps the priority itself unchanged: the transports still
+ * register their routes on `rest_api_init:16`. When another copy then boots the registry first,
+ * novamira_register_mcp_adapter_builtin_abilities() registers the bundled built-ins and
+ * novamira_own_mcp_adapter_builtin_abilities() removes the bundled registrar, as for any other early use
+ * of the Abilities API. This keeps the common case native for the other copies; when the registry boots
+ * before one of them initializes anyway, novamira_catch_up_stock_mcp_adapter_abilities() registers its
+ * built-ins.
+ */
+function novamira_defer_mcp_adapter_init(): void
+{
+    if (!novamira_is_mcp_adapter_available()) {
+        return;
+    }
+
+    $hook_name = current_action();
+    if (!is_string($hook_name)) {
+        return;
+    }
+
+    $callback = [\Novamira\Vendor\WP\MCP\Core\McpAdapter::instance(), 'init'];
+    $priority = has_action($hook_name, $callback);
+    if (!is_int($priority) || !remove_action($hook_name, $callback, $priority)) {
+        return;
+    }
+
+    add_action($hook_name, $callback, $priority);
 }
 
 /**

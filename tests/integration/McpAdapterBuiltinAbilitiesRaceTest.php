@@ -46,6 +46,208 @@ final class McpAdapterBuiltinAbilitiesRaceTest extends TestCase
         yield 'create_default_server filter true for the adapter, false inside wp_abilities_api_init' => [
             'filter-context',
         ];
+        yield 'unprefixed adapter copy created after Novamira boots the registry on rest_api_init:15' => [
+            'foreign-adapter',
+        ];
+        yield 'unprefixed adapter copy created after Novamira boots the registry on init:20 under WP-CLI' => [
+            'foreign-adapter-wp-cli',
+        ];
+        yield 'registry read before rest_api_init with an unprefixed adapter copy' => ['stock-adapter-registry-read'];
+        yield 'unprefixed adapter copy initialized on rest_api_init:20' => ['stock-adapter-late-priority'];
+        yield 'unprefixed adapter copy initialized while wp_abilities_api_init runs' => [
+            'stock-adapter-init-during-action',
+        ];
+        yield 'only the categories registry booted before rest_api_init' => ['stock-adapter-categories-first'];
+    }
+
+    /**
+     * Read mode with an unprefixed adapter copy whose built-ins are registered after the registry booted:
+     * they are swept like any Ability registered in time, a write Ability stays removed, an Ability object
+     * the copy holds on to is refused, and Novamira's server keeps its read-mode tools.
+     */
+    public function testReadModeStillSweepsWithAStockAdapterCopy(): void
+    {
+        $result = $this->runBootScenario('read-mode-stock-adapter');
+
+        self::assertContains('stock adapter: init, registry booted=true', $result['trace']);
+        foreach (['late/write', 'mcp-adapter/discover-abilities', 'mcp-adapter/get-ability-info', 'mcp-adapter/execute-ability'] as $name) {
+            self::assertContains('unregister ' . $name, $result['trace']);
+            self::assertNotContains($name, $result['registered_after_policy']);
+        }
+        self::assertSame(
+            [
+                'mcp-adapter/discover-abilities' => false,
+                'mcp-adapter/get-ability-info' => false,
+                'mcp-adapter/execute-ability' => false,
+            ],
+            $result['stock_adapter']['permissions'],
+        );
+        self::assertContains('novamira/read-query', $result['registered_after_policy']);
+        self::assertSame(self::NOVAMIRA_SERVER_TOOLS, array_keys($result['tools']));
+    }
+
+    /**
+     * A filter that throws while Novamira registers the copy's built-ins late must not leave
+     * wp_abilities_api_init, or the filter, on WordPress's stack of running hooks.
+     */
+    public function testLateRegistrationRestoresTheRunningHooksWhenAFilterThrows(): void
+    {
+        $result = $this->runBootScenario('stock-adapter-throwing-filter');
+
+        self::assertSame(
+            [
+                'exception' => 'filter failed',
+                'doing_wp_abilities_api_init' => false,
+                'doing_wp_abilities_api_categories_init' => false,
+                'doing_wp_register_ability_args' => false,
+            ],
+            $result['after_throw'],
+        );
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function noStockBuiltinsScenarios(): iterable
+    {
+        yield 'no unprefixed adapter copy' => ['race'];
+        yield 'unprefixed adapter copy with its default server disabled' => ['stock-adapter-server-disabled'];
+    }
+
+    /**
+     * Novamira registers the copy's built-ins only for a copy that initializes and builds its default
+     * server, never on its own.
+     */
+    #[DataProvider('noStockBuiltinsScenarios')]
+    public function testNoStockBuiltinsWithoutACopyThatBuildsItsDefaultServer(string $scenario): void
+    {
+        $result = $this->runBootScenario($scenario);
+
+        foreach ($result['registered_after_policy'] as $ability_name) {
+            self::assertStringStartsNotWith('mcp-adapter/', $ability_name);
+        }
+        foreach (self::ADAPTER_ABILITIES as $ability_name) {
+            self::assertTrue($result['registered'][$ability_name], $ability_name . ' is not registered.');
+        }
+        self::assertSame(self::NOVAMIRA_SERVER_TOOLS, array_keys($result['tools']));
+        self::assertSame([], $result['notices'], implode("\n", $result['notices']));
+    }
+
+    /**
+     * The copy's built-ins registered late go through helpers.php's real Ability policy: an Abilities Hub
+     * rule that turns one of them off is honoured as for an Ability registered in time.
+     */
+    public function testHubRuleTurnsOffALateStockBuiltin(): void
+    {
+        self::assertSame(
+            [
+                'category' => true,
+                'registered' => ['mcp-adapter/discover-abilities', 'mcp-adapter/get-ability-info'],
+                'unregistered' => ['mcp-adapter/execute-ability'],
+            ],
+            $this->runPolicyScenario('hub-disabled'),
+        );
+        self::assertSame(
+            [
+                'category' => true,
+                'registered' => [
+                    'mcp-adapter/discover-abilities',
+                    'mcp-adapter/get-ability-info',
+                    'mcp-adapter/execute-ability',
+                ],
+                'unregistered' => [],
+            ],
+            $this->runPolicyScenario('hub-enabled'),
+        );
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function fenceScenarios(): iterable
+    {
+        yield 'built-ins registered late' => ['stock-adapter-fence'];
+        yield 'built-ins registered in time' => ['stock-adapter-fence-native'];
+    }
+
+    /**
+     * The copy's built-in Abilities are a gateway to every MCP-public Ability. Through them, neither an
+     * administrator nor an editor can list, describe, or run a Novamira Ability, or one a Novamira feature
+     * owns; another plugin's Abilities work as before. Novamira's own discovery and a direct call still reach
+     * Novamira's Abilities.
+     */
+    #[DataProvider('fenceScenarios')]
+    public function testStockBuiltinsDoNotReachNovamiraAbilities(string $scenario): void
+    {
+        $result = $this->runBootScenario($scenario);
+        $fence = $result['fence'];
+
+        foreach (['administrator', 'editor'] as $role) {
+            self::assertSame(['acme/ping'], $fence[$role]['discover'], $role);
+            foreach (['novamira/stand-in-tool', 'novamira/skill-prompt-demo', 'pro-addon/feature-ability'] as $target) {
+                foreach (['info', 'execute'] as $kind) {
+                    self::assertSame('ability_not_found', $fence[$role][$kind][$target]['permission'], "{$role} {$kind} {$target}");
+                    self::assertSame('ability_invalid_permissions', $fence[$role][$kind][$target]['result']['wp_error']);
+                }
+            }
+            self::assertSame(['permission' => true, 'result' => 'described'], $fence[$role]['info']['acme/ping']);
+            self::assertSame(
+                ['permission' => true, 'result' => ['success' => true, 'data' => 'ran acme/ping']],
+                $fence[$role]['execute']['acme/ping'],
+            );
+        }
+        // Only the direct call ran the Novamira Ability.
+        self::assertSame(
+            ['executed acme/ping', 'executed novamira/stand-in-tool', 'executed acme/ping'],
+            array_values(array_filter($result['trace'], static fn(string $line): bool => str_starts_with($line, 'executed '))),
+        );
+        self::assertSame('ran novamira/stand-in-tool', $fence['direct']);
+        self::assertContains('novamira/stand-in-tool', $fence['own_discover']);
+        self::assertContains('pro-addon/feature-ability', $fence['own_discover']);
+        self::assertSame(self::NOVAMIRA_SERVER_TOOLS, array_keys($result['tools']));
+        self::assertSame([], $result['notices'], implode("\n", $result['notices']));
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function stockAdapterScenarios(): iterable
+    {
+        yield 'created after Novamira, init() on rest_api_init:15' => ['foreign-adapter', false];
+        yield 'created after Novamira, init() on init:20 under WP-CLI' => ['foreign-adapter-wp-cli', false];
+        yield 'registry read before rest_api_init, as by a Novamira admin screen' => [
+            'stock-adapter-registry-read',
+            true,
+        ];
+        yield 'init() moved to rest_api_init:20' => ['stock-adapter-late-priority', true];
+        yield 'init() run by a priority-20 wp_abilities_api_init callback' => ['stock-adapter-init-during-action', true];
+        yield 'categories registry booted alone before rest_api_init' => ['stock-adapter-categories-first', false];
+    }
+
+    /**
+     * Another plugin bundles an unprefixed copy of the MCP Adapter, which attaches its built-in Ability
+     * registration only from its own init(). Whatever boots the one-shot Abilities registry first, and
+     * whenever that init() runs, the copy's default server must find its own built-in Abilities, and
+     * Novamira's own three must exist. With the same hook and priority, the bundled adapter initializes
+     * after the copy, so the registry is not booted yet when the copy initializes.
+     */
+    #[DataProvider('stockAdapterScenarios')]
+    public function testStockAdapterCopyFindsItsBuiltinAbilities(string $scenario, bool $registry_booted_first): void
+    {
+        $result = $this->runBootScenario($scenario);
+
+        self::assertContains(
+            'stock adapter: init, registry booted=' . var_export($registry_booted_first, return: true),
+            $result['trace'],
+        );
+        $all_registered = [
+            'mcp-adapter/discover-abilities' => true,
+            'mcp-adapter/get-ability-info' => true,
+            'mcp-adapter/execute-ability' => true,
+        ];
+        self::assertSame($all_registered, $result['stock_adapter']['server_abilities']);
+        foreach (array_keys($all_registered) as $ability_name) {
+            self::assertSame(1, count(array_keys($result['trace'], 'register ' . $ability_name, strict: true)));
+        }
+        foreach (self::ADAPTER_ABILITIES as $ability_name) {
+            self::assertTrue($result['registered'][$ability_name], $ability_name . ' is not registered.');
+        }
+        self::assertSame(self::NOVAMIRA_SERVER_TOOLS, array_keys($result['tools']));
+        self::assertSame([], $result['notices'], implode("\n", $result['trace']));
     }
 
     #[DataProvider('scenarios')]
@@ -614,6 +816,154 @@ final class McpAdapterBuiltinAbilitiesRaceTest extends TestCase
     }
 
     /** @return array<string, mixed> */
+    /** @return iterable<string, array{string, bool}> */
+    public static function realStockServerScenarios(): iterable
+    {
+        yield 'built-ins registered in time' => ['stock-server-real', false];
+        yield 'registry read before rest_api_init' => ['stock-server-real-late', false];
+        yield 'later filters and a server created after the pruning' => ['stock-server-real-hostile', true];
+    }
+
+    /**
+     * Every server of the real unprefixed adapter loses the components that run a Novamira Ability before
+     * anything is listed, checked, or run: its default server under another plugin's partial configuration
+     * (whose merged defaults bring back Novamira's resource and skill prompt), a server that plugin creates
+     * with create_server() holding them by name and as component objects, and, with the later filters, a
+     * server created after the pruning. Through the adapter's real handlers, as an administrator and as an
+     * editor, tools/call, resources/read, and prompts/get answer exactly as for a name never registered, also
+     * when a later filter undoes refusals and lists Novamira's names; execute-ability and discover-abilities
+     * do not reach them. The other plugin's components work as before, and Novamira's own server is unchanged.
+     */
+    #[DataProvider('realStockServerScenarios')]
+    public function testNoServerOfTheStockAdapterReachesNovamiraAbilities(string $scenario, bool $hostile): void
+    {
+        $result = $this->runBootScenario($scenario);
+        $owned = ['novamira/stand-in-tool', 'novamira/stand-in-resource', 'novamira/skill-prompt-demo', 'pro-addon/feature-ability'];
+        $absent = [
+            'tool' => [['novamira-stand-in-tool', 'pro-addon-feature-ability'], 'acme-never-registered', 'tools/list'],
+            'resource' => [['novamira://stand-in'], 'acme://never-registered', 'resources/list'],
+            'prompt' => [['novamira-skill-prompt-demo'], 'acme-never-registered', 'prompts/list'],
+        ];
+
+        // What the servers held when they were created.
+        $created = $result['components_at_creation'];
+        self::assertSame('novamira/stand-in-resource', $created['mcp-adapter-default-server']['resource novamira://stand-in']);
+        self::assertSame('novamira/skill-prompt-demo', $created['mcp-adapter-default-server']['prompt novamira-skill-prompt-demo']);
+        self::assertSame('novamira/stand-in-tool', $created['acme-server']['tool novamira-stand-in-tool']);
+        self::assertSame('pro-addon/feature-ability', $created['acme-server']['tool pro-addon-feature-ability']);
+        self::assertSame('novamira/stand-in-resource', $created['acme-server']['resource novamira://stand-in']);
+        self::assertSame($hostile, isset($created['acme-late-server']['tool novamira-stand-in-tool']));
+
+        foreach ($result['stock_servers'] as $role => $servers) {
+            foreach ($servers as $server_id => $report) {
+                if ($report === null) {
+                    self::assertSame('acme-late-server', $server_id);
+                    self::assertFalse($hostile);
+                    continue;
+                }
+                foreach ($absent as $kind => [$names, $missing, $list]) {
+                    foreach ($names as $name) {
+                        $context = "{$role} {$server_id} {$kind} {$name}";
+                        self::assertSame($report['absent'][$kind][$missing], $report['absent'][$kind][$name], $context);
+                        if (!$hostile) {
+                            self::assertNotContains($name, $report[$list], $context);
+                        }
+                    }
+                }
+                $calls = ['tool' => ['tools/list', 'tools/call'], 'resource' => ['resources/list', 'resources/read'], 'prompt' => ['prompts/list', 'prompts/get']];
+                foreach ($report['components'] as $component => $ability_name) {
+                    self::assertNotContains($ability_name, $owned, "{$role} {$server_id} {$component}");
+                    if (!str_starts_with((string) $ability_name, 'acme/')) {
+                        continue;
+                    }
+                    [$kind, $name] = explode(' ', $component, limit: 2);
+                    [$list, $call] = $calls[$kind];
+                    self::assertContains($name, $report[$list]);
+                    self::assertSame(['executed' => [$ability_name], 'error' => false], $report[$call][$name]);
+                }
+                if (isset($report['execute-ability'])) {
+                    foreach (['novamira/stand-in-tool', 'pro-addon/feature-ability'] as $target) {
+                        self::assertSame(['executed' => [], 'error' => true], $report['execute-ability'][$target]);
+                    }
+                    self::assertSame(['executed' => ['acme/ping'], 'error' => false], $report['execute-ability']['acme/ping']);
+                }
+                if (isset($report['discover-abilities'])) {
+                    self::assertSame(['acme/ping'], $report['discover-abilities'], "{$role} {$server_id}");
+                }
+            }
+        }
+
+        $executed = array_filter($result['trace'], static fn(string $line): bool => str_starts_with($line, 'executed '));
+        self::assertSame([], array_values(array_filter(
+            $executed,
+            static fn(string $line): bool => in_array(substr($line, strlen('executed ')), $owned, strict: true),
+        )));
+        self::assertSame(self::NOVAMIRA_SERVER_TOOLS, array_keys($result['tools']));
+        self::assertContains('novamira/stand-in-tool', $result['manager_discovery']);
+        self::assertSame([], $result['notices'], implode("\n", $result['notices']));
+    }
+
+    /**
+     * A component of the unprefixed adapter whose layout Novamira does not know counts as running a Novamira
+     * Ability unless it reports another plugin's Ability or a callable or builder source, and inspecting it
+     * raises no PHP warning.
+     */
+    public function testUnknownComponentLayoutsFailClosedWithoutWarnings(): void
+    {
+        $root = dirname(__DIR__, levels: 2);
+        $process = proc_open(
+            [PHP_BINARY, $root . '/tests/fixtures/stock-mcp-component-runner.php', $root],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $pipes,
+        );
+        self::assertIsResource($process);
+        $stdout = (string) stream_get_contents($pipes[1]);
+        $stderr = (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        self::assertSame(0, proc_close($process), "stdout:\n{$stdout}\nstderr:\n{$stderr}");
+
+        self::assertSame(
+            [
+                'runs_novamira' => [
+                    'tool reporting a Novamira Ability' => true,
+                    "tool reporting another plugin's Ability" => false,
+                    'tool reporting an Ability without its name' => true,
+                    'tool built from a callable' => false,
+                    'tool reporting no source' => true,
+                    'tool reporting an unknown source' => true,
+                    'resource built from a callable, with a renamed field' => false,
+                    'resource reporting no source, with a renamed field' => true,
+                    'prompt built from a builder' => false,
+                    'prompt holding something other than an Ability' => true,
+                ],
+                'warnings' => [],
+            ],
+            json_decode($stdout, associative: true),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function runPolicyScenario(string $scenario): array
+    {
+        $root = dirname(__DIR__, levels: 2);
+        $command = [PHP_BINARY, $root . '/tests/fixtures/stock-mcp-adapter-policy-runner.php', $root, $scenario];
+        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        self::assertIsResource($process);
+
+        $stdout = (string) stream_get_contents($pipes[1]);
+        $stderr = (string) stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        self::assertSame(0, proc_close($process), "stdout:\n{$stdout}\nstderr:\n{$stderr}");
+        self::assertSame('', $stderr, $stderr);
+
+        $decoded = json_decode($stdout, associative: true);
+        self::assertIsArray($decoded, $stdout);
+
+        return $decoded;
+    }
+
     private function runBootScenario(string $scenario): array
     {
         $root = dirname(__DIR__, levels: 2);

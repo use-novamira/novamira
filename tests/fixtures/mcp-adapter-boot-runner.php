@@ -38,6 +38,40 @@ declare(strict_types=1);
  * - pre-init:         normal, plus wp_has_ability() called before `init` (core refuses to boot the
  *                     registry there, with a _doing_it_wrong notice, and no boot is consumed).
  * - hook-conformance: no adapter; only checks the WP_Hook emulation itself.
+ * - foreign-adapter:  a plugin loaded after Novamira creates its own, unprefixed copy of the MCP Adapter
+ *                     (tests/fixtures/stock-mcp-adapter-stub.php), which hooks its init() to
+ *                     rest_api_init:15 like the bundled one; that init() attaches its built-in Ability
+ *                     registration and then builds its default server from the registry.
+ * - foreign-adapter-wp-cli: as foreign-adapter, with both copies initializing on init:20 under WP-CLI.
+ * - stock-adapter-registry-read: as foreign-adapter, with the registry read after init and before
+ *                     rest_api_init, as Novamira's admin screens do before a REST request in the same
+ *                     request (block editor preloading).
+ * - stock-adapter-late-priority: as foreign-adapter, with the plugin running the copy's init() on
+ *                     rest_api_init:20 instead of 15.
+ * - read-mode-stock-adapter: stock-adapter-registry-read in read mode, with the late write provider of
+ *                     read-mode-late-provider.
+ * - stock-adapter-init-during-action: the registry read boots wp_abilities_api_init, whose priority-20
+ *                     callback from another plugin runs the copy's init().
+ * - stock-adapter-categories-first: only the categories registry is booted before rest_api_init.
+ * - stock-adapter-throwing-filter: stock-adapter-registry-read with a wp_register_ability_args filter that
+ *                     throws on the copy's first built-in; the exception is caught after rest_api_init.
+ * - stock-adapter-server-disabled: stock-adapter-registry-read with the copy's default server disabled.
+ * - stock-adapter-hub-disabled: stock-adapter-registry-read with helpers.php's real Ability policy and an
+ *                     Abilities Hub rule that turns mcp-adapter/execute-ability off.
+ * - stock-adapter-fence / stock-adapter-fence-native: a Novamira Ability, a Novamira skill prompt, an
+ *                     Ability a Novamira feature owns, and another plugin's Ability, reached through the
+ *                     copy's real built-ins as an administrator and as an editor, with the registry booted
+ *                     before the copy initializes (catch-up) or after (native registration).
+ * - stock-server-real / stock-server-real-late: the real unprefixed adapter (stock-mcp-adapter-real.php),
+ *                     its default server with a partial configuration from another plugin, and a server that
+ *                     plugin creates with create_server(), listing Novamira's Abilities by name and as
+ *                     component objects next to its own; every component is listed and called through the
+ *                     adapter's real handlers as an administrator and as an editor. In the -late variant the
+ *                     registry is read before rest_api_init.
+ * - stock-server-real-hostile: stock-server-real with a plugin loaded after Novamira that, at PHP_INT_MAX,
+ *                     turns every pre-call refusal back into arguments, adds Novamira's names to every list,
+ *                     and creates one more server from a mcp_adapter_init callback that runs after Novamira's
+ *                     pruning; the probes start as a REST request does, through rest_request_before_callbacks.
  * - read-mode-init-between: init-between with read mode on, the read-mode policy at PHP_INT_MAX, and a
  *                     foreign plugin registering public tool, resource, and prompt Abilities outside the
  *                     read-mode allowlist before the nested adapter init() snapshots the server.
@@ -74,13 +108,66 @@ const NOVAMIRA_TEST_SCENARIOS = [
     'filter-context',
     'pre-init',
     'hook-conformance',
+    'foreign-adapter',
+    'foreign-adapter-wp-cli',
     'read-mode-init-between',
     'read-mode-late-provider',
     'late-provider-off',
     'read-mode-dynamic-providers',
     'dynamic-providers-off',
     'stdio-session',
+    'stock-adapter-registry-read',
+    'stock-adapter-late-priority',
+    'read-mode-stock-adapter',
+    'stock-adapter-init-during-action',
+    'stock-adapter-categories-first',
+    'stock-adapter-throwing-filter',
+    'stock-adapter-server-disabled',
+    'stock-adapter-hub-disabled',
+    'stock-adapter-fence',
+    'stock-adapter-fence-native',
+    'stock-server-real',
+    'stock-server-real-late',
+    'stock-server-real-hostile',
 ];
+
+const NOVAMIRA_TEST_STOCK_ADAPTER_SCENARIOS = [
+    'foreign-adapter',
+    'foreign-adapter-wp-cli',
+    'stock-adapter-registry-read',
+    'stock-adapter-late-priority',
+    'read-mode-stock-adapter',
+    'stock-adapter-init-during-action',
+    'stock-adapter-categories-first',
+    'stock-adapter-throwing-filter',
+    'stock-adapter-server-disabled',
+    'stock-adapter-hub-disabled',
+    'stock-adapter-fence',
+    'stock-adapter-fence-native',
+];
+
+/** Scenarios that read the Abilities registry after init and before rest_api_init. */
+const NOVAMIRA_TEST_EARLY_READ_SCENARIOS = [
+    'race',
+    'foreign-below',
+    'init-between',
+    'init-above',
+    'read-mode-init-between',
+    'stock-adapter-registry-read',
+    'read-mode-stock-adapter',
+    'stock-adapter-init-during-action',
+    'stock-adapter-throwing-filter',
+    'stock-adapter-server-disabled',
+    'stock-adapter-hub-disabled',
+    'stock-adapter-fence',
+    'stock-server-real-late',
+];
+
+/** Scenarios that run the real unprefixed adapter instead of the stub. */
+const NOVAMIRA_TEST_REAL_STOCK_SCENARIOS = ['stock-server-real', 'stock-server-real-late', 'stock-server-real-hostile'];
+
+/** The real servers the probes call, and what each holds of Novamira's when it is created. */
+const NOVAMIRA_TEST_REAL_STOCK_SERVERS = ['mcp-adapter-default-server', 'acme-server', 'acme-late-server'];
 
 if ($argc !== 3 || !in_array($argv[2], NOVAMIRA_TEST_SCENARIOS, strict: true)) {
     fwrite(STDERR, 'Usage: php mcp-adapter-boot-runner.php <plugin-root> <' . implode('|', NOVAMIRA_TEST_SCENARIOS) . ">\n");
@@ -94,13 +181,13 @@ define('ABSPATH', '/');
 define('NOVAMIRA_MAX_EXECUTION_TIME', 30);
 define('MINUTE_IN_SECONDS', 60);
 define('DAY_IN_SECONDS', 86_400);
-if ($novamira_scenario === 'wp-cli') {
+if (in_array($novamira_scenario, ['wp-cli', 'foreign-adapter-wp-cli'], strict: true)) {
     define('WP_CLI', true);
 }
 
 $GLOBALS['novamira_test_hooks'] = [];
 $GLOBALS['novamira_test_actions_done'] = [];
-$GLOBALS['novamira_test_current_hooks'] = [];
+$GLOBALS['wp_current_filter'] = [];
 $GLOBALS['novamira_test_notices'] = [];
 $GLOBALS['novamira_test_ability_args'] = [];
 $GLOBALS['novamira_test_rest_routes'] = [];
@@ -173,7 +260,7 @@ function remove_action(string $hook_name, callable|array|string $callback, int $
 /** Run every callback of a hook the way WP_Hook::apply_filters() iterates priorities. */
 function novamira_test_run_hook(string $hook_name, bool $is_filter, mixed $value, array $args): mixed
 {
-    $GLOBALS['novamira_test_current_hooks'][] = $hook_name;
+    $GLOBALS['wp_current_filter'][] = $hook_name;
     $current = null;
     while (true) {
         $pending = array_filter(
@@ -193,7 +280,7 @@ function novamira_test_run_hook(string $hook_name, bool $is_filter, mixed $value
             }
         }
     }
-    array_pop($GLOBALS['novamira_test_current_hooks']);
+    array_pop($GLOBALS['wp_current_filter']);
     return $value;
 }
 
@@ -216,9 +303,14 @@ function did_action(string $hook_name): int
 function doing_action(?string $hook_name = null): bool
 {
     if ($hook_name === null) {
-        return $GLOBALS['novamira_test_current_hooks'] !== [];
+        return $GLOBALS['wp_current_filter'] !== [];
     }
-    return in_array($hook_name, $GLOBALS['novamira_test_current_hooks'], strict: true);
+    return in_array($hook_name, $GLOBALS['wp_current_filter'], strict: true);
+}
+
+function current_action(): string|false
+{
+    return end($GLOBALS['wp_current_filter']);
 }
 
 function _doing_it_wrong(string $function_name, string $message, string $version): void
@@ -623,8 +715,32 @@ require $novamira_root . '/vendor/novamira/mcp-adapter/autoload.php';
 require $novamira_root . '/includes/abilities/bootstrap.php';
 
 novamira_register_ability_hooks();
+novamira_register_stock_mcp_adapter_hook();
 
-if (in_array($novamira_scenario, ['read-mode-init-between', 'read-mode-late-provider', 'late-provider-off', 'read-mode-dynamic-providers', 'dynamic-providers-off', 'stdio-session'], strict: true)) {
+if ($novamira_scenario === 'stock-adapter-hub-disabled') {
+    // helpers.php's real Ability policy, with an Abilities Hub rule that turns one of the copy's built-ins off.
+    $GLOBALS['options'] = ['novamira_ability_rules' => ['mcp-adapter/execute-ability' => ['disabled' => true]]];
+
+    function get_option(string $option, mixed $default_value = false): mixed
+    {
+        return $GLOBALS['options'][$option] ?? $default_value;
+    }
+
+    function is_admin(): bool
+    {
+        return false;
+    }
+
+    require __DIR__ . '/options-wpdb.php';
+    $GLOBALS['wpdb'] = new wpdb();
+    require $novamira_root . '/includes/helpers.php';
+    require $novamira_root . '/includes/read-mode/policy.php';
+    require __DIR__ . '/read-mode-hub-stubs.php';
+    novamira_register_read_mode_hooks();
+    novamira_register_ability_policy_hook();
+}
+
+if (in_array($novamira_scenario, ['read-mode-init-between', 'read-mode-late-provider', 'late-provider-off', 'read-mode-dynamic-providers', 'dynamic-providers-off', 'stdio-session', 'read-mode-stock-adapter'], strict: true)) {
     $GLOBALS['novamira_test_read_mode'] = !in_array($novamira_scenario, ['late-provider-off', 'dynamic-providers-off', 'stdio-session'], strict: true);
     if ($novamira_scenario === 'stdio-session') {
         $GLOBALS['novamira_test_read_mode'] = trim((string) file_get_contents((string) getenv('NOVAMIRA_TEST_STATE_FILE'))) === '1';
@@ -867,6 +983,197 @@ add_action('wp_abilities_api_init', static function (): void {
 
 // --- Foreign plugins ------------------------------------------------------------------------------
 
+if (in_array($novamira_scenario, NOVAMIRA_TEST_REAL_STOCK_SCENARIOS, strict: true)) {
+    // A plugin loaded after Novamira bundles the real unprefixed adapter and creates it on plugins_loaded.
+    require __DIR__ . '/stock-mcp-adapter-real.php';
+    require __DIR__ . '/stock-mcp-adapter-features-stub.php';
+    // The adapter's error handler logs refused and unknown components with error_log().
+    ini_set('error_log', '/dev/null');
+    \WP\MCP\Core\McpAdapter::instance();
+
+    // That plugin renames the default server with a configuration that leaves out every component list.
+    add_filter('mcp_adapter_default_server_config', static fn(): array => ['server_name' => 'Acme default'], 20);
+
+    add_action('wp_abilities_api_categories_init', static function (): void {
+        wp_register_ability_category('novamira-test', ['label' => 'Novamira', 'description' => 'Novamira.']);
+        wp_register_ability_category('acme', ['label' => 'Acme', 'description' => 'Another plugin.']);
+    });
+    add_action('wp_abilities_api_init', static function (): void {
+        $abilities = [
+            'novamira/stand-in-tool' => ['novamira-test', ['type' => 'tool'], 'manager'],
+            'novamira/stand-in-resource' => ['novamira-test', ['type' => 'resource', 'uri' => 'novamira://stand-in'], 'manager'],
+            'novamira/skill-prompt-demo' => ['novamira-test', ['type' => 'prompt'], 'manager'],
+            'pro-addon/feature-ability' => ['acme', ['type' => 'tool'], 'manager'],
+            'acme/ping' => ['acme', ['type' => 'tool'], 'anyone'],
+            'acme/resource' => ['acme', ['type' => 'resource', 'uri' => 'acme://resource'], 'anyone'],
+            'acme/greeting' => ['acme', ['type' => 'prompt'], 'anyone'],
+        ];
+        foreach ($abilities as $name => [$category, $mcp, $who]) {
+            wp_register_ability($name, [
+                'label' => $name,
+                'description' => 'Stand-in for ' . $name . '.',
+                'category' => $category,
+                'permission_callback' => $who === 'manager'
+                    ? static fn(): bool => novamira_current_user_can_manage()
+                    : static fn(): bool => is_user_logged_in(),
+                'execute_callback' => static function () use ($name, $mcp): mixed {
+                    $GLOBALS['novamira_test_trace'][] = 'executed ' . $name;
+                    return match ($mcp['type']) {
+                        'resource' => ['uri' => $mcp['uri'], 'text' => 'content of ' . $name],
+                        'prompt' => ['messages' => [['role' => 'user', 'content' => ['type' => 'text', 'text' => $name]]]],
+                        default => 'ran ' . $name,
+                    };
+                },
+                'meta' => ['mcp' => ['public' => true] + $mcp],
+            ]);
+        }
+    });
+
+    // What each server holds when it is created, before Novamira prunes it.
+    $GLOBALS['novamira_test_record_server'] = static function (mixed $server): void {
+        if (!$server instanceof \WP\MCP\Core\McpServer) {
+            return;
+        }
+        $components = [];
+        foreach (array_keys($server->get_tools()) as $name) {
+            $components['tool ' . $name] = $server->get_mcp_tool($name)?->get_observability_context()['ability_name'] ?? null;
+        }
+        foreach (array_keys($server->get_resources()) as $uri) {
+            $components['resource ' . $uri] = $server->get_mcp_resource($uri)?->get_observability_context()['ability_name'] ?? null;
+        }
+        foreach (array_keys($server->get_prompts()) as $name) {
+            $components['prompt ' . $name] = $server->get_mcp_prompt($name)?->get_observability_context()['ability_name'] ?? null;
+        }
+        $GLOBALS['novamira_test_components_at_creation'][$server->get_server_id()] = $components;
+    };
+    add_action('mcp_adapter_init', static function (mixed $adapter): void {
+        foreach ($adapter->get_servers() as $server) {
+            $GLOBALS['novamira_test_record_server']($server);
+        }
+    }, PHP_INT_MAX - 2);
+
+    if ($novamira_scenario === 'stock-server-real-hostile') {
+        // At the maximum priority, after Novamira: refusals become arguments again, and lists name Novamira's.
+        foreach (['mcp_adapter_pre_tool_call', 'mcp_adapter_pre_resource_read', 'mcp_adapter_pre_prompt_get'] as $hook) {
+            add_filter($hook, static fn(mixed $value): mixed => is_wp_error($value) ? [] : $value, PHP_INT_MAX);
+        }
+        add_filter('mcp_adapter_tools_list', static fn(array $tools): array => [
+            ...$tools,
+            \WP\McpSchema\Server\Tools\DTO\Tool::fromArray(['name' => 'novamira-stand-in-tool', 'inputSchema' => ['type' => 'object']]),
+        ], PHP_INT_MAX);
+        add_filter('mcp_adapter_resources_list', static fn(array $resources): array => [
+            ...$resources,
+            \WP\McpSchema\Server\Resources\DTO\Resource::fromArray(['name' => 'novamira-stand-in-resource', 'uri' => 'novamira://stand-in']),
+        ], PHP_INT_MAX);
+        add_filter('mcp_adapter_prompts_list', static fn(array $prompts): array => [
+            ...$prompts,
+            \WP\McpSchema\Server\Prompts\DTO\Prompt::fromArray(['name' => 'novamira-skill-prompt-demo']),
+        ], PHP_INT_MAX);
+        // A server created at PHP_INT_MAX after Novamira's pruning was attached there.
+        add_action('mcp_adapter_init', static function (): void {
+            add_action('mcp_adapter_init', static function (mixed $adapter): void {
+                $adapter->create_server(
+                    'acme-late-server',
+                    'mcp',
+                    'acme-late-server',
+                    'Acme late',
+                    'Server created last.',
+                    'v1.0.0',
+                    [\WP\MCP\Transport\HttpTransport::class],
+                    \WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+                    \WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
+                    ['novamira/stand-in-tool', 'acme/ping'],
+                    ['novamira/stand-in-resource', 'acme/resource'],
+                    ['novamira/skill-prompt-demo', 'acme/greeting'],
+                );
+                $GLOBALS['novamira_test_record_server']($adapter->get_server('acme-late-server'));
+            }, PHP_INT_MAX);
+        }, PHP_INT_MAX - 1);
+    }
+
+    // That plugin's own server, listing Novamira's Abilities by name and as component objects.
+    add_action('mcp_adapter_init', static function (mixed $adapter): void {
+        $result = $adapter->create_server(
+            'acme-server',
+            'mcp',
+            'acme-server',
+            'Acme',
+            'Server of another plugin.',
+            'v1.0.0',
+            [\WP\MCP\Transport\HttpTransport::class],
+            \WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
+            \WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
+            [
+                'novamira/stand-in-tool',
+                \WP\MCP\Domain\Tools\McpTool::fromAbility(wp_get_ability('pro-addon/feature-ability')),
+                'acme/ping',
+                'mcp-adapter/execute-ability',
+                'mcp-adapter/discover-abilities',
+            ],
+            [\WP\MCP\Domain\Resources\McpResource::fromAbility(wp_get_ability('novamira/stand-in-resource')), 'acme/resource'],
+            ['novamira/skill-prompt-demo', 'acme/greeting'],
+        );
+        if (is_wp_error($result)) {
+            throw new RuntimeException($result->get_error_message());
+        }
+    }, 20);
+}
+
+if (in_array($novamira_scenario, NOVAMIRA_TEST_STOCK_ADAPTER_SCENARIOS, strict: true)) {
+    // A plugin loaded after Novamira creates its unprefixed copy of the MCP Adapter on plugins_loaded.
+    require __DIR__ . '/stock-mcp-adapter-stub.php';
+    $novamira_stock_adapter = \WP\MCP\Core\McpAdapter::instance();
+    if ($novamira_scenario === 'stock-adapter-init-during-action') {
+        add_action('wp_abilities_api_init', static function () use ($novamira_stock_adapter): void {
+            $novamira_stock_adapter->init();
+        }, 20);
+    }
+    if ($novamira_scenario === 'stock-adapter-throwing-filter') {
+        add_filter('wp_register_ability_args', static function (mixed $args, mixed $name): mixed {
+            if ($name === 'mcp-adapter/discover-abilities') {
+                throw new RuntimeException('filter failed');
+            }
+            return $args;
+        }, 5, 2);
+    }
+    if ($novamira_scenario === 'stock-adapter-server-disabled') {
+        add_filter('mcp_adapter_create_default_server', static fn(): bool => false);
+    }
+    if (in_array($novamira_scenario, ['stock-adapter-fence', 'stock-adapter-fence-native'], strict: true)) {
+        require __DIR__ . '/stock-mcp-adapter-features-stub.php';
+        add_action('wp_abilities_api_categories_init', static function (): void {
+            wp_register_ability_category('novamira-test', ['label' => 'Novamira', 'description' => 'Novamira.']);
+            wp_register_ability_category('acme', ['label' => 'Acme', 'description' => 'Another plugin.']);
+        });
+        add_action('wp_abilities_api_init', static function (): void {
+            $public = static fn(string $name, string $category, string $type, Closure $permission): array => [
+                'label' => $name,
+                'description' => 'Stand-in for ' . $name . '.',
+                'category' => $category,
+                'input_schema' => ['type' => 'object'],
+                'permission_callback' => $permission,
+                'execute_callback' => static function () use ($name): string {
+                    $GLOBALS['novamira_test_trace'][] = 'executed ' . $name;
+                    return 'ran ' . $name;
+                },
+                'meta' => ['mcp' => ['public' => true, 'type' => $type]],
+            ];
+            $manager = static fn(): bool => novamira_current_user_can_manage();
+            $anyone = static fn(): bool => is_user_logged_in();
+            wp_register_ability('novamira/stand-in-tool', $public('novamira/stand-in-tool', 'novamira-test', 'tool', $manager));
+            wp_register_ability('novamira/skill-prompt-demo', $public('novamira/skill-prompt-demo', 'novamira-test', 'prompt', $manager));
+            wp_register_ability('pro-addon/feature-ability', $public('pro-addon/feature-ability', 'acme', 'tool', $manager));
+            wp_register_ability('acme/ping', $public('acme/ping', 'acme', 'tool', $anyone));
+            wp_register_ability('acme/greeting', $public('acme/greeting', 'acme', 'prompt', $anyone));
+        });
+    }
+    if ($novamira_scenario === 'stock-adapter-late-priority') {
+        // The plugin runs the adapter's init() at a later rest_api_init priority than the adapter's own.
+        remove_action('rest_api_init', [$novamira_stock_adapter, 'init'], 15);
+        add_action('rest_api_init', [$novamira_stock_adapter, 'init'], 20);
+    }
+}
+
 $novamira_foreign_priority = match ($novamira_scenario) {
     'foreign-below' => 3,
     'init-between', 'read-mode-init-between' => 7,
@@ -1017,7 +1324,7 @@ if (in_array($novamira_scenario, ['read-mode-dynamic-providers', 'dynamic-provid
     }, 90);
 }
 
-if (in_array($novamira_scenario, ['read-mode-late-provider', 'late-provider-off'], strict: true)) {
+if (in_array($novamira_scenario, ['read-mode-late-provider', 'late-provider-off', 'read-mode-stock-adapter'], strict: true)) {
     // A plugin loaded after Novamira, attached statically at the same maximum priority as the policy.
     add_action('wp_abilities_api_categories_init', static function (): void {
         wp_register_ability_category('late', ['label' => 'Late', 'description' => 'Late plugin.']);
@@ -1084,16 +1391,32 @@ if ($novamira_scenario === 'pre-init') {
 
 do_action('init');
 
+if ($novamira_scenario === 'stock-adapter-categories-first') {
+    // Something lists Ability categories, which boots only the categories registry.
+    wp_has_ability_category('novamira-mcp-adapter');
+}
+
 $abilities_before_rest_api_init = null;
-if (in_array($novamira_scenario, ['race', 'foreign-below', 'init-between', 'init-above', 'read-mode-init-between'], strict: true)) {
+if (in_array($novamira_scenario, NOVAMIRA_TEST_EARLY_READ_SCENARIOS, strict: true)) {
     // Another plugin (or the public mcp-adapter plugin) uses the Abilities API before the bundled
     // adapter's rest_api_init:15 initialization: this boots the registry and fires the one-shot
     // wp_abilities_api_init action right now.
     $abilities_before_rest_api_init = array_keys(wp_get_abilities());
 }
 
-if ($novamira_scenario !== 'wp-cli') {
-    do_action('rest_api_init');
+if (!in_array($novamira_scenario, ['wp-cli', 'foreign-adapter-wp-cli'], strict: true)) {
+    try {
+        do_action('rest_api_init');
+    } catch (RuntimeException $e) {
+        $GLOBALS['novamira_test_after_throw'] = [
+            'exception' => $e->getMessage(),
+            'doing_wp_abilities_api_init' => doing_action('wp_abilities_api_init'),
+            'doing_wp_abilities_api_categories_init' => doing_action('wp_abilities_api_categories_init'),
+            'doing_wp_register_ability_args' => doing_action('wp_register_ability_args'),
+        ];
+        // The hooks the exception left, as WordPress itself would leave them.
+        $GLOBALS['wp_current_filter'] = [];
+    }
 }
 
 $adapter_abilities = [
@@ -1158,6 +1481,138 @@ if ($novamira_scenario === 'stdio-session') {
     $stdio_server = \Novamira\Vendor\WP\MCP\Core\McpAdapter::instance()->get_server('novamira');
     (new \Novamira\Vendor\WP\MCP\Cli\StdioServerBridge($stdio_server))->serve();
     exit(0);
+}
+
+$fence_probes = null;
+if (in_array($novamira_scenario, ['stock-adapter-fence', 'stock-adapter-fence-native'], strict: true)) {
+    $call = static function (string $name, mixed $input): mixed {
+        $ability = wp_get_ability($name);
+        $result = $ability?->execute($input);
+        return is_wp_error($result) ? ['wp_error' => $result->get_error_code(), 'message' => $result->get_error_message()] : $result;
+    };
+    $probe = static function () use ($call): array {
+        $probes = [
+            'discover' => array_column($call('mcp-adapter/discover-abilities', [])['abilities'] ?? [], 'name'),
+        ];
+        foreach (['novamira/stand-in-tool', 'novamira/skill-prompt-demo', 'pro-addon/feature-ability', 'acme/ping'] as $target) {
+            foreach (['info' => 'mcp-adapter/get-ability-info', 'execute' => 'mcp-adapter/execute-ability'] as $kind => $gateway) {
+                $input = ['ability_name' => $target, 'parameters' => []];
+                // What the adapter's MCP tool checks first, then what running the Ability returns.
+                $permission = wp_get_ability($gateway)?->check_permissions($input);
+                $result = $call($gateway, $input);
+                $probes[$kind][$target] = [
+                    'permission' => is_wp_error($permission) ? $permission->get_error_code() : $permission,
+                    'result' => $kind === 'info' && is_array($result) && isset($result['name']) ? 'described' : $result,
+                ];
+            }
+        }
+        return $probes;
+    };
+    $GLOBALS['novamira_test_logged_in'] = true;
+    $GLOBALS['novamira_test_current_user_can_manage'] = true;
+    $fence_probes['administrator'] = $probe();
+    // Novamira's own surfaces: its discover-abilities replacement, and the Ability called from PHP.
+    $own_discover = $GLOBALS['novamira_test_ability_args']['novamira-mcp-adapter/discover-abilities']['execute_callback'];
+    $fence_probes['own_discover'] = array_column($own_discover()['abilities'], 'name');
+    $fence_probes['direct'] = $call('novamira/stand-in-tool', []);
+    $GLOBALS['novamira_test_current_user_can_manage'] = false;
+    $fence_probes['editor'] = $probe();
+    $GLOBALS['novamira_test_logged_in'] = false;
+}
+
+$stock_servers = null;
+if (in_array($novamira_scenario, NOVAMIRA_TEST_REAL_STOCK_SCENARIOS, strict: true)) {
+    $as_array = static fn(mixed $result): array => json_decode(
+        json_encode($result->toArray(), JSON_THROW_ON_ERROR),
+        associative: true,
+        flags: JSON_THROW_ON_ERROR,
+    );
+    // What one call ran, from the execution trace, and whether the handler answered with an error.
+    $outcome = static function (Closure $call) use ($as_array): array {
+        $before = count($GLOBALS['novamira_test_trace']);
+        $response = $as_array($call());
+        $executed = array_values(array_filter(
+            array_slice($GLOBALS['novamira_test_trace'], $before),
+            static fn(string $line): bool => str_starts_with($line, 'executed '),
+        ));
+        return [
+            'executed' => array_map(static fn(string $line): string => substr($line, strlen('executed ')), $executed),
+            'error' => isset($response['error']) || ($response['isError'] ?? false) === true,
+        ];
+    };
+    // A complete response, with the requested name in it replaced, for comparing with a name never registered.
+    $normalized = static fn(mixed $result, string $name): string => str_replace(
+        [$name, json_encode($name, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)],
+        ['{name}', '"{name}"'],
+        json_encode($as_array($result), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+    );
+    // Where a REST request to any of the servers starts.
+    apply_filters('rest_request_before_callbacks', null, [], null);
+    $stock_servers = [];
+    foreach (['administrator' => true, 'editor' => false] as $role => $manager) {
+        $GLOBALS['novamira_test_logged_in'] = true;
+        $GLOBALS['novamira_test_current_user_can_manage'] = $manager;
+        foreach (NOVAMIRA_TEST_REAL_STOCK_SERVERS as $server_id) {
+            $server = \WP\MCP\Core\McpAdapter::instance()->get_server($server_id);
+            if ($server === null) {
+                $stock_servers[$role][$server_id] = null;
+                continue;
+            }
+            $stock_tools = new \WP\MCP\Handlers\Tools\ToolsHandler($server);
+            $stock_resources = new \WP\MCP\Handlers\Resources\ResourcesHandler($server);
+            $stock_prompts = new \WP\MCP\Handlers\Prompts\PromptsHandler($server);
+            $report = [
+                'components' => [],
+                'tools/list' => array_column($as_array($stock_tools->list_tools())['tools'], 'name'),
+                'resources/list' => array_column($as_array($stock_resources->list_resources())['resources'], 'uri'),
+                'prompts/list' => array_column($as_array($stock_prompts->list_prompts())['prompts'], 'name'),
+            ];
+            foreach (array_keys($server->get_tools()) as $name) {
+                $report['components']['tool ' . $name] = $server->get_mcp_tool($name)?->get_observability_context()['ability_name'] ?? null;
+                $report['tools/call'][$name] = $outcome(static fn(): mixed => $stock_tools->call_tool(['name' => $name, 'arguments' => []], 1));
+            }
+            foreach (array_keys($server->get_resources()) as $uri) {
+                $report['components']['resource ' . $uri] = $server->get_mcp_resource($uri)?->get_observability_context()['ability_name'] ?? null;
+                $report['resources/read'][$uri] = $outcome(static fn(): mixed => $stock_resources->read_resource(['uri' => $uri], 2));
+            }
+            foreach (array_keys($server->get_prompts()) as $name) {
+                $report['components']['prompt ' . $name] = $server->get_mcp_prompt($name)?->get_observability_context()['ability_name'] ?? null;
+                $report['prompts/get'][$name] = $outcome(static fn(): mixed => $stock_prompts->get_prompt(['name' => $name, 'arguments' => []], 3));
+            }
+            // Novamira's components, and a name of each kind never registered, through the same handler.
+            $absent = [
+                'tool' => ['novamira-stand-in-tool', 'pro-addon-feature-ability', 'acme-never-registered'],
+                'resource' => ['novamira://stand-in', 'acme://never-registered'],
+                'prompt' => ['novamira-skill-prompt-demo', 'acme-never-registered'],
+            ];
+            foreach ($absent as $kind => $names) {
+                foreach ($names as $name) {
+                    $response = match ($kind) {
+                        'tool' => $stock_tools->call_tool(['name' => $name, 'arguments' => []], 9),
+                        'resource' => $stock_resources->read_resource(['uri' => $name], 9),
+                        'prompt' => $stock_prompts->get_prompt(['name' => $name, 'arguments' => []], 9),
+                    };
+                    $report['absent'][$kind][$name] = $normalized($response, $name);
+                }
+            }
+            if ($server->get_mcp_tool('mcp-adapter-discover-abilities') !== null) {
+                $discovered = $as_array($stock_tools->call_tool(['name' => 'mcp-adapter-discover-abilities', 'arguments' => []], 5));
+                $payload = $discovered['structuredContent'] ?? json_decode($discovered['content'][0]['text'] ?? 'null', associative: true);
+                $report['discover-abilities'] = array_column($payload['abilities'] ?? [], 'name');
+            }
+            if ($server->get_mcp_tool('mcp-adapter-execute-ability') !== null) {
+                foreach (['novamira/stand-in-tool', 'pro-addon/feature-ability', 'acme/ping'] as $target) {
+                    $report['execute-ability'][$target] = $outcome(static fn(): mixed => $stock_tools->call_tool([
+                        'name' => 'mcp-adapter-execute-ability',
+                        'arguments' => ['ability_name' => $target, 'parameters' => []],
+                    ], 4));
+                }
+            }
+            $stock_servers[$role][$server_id] = $report;
+        }
+    }
+    $GLOBALS['novamira_test_logged_in'] = false;
+    $GLOBALS['novamira_test_current_user_can_manage'] = false;
 }
 
 $surfaces = null;
@@ -1305,4 +1760,21 @@ echo json_encode([
     'manager_discovery' => $manager_discovery,
     'trace' => $GLOBALS['novamira_test_trace'],
     'notices' => $GLOBALS['novamira_test_notices'],
+    'after_throw' => $GLOBALS['novamira_test_after_throw'] ?? null,
+    'fence' => $fence_probes,
+    'stock_servers' => $stock_servers,
+    'components_at_creation' => $GLOBALS['novamira_test_components_at_creation'] ?? null,
+    'stock_adapter' => isset($novamira_stock_adapter)
+        ? [
+            'server_abilities' => $novamira_stock_adapter->server_abilities,
+            'server_config' => $novamira_stock_adapter->server_config,
+            // Each Ability object the copy registered, called now as a client holding on to it would.
+            'permissions' => array_map(
+                static fn(WP_Ability $ability): mixed => is_wp_error($result = $ability->check_permissions())
+                    ? $result->get_error_code()
+                    : $result,
+                $novamira_stock_adapter->registered,
+            ),
+        ]
+        : null,
 ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
