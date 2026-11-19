@@ -1122,6 +1122,9 @@ function novamira_apply_ability_policy(): void
 function novamira_apply_ability_policy_rule(WP_Ability $ability, array $rules): void
 {
     $ability_name = $ability->get_name();
+    if (novamira_is_read_mode() && novamira_read_mode_retains_upstream_ability($ability)) {
+        return;
+    }
     $category = $ability->get_category();
     if (!\Novamira\Features\features()->is_ability_active($ability_name, $category)) {
         wp_unregister_ability($ability_name);

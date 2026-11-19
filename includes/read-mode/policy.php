@@ -26,6 +26,7 @@ require_once __DIR__ . '/trust.php';
 require_once __DIR__ . '/mcp.php';
 require_once __DIR__ . '/page.php';
 require_once __DIR__ . '/cli.php';
+require_once dirname(__DIR__) . '/abilities/stock-mcp-adapter.php';
 
 /** REST route prefixes whose handlers read the Ability registry: core Abilities, Novamira, and MCP. */
 const NOVAMIRA_READ_MODE_REGISTRY_ROUTES = ['/wp-abilities/v1', '/novamira/v1', '/mcp/'];
@@ -81,8 +82,11 @@ function novamira_read_mode_ability_is_choosable(string $ability_name): bool
 function novamira_read_mode_allows_ability(string $ability_name): bool
 {
     return (
-        in_array($ability_name, novamira_read_mode_allowed_abilities(), strict: true)
-        || novamira_read_mode_declared_allowed($ability_name)
+        !novamira_read_mode_keeps_upstream_ability($ability_name)
+        && (
+            in_array($ability_name, novamira_read_mode_allowed_abilities(), strict: true)
+            || novamira_read_mode_declared_allowed($ability_name)
+        )
     );
 }
 
@@ -103,8 +107,22 @@ function novamira_read_mode_permits_ability(string $ability_name): bool
 }
 
 /**
+ * Whether a name is one of the built-in Abilities of the unprefixed MCP Adapter that other plugins may
+ * bundle. Read mode never allows, lists, or declares these names; it keeps them registered, and refused,
+ * only for the adapter's own registrations (novamira_read_mode_retains_upstream_ability()).
+ */
+function novamira_read_mode_keeps_upstream_ability(string $ability_name): bool
+{
+    return in_array($ability_name, NOVAMIRA_STOCK_MCP_ADAPTER_ABILITIES, strict: true);
+}
+
+/**
  * Unregister every Ability that read mode does not allow, and every Ability registered under an
  * allowed name that is not Novamira's own implementation of it. Idempotent.
+ * The built-in Abilities of an unprefixed MCP Adapter another plugin bundles remain registered when that
+ * adapter's own classes registered them (novamira_read_mode_retains_upstream_ability()), so its default
+ * server finds them and logs no missing Abilities. Their read-mode guards refuse them, and Novamira's
+ * read-mode surfaces neither permit nor list them. Anything else registered under those names is removed.
  *
  * Runs from novamira_apply_ability_policy() at the end of `wp_abilities_api_init`, and again from
  * novamira_enforce_read_mode_registry() when a registry-backed surface is entered. It also binds each
@@ -119,6 +137,9 @@ function novamira_apply_read_mode_policy(): void
         novamira_read_mode_bind_guard($ability);
         novamira_read_mode_declared_candidates($ability);
         $ability_name = $ability->get_name();
+        if (novamira_read_mode_retains_upstream_ability($ability)) {
+            continue;
+        }
         $allowed = $keeps_turned_off
             ? novamira_read_mode_allows_ability($ability_name)
             : novamira_read_mode_permits_ability($ability_name);
@@ -135,7 +156,8 @@ function novamira_apply_read_mode_policy(): void
  *
  * Every surface that lists, checks, or executes Abilities from the registry calls this on entry, before
  * any listing, permission check, or execution. Hook ordering therefore cannot leave a non-allowlisted
- * Ability reachable: one registered after the `wp_abilities_api_init` sweep is removed here.
+ * Ability reachable: one registered after the `wp_abilities_api_init` sweep is removed here, except the
+ * upstream infrastructure names retained with execution guards by novamira_apply_read_mode_policy().
  */
 function novamira_enforce_read_mode_registry(): void
 {

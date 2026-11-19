@@ -26,6 +26,12 @@ final class McpAdapterBuiltinAbilitiesRaceTest extends TestCase
         'novamira-mcp-adapter/execute-ability',
     ];
 
+    private const STOCK_BUILTINS = [
+        'mcp-adapter/discover-abilities',
+        'mcp-adapter/get-ability-info',
+        'mcp-adapter/execute-ability',
+    ];
+
     private const NOVAMIRA_SERVER_TOOLS = [
         'mcp-adapter-discover-abilities',
         'mcp-adapter-execute-ability',
@@ -62,25 +68,26 @@ final class McpAdapterBuiltinAbilitiesRaceTest extends TestCase
 
     /**
      * Read mode with an unprefixed adapter copy whose built-ins are registered after the registry booted:
-     * they are swept like any Ability registered in time, a write Ability stays removed, an Ability object
-     * the copy holds on to is refused, and Novamira's server keeps its read-mode tools.
+     * a write Ability registered late is swept, the copy's own built-ins stay registered so its default
+     * server finds them, and they are refused, so its execute-ability reaches no write Ability. Novamira's
+     * server keeps its read-mode tools.
      */
     public function testReadModeStillSweepsWithAStockAdapterCopy(): void
     {
         $result = $this->runBootScenario('read-mode-stock-adapter');
 
         self::assertContains('stock adapter: init, registry booted=true', $result['trace']);
-        foreach (['late/write', 'mcp-adapter/discover-abilities', 'mcp-adapter/get-ability-info', 'mcp-adapter/execute-ability'] as $name) {
-            self::assertContains('unregister ' . $name, $result['trace']);
-            self::assertNotContains($name, $result['registered_after_policy']);
+        self::assertContains('unregister late/write', $result['trace']);
+        self::assertNotContains('late/write', $result['registered_after_policy']);
+        foreach (self::STOCK_BUILTINS as $name) {
+            self::assertNotContains('unregister ' . $name, $result['trace']);
+            self::assertContains($name, $result['registered_after_policy']);
         }
+        self::assertSame(array_fill_keys(self::STOCK_BUILTINS, true), $result['stock_adapter']['server_abilities']);
+        self::assertSame(array_fill_keys(self::STOCK_BUILTINS, false), $result['stock_adapter']['permissions']);
         self::assertSame(
-            [
-                'mcp-adapter/discover-abilities' => false,
-                'mcp-adapter/get-ability-info' => false,
-                'mcp-adapter/execute-ability' => false,
-            ],
-            $result['stock_adapter']['permissions'],
+            ['late/write' => 'ability_invalid_permissions', 'novamira/execute-php' => 'ability_invalid_permissions'],
+            $result['stock_adapter']['dispatch'],
         );
         self::assertContains('novamira/read-query', $result['registered_after_policy']);
         self::assertSame(self::NOVAMIRA_SERVER_TOOLS, array_keys($result['tools']));

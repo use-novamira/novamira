@@ -219,6 +219,101 @@ namespace {
     $GLOBALS['options']['novamira_ai_abilities_domain'] = 'example.test';
 
     $result = match ($scenario) {
+        'upstream-on', 'upstream-declared-on' => (static function () use ($root, $scenario): array {
+            require __DIR__ . '/read-mode-rest-list-stubs.php';
+            require $root . '/vendor/novamira/mcp-adapter/autoload.php';
+            require $root . '/includes/ability-metadata.php';
+            require $root . '/includes/abilities/discover-abilities.php';
+            require $root . '/includes/admin-page.php';
+            require $root . '/includes/mcp-mirror-server.php';
+            foreach (['Abilities/McpAbilityExposure', 'Abilities/McpAbilityHelperTrait', 'Domain/Utils/AbilityArgumentNormalizer', 'Abilities/DiscoverAbilitiesAbility', 'Abilities/GetAbilityInfoAbility', 'Abilities/ExecuteAbilityAbility'] as $file) {
+                require_once $root . '/vendor/wordpress/mcp-adapter/includes/' . $file . '.php';
+            }
+            test_read_mode(true);
+            // Novamira's fence on the unprefixed adapter's built-ins runs before read mode's guard.
+            add_filter('wp_register_ability_args', 'novamira_fence_stock_mcp_adapter_ability', PHP_INT_MAX - 1, 2);
+            novamira_register_read_mode_hooks();
+            if ($scenario === 'upstream-declared-on') {
+                add_filter('novamira_read_mode_allow_declared_abilities', static fn(): bool => true);
+            }
+            $names = [
+                'mcp-adapter/discover-abilities',
+                'mcp-adapter/get-ability-info',
+                'mcp-adapter/execute-ability',
+            ];
+            foreach ([...$names, 'mcp-adapter/other-tool', 'acme/write-thing', 'novamira/read-file'] as $name) {
+                $meta = [
+                    'show_in_rest' => true,
+                    'mcp' => ['public' => true],
+                    'annotations' => ['readonly' => in_array($name, $names, true)],
+                ];
+                if (in_array($name, $names, true)) {
+                    // The adapter's own class registers it, as the plugin bundling the adapter does.
+                    [NOVAMIRA_STOCK_MCP_ADAPTER_ABILITY_CLASSES[$name], 'register']();
+                } else {
+                    test_register($name, meta: $meta);
+                }
+            }
+            $GLOBALS['options']['novamira_ability_rules'] = array_fill_keys($names, ['disabled' => true]);
+            novamira_apply_ability_policy();
+            $result = ['registered' => array_keys(wp_get_abilities()), 'surfaces' => []];
+            foreach ([true, false] as $manager) {
+                $GLOBALS['can_manage'] = $manager;
+                novamira_read_mode_rest_sweep(null, [], new WP_REST_Request());
+                $request = new WP_REST_Request(['page' => 1, 'per_page' => 100, 'category' => null]);
+                $response = novamira_filter_rest_ability_list_response(
+                    new WP_REST_Response(array_map(
+                        static fn(WP_Ability $a): array => ['name' => $a->get_name()],
+                        array_values(wp_get_abilities()),
+                    )),
+                    new WP_REST_Abilities_V1_List_Controller(),
+                    $request,
+                );
+                $surface = [
+                    'discover' => array_column(novamira_execute_discover_abilities()['abilities'], 'name'),
+                    'rest' => array_column($response->get_data(), 'name'),
+                    'mirror' => novamira_discover_public_abilities('tool'),
+                ];
+                foreach ($names as $name) {
+                    $surface['items'][$name] = test_export(novamira_filter_rest_ability_item_response(
+                        new WP_REST_Response(['name' => $name]), new WP_REST_Request(['name' => $name]),
+                    ));
+                    $surface['info'][$name] = test_export(novamira_get_ability_info_permission([
+                        'ability_name' => $name,
+                    ]));
+                    $surface['execute'][$name] = test_export(novamira_execute_ability_permission([
+                        'ability_name' => $name,
+                    ]));
+                    $surface['hub'][$name] = wp_has_ability($name)
+                        ? novamira_build_registered_ability_row(wp_get_ability($name), []) : null;
+                }
+                $result['surfaces'][$manager ? 'manager' : 'reader'] = $surface;
+            }
+            $result['permitted'] = array_map('novamira_read_mode_permits_ability', $names);
+            $result['declared'] = novamira_read_mode_declared_abilities();
+            // Another plugin's own Ability registered under each name: the real policy removes it.
+            $genuine = array_map('wp_get_ability', array_combine($names, $names));
+            foreach ($names as $name) {
+                wp_unregister_ability($name);
+                wp_register_ability($name, [
+                    'meta' => ['show_in_rest' => true, 'mcp' => ['public' => true], 'annotations' => ['readonly' => true]],
+                    'permission_callback' => static fn(): bool => true,
+                    'execute_callback' => static fn(): string => 'fake executed',
+                ]);
+            }
+            novamira_apply_ability_policy();
+            $result['fakes_registered'] = array_values(array_intersect($names, array_keys(wp_get_abilities())));
+            $GLOBALS['abilities'] = array_merge($GLOBALS['abilities'], $genuine);
+            novamira_apply_ability_policy();
+            $result['genuine_registered_again'] = array_values(array_intersect($names, array_keys(wp_get_abilities())));
+            foreach ($names as $name) {
+                $impostor = new class($name) extends WP_Ability {};
+                $GLOBALS['abilities'][$name] = $impostor;
+                novamira_apply_ability_policy_rule($impostor, [$name => ['disabled' => true]]);
+                $result['helper_impostors'][$name] = wp_has_ability($name);
+            }
+            return $result;
+        })(),
         'policy-off' => (static function (): array {
             $GLOBALS['options']['novamira_ability_rules'] = ['acme/report' => ['disabled' => true]];
             test_register_all();

@@ -25,6 +25,13 @@ const NOVAMIRA_STOCK_MCP_ADAPTER_ABILITIES = [
     'mcp-adapter/execute-ability',
 ];
 
+/** The class of the unprefixed MCP Adapter that registers each of its built-in Abilities. */
+const NOVAMIRA_STOCK_MCP_ADAPTER_ABILITY_CLASSES = [
+    'mcp-adapter/discover-abilities' => 'WP\\MCP\\Abilities\\DiscoverAbilitiesAbility',
+    'mcp-adapter/get-ability-info' => 'WP\\MCP\\Abilities\\GetAbilityInfoAbility',
+    'mcp-adapter/execute-ability' => 'WP\\MCP\\Abilities\\ExecuteAbilityAbility',
+];
+
 /**
  * Attach the coexistence hooks. Attached whether or not Novamira is enabled, because Novamira's admin
  * screens read the Abilities registry and Novamira Pro may register Abilities either way.
@@ -206,6 +213,8 @@ function novamira_is_novamira_owned_ability(string $ability_name): bool
  *
  * Applied to the registration arguments, so it holds whichever copy of the adapter registers these names,
  * whenever it registers them. Novamira's own copy registers its built-ins under `novamira-mcp-adapter/`.
+ * When the callbacks are the adapter's own classes', both are wrapped and the pair is remembered as the
+ * provenance read mode checks before it keeps these names registered.
  */
 function novamira_fence_stock_mcp_adapter_ability(mixed $args, mixed $ability_name): mixed
 {
@@ -225,21 +234,105 @@ function novamira_fence_stock_mcp_adapter_ability(mixed $args, mixed $ability_na
         return $args;
     }
 
-    if ($ability_name === 'mcp-adapter/discover-abilities') {
-        $args['execute_callback'] =
-            static fn(mixed ...$arguments): mixed => novamira_hide_novamira_abilities($execute_callback(...$arguments));
-
-        return $args;
+    $fenced = novamira_fence_stock_mcp_adapter_callbacks($ability_name, $permission_callback, $execute_callback);
+    $args['permission_callback'] = $fenced['permission'];
+    $args['execute_callback'] = $fenced['execute'];
+    if (novamira_stock_mcp_adapter_callbacks_are_its_own($ability_name, $permission_callback, $execute_callback)) {
+        novamira_remember_stock_mcp_adapter_ability($ability_name, $fenced['permission'], $fenced['execute']);
     }
 
-    $args['permission_callback'] = static fn(mixed ...$arguments): mixed => (
-        novamira_stock_mcp_adapter_refusal($arguments[0] ?? null) ?? $permission_callback(...$arguments)
-    );
-    $args['execute_callback'] = static fn(mixed ...$arguments): mixed => (
-        novamira_stock_mcp_adapter_refusal($arguments[0] ?? null) ?? $execute_callback(...$arguments)
-    );
-
     return $args;
+}
+
+/**
+ * The callbacks novamira_fence_stock_mcp_adapter_ability() registers in place of a built-in's: closures made
+ * for this registration only. discover-abilities leaves Novamira's Abilities out of its result; the other
+ * two answer for a Novamira Ability as for one that does not exist.
+ *
+ * @return array{permission: Closure, execute: Closure}
+ */
+function novamira_fence_stock_mcp_adapter_callbacks(
+    string $ability_name,
+    callable $permission_callback,
+    callable $execute_callback,
+): array {
+    if ($ability_name === 'mcp-adapter/discover-abilities') {
+        return [
+            'permission' => static fn(mixed ...$arguments): mixed => $permission_callback(...$arguments),
+            'execute' => static fn(mixed ...$arguments): mixed => novamira_hide_novamira_abilities($execute_callback(
+                ...$arguments,
+            )),
+        ];
+    }
+
+    return [
+        'permission' => static fn(mixed ...$arguments): mixed => (
+            novamira_stock_mcp_adapter_refusal($arguments[0] ?? null) ?? $permission_callback(...$arguments)
+        ),
+        'execute' => static fn(mixed ...$arguments): mixed => (
+            novamira_stock_mcp_adapter_refusal($arguments[0] ?? null) ?? $execute_callback(...$arguments)
+        ),
+    ];
+}
+
+/**
+ * Whether registration callbacks are the ones the unprefixed adapter's own class for that built-in
+ * Ability passes, as its static register() does: the class's check_permission() and execute().
+ */
+function novamira_stock_mcp_adapter_callbacks_are_its_own(
+    string $ability_name,
+    mixed $permission_callback,
+    mixed $execute_callback,
+): bool {
+    $class = NOVAMIRA_STOCK_MCP_ADAPTER_ABILITY_CLASSES[$ability_name] ?? null;
+
+    return (
+        $class !== null
+        && $permission_callback === [$class, 'check_permission']
+        && $execute_callback === [$class, 'execute']
+    );
+}
+
+/**
+ * The callbacks novamira_fence_stock_mcp_adapter_ability() built for each registration of a built-in by the
+ * unprefixed adapter's own class.
+ *
+ * This is the provenance read mode relies on to keep those Abilities registered: the callbacks are
+ * closures created for one registration only, so an Ability holds the same objects only when it was
+ * registered through the adapter's own classes, whether WordPress called the adapter's registrar or
+ * novamira_catch_up_stock_mcp_adapter_abilities() did, and no later filter replaced them. Any other
+ * registration under the same names, whatever its class or callbacks, is not recognised.
+ *
+ * @return array<string, list<array{Closure, Closure}>>
+ */
+function &novamira_stock_mcp_adapter_provenance(): array
+{
+    /** @var array<string, list<array{Closure, Closure}>> $genuine */
+    static $genuine = [];
+
+    return $genuine;
+}
+
+/** Remember the callbacks the fence built for a registration by the adapter's own class. */
+function novamira_remember_stock_mcp_adapter_ability(string $ability_name, Closure $permission, Closure $execute): void
+{
+    $genuine = &novamira_stock_mcp_adapter_provenance();
+    $genuine[$ability_name][] = [$permission, $execute];
+}
+
+/** Whether a built-in's callbacks are ones the fence built for a registration by the adapter's own class. */
+function novamira_stock_mcp_adapter_ability_is_genuine(
+    string $ability_name,
+    mixed $permission_callback,
+    mixed $execute_callback,
+): bool {
+    foreach (novamira_stock_mcp_adapter_provenance()[$ability_name] ?? [] as [$permission, $execute]) {
+        if ($permission === $permission_callback && $execute === $execute_callback) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /** The answer of the adapter's get-ability-info and execute-ability for a Novamira Ability, or null. */

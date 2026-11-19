@@ -333,10 +333,14 @@ function novamira_read_mode_declared_enabled(): bool
     return $enabled;
 }
 
-/** Whether a name can be a declared read ability: Novamira's own namespaces never are. */
+/** Whether a name can be a declared read ability: exclude Novamira's namespaces and upstream dispatchers. */
 function novamira_read_mode_declared_name_ok(string $ability_name): bool
 {
-    return $ability_name !== '' && !str_starts_with(strtolower($ability_name), 'novamira');
+    return (
+        $ability_name !== ''
+        && !str_starts_with(strtolower($ability_name), 'novamira')
+        && !novamira_read_mode_keeps_upstream_ability($ability_name)
+    );
 }
 
 /**
@@ -474,4 +478,34 @@ function novamira_read_mode_bind_guard(WP_Ability $ability): void
     }
 
     $callbacks['permission']->bind($ability);
+}
+
+/**
+ * Whether read mode keeps a built-in Ability of the unprefixed MCP Adapter registered, so the default
+ * server of a plugin bundling that adapter finds it: only an exact WP_Ability that the adapter's own class
+ * registered (novamira_stock_mcp_adapter_ability_is_genuine()), whose permission callback is read mode's
+ * guard bound to that same object, which refuses it. Anything else registered under these names is removed
+ * like any Ability read mode does not allow.
+ */
+function novamira_read_mode_retains_upstream_ability(WP_Ability $ability): bool
+{
+    $ability_name = $ability->get_name();
+    if (!novamira_read_mode_keeps_upstream_ability($ability_name) || get_class($ability) !== WP_Ability::class) {
+        return false;
+    }
+
+    $callbacks = novamira_read_mode_ability_callbacks($ability);
+    if (
+        $callbacks === null
+        || !$callbacks['permission'] instanceof \Novamira\ReadMode\PermissionGuard
+        || !$callbacks['permission']->is_bound_to($ability)
+    ) {
+        return false;
+    }
+
+    return novamira_stock_mcp_adapter_ability_is_genuine(
+        $ability_name,
+        $callbacks['permission']->wrapped_callback(),
+        $callbacks['execute'],
+    );
 }

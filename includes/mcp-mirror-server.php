@@ -174,6 +174,9 @@ function novamira_discover_public_abilities(string $type): array
     $abilities = wp_get_abilities();
     $filtered = [];
     foreach ($abilities as $ability) {
+        if (function_exists('novamira_read_mode_hides_ability') && novamira_read_mode_hides_ability($ability)) {
+            continue;
+        }
         $meta = $ability->get_meta();
         if (!($meta['mcp']['public'] ?? false)) {
             continue;

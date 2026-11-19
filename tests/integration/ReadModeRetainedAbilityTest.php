@@ -31,6 +31,9 @@ final class ReadModeRetainedAbilityTest extends TestCase
                 'novamira-mcp-adapter/get-ability-info',
                 'novamira-mcp-adapter/execute-ability',
                 'novamira/get-options',
+                'mcp-adapter/discover-abilities',
+                'mcp-adapter/get-ability-info',
+                'mcp-adapter/execute-ability',
             ],
             $result['registered_after_sweep'],
         );
@@ -59,6 +62,65 @@ final class ReadModeRetainedAbilityTest extends TestCase
         // registering, so it wrapped the replacement instead of being replaced.
         self::assertSame(0, $result['competitor_calls']);
         self::assertSame(0, $result['third_party_permission_calls']);
+    }
+
+    /**
+     * The built-ins of an unprefixed MCP Adapter another plugin bundles, registered through that adapter's
+     * own classes, stay registered in read mode so its default server finds them, and are refused: no
+     * write Ability, Novamira's or another plugin's, is reached through execute-ability or the others.
+     */
+    public function testUpstreamInfrastructureStaysRegisteredButCannotExecute(): void
+    {
+        foreach (['on', 'on-wp71'] as $mode) {
+            $result = self::scenarioResult($mode);
+            self::assertCount(3, $result['upstream']);
+            foreach ($result['upstream'] as $name => $ability) {
+                $label = $mode . ': ' . $name;
+                self::assertTrue($ability['registered'], $label);
+                self::assertTrue($ability['retained'], $label);
+                self::assertTrue($ability['guarded'], $label);
+                self::assertTrue($ability['bound'], $label);
+                self::assertFalse($ability['permitted'], $label);
+                self::assertCount(3, $ability['calls'], $label);
+                foreach ($ability['calls'] as $target => $call) {
+                    self::assertFalse($call['permission'], $label . ' -> ' . $target);
+                    self::assertSame(
+                        $mode === 'on' ? 'ability_invalid_permissions' : 'novamira_read_mode',
+                        $call['execute']['error'],
+                        $label . ' -> ' . $target,
+                    );
+                }
+            }
+            self::assertNotContains('acme/write-thing', $result['registered_after_sweep']);
+            self::assertFalse($result['file_written']);
+            self::assertSame(0, $result['third_party_permission_calls']);
+        }
+    }
+
+    /**
+     * Anything else registered under those names is removed in read mode, whatever it looks like: another
+     * plugin's own exact WP_Ability with a properly bound guard, a custom class, a missing or foreign-bound
+     * guard, or the adapter's own registration whose execute callback a later filter replaced.
+     */
+    public function testUpstreamImpostorsAreUnregisteredAndCannotExecuteThroughTheRegistry(): void
+    {
+        foreach (['on', 'on-wp71'] as $mode) {
+            $result = self::scenarioResult($mode);
+            self::assertCount(3, $result['upstream_impostors']);
+            foreach ($result['upstream_impostors'] as $name => $variants) {
+                self::assertSame(
+                    ['foreign-callbacks', 'permissive-class', 'own-execute-class', 'missing-guard', 'foreign-bound-guard', 'swapped-execute'],
+                    array_keys($variants),
+                    $name,
+                );
+                foreach ($variants as $variant => $impostor) {
+                    self::assertFalse($impostor['registered'], $mode . ': ' . $name . ': ' . $variant);
+                    self::assertNull($impostor['execute'], $mode . ': ' . $name . ': ' . $variant);
+                }
+            }
+            self::assertNotContains('upstream-impostor', $result['side_effects']);
+            self::assertSame($mode === 'on' ? [] : ['own-execute'], $result['side_effects']);
+        }
     }
 
     public function testPhpAndWpCliExecuteCallbacksRefuseWhenCalledDirectly(): void

@@ -8,8 +8,8 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * Read mode keeps only an allowlist of Abilities registered, on every request, and tells the agent why
- * everything else is gone. The allowlist is Novamira's own read abilities plus whatever the single
+ * Read mode keeps only an allowlist of Abilities usable, on every request, and tells the agent why
+ * everything else is unavailable. The allowlist is Novamira's own read abilities plus whatever the single
  * novamira_read_mode_abilities filter adds (Novamira Pro's, stood in for here). Outside read mode the
  * Ability policy behaves exactly as before.
  */
@@ -102,6 +102,38 @@ final class ReadModePolicyTest extends TestCase
             'acme/delete-everything',
         ] as $ability) {
             self::assertContains($ability, $result['unregistered'], $ability . ' survived read mode.');
+        }
+    }
+
+    public function testUpstreamInfrastructureIsRetainedWithoutExposureInReadMode(): void
+    {
+        $names = [
+            'mcp-adapter/discover-abilities',
+            'mcp-adapter/get-ability-info',
+            'mcp-adapter/execute-ability',
+        ];
+        foreach (['upstream-on', 'upstream-declared-on'] as $scenario) {
+            $result = self::runScenario($scenario);
+            self::assertSame([false, false, false], $result['permitted']);
+            foreach ($names as $name) {
+                self::assertContains($name, $result['registered']);
+                self::assertNotContains($name, $result['declared']);
+                self::assertFalse($result['helper_impostors'][$name]);
+                foreach ($result['surfaces'] as $surface) {
+                    foreach (['discover', 'rest', 'mirror'] as $listing) {
+                        self::assertNotContains($name, $surface[$listing], $listing);
+                    }
+                    self::assertSame('rest_ability_not_found', $surface['items'][$name]['error']);
+                    self::assertArrayHasKey('error', $surface['info'][$name]);
+                    self::assertSame('novamira_read_mode', $surface['execute'][$name]['error']);
+                    self::assertNull($surface['hub'][$name]);
+                }
+            }
+            self::assertSame([], $result['fakes_registered']);
+            self::assertSame($names, $result['genuine_registered_again']);
+            self::assertNotContains('mcp-adapter/other-tool', $result['registered']);
+            self::assertNotContains('acme/write-thing', $result['registered']);
+            self::assertContains('novamira/read-file', $result['surfaces']['manager']['rest']);
         }
     }
 

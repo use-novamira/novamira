@@ -12,6 +12,14 @@ if (!defined('ABSPATH')) {
 /** Check whether the current user may view an Ability's metadata. */
 function novamira_current_user_can_view_ability_metadata(string $ability_name): bool
 {
+    if (
+        function_exists('novamira_read_mode_keeps_upstream_ability')
+        && novamira_is_read_mode()
+        && novamira_read_mode_keeps_upstream_ability($ability_name)
+    ) {
+        return false;
+    }
+
     return !str_starts_with($ability_name, 'novamira/') || novamira_current_user_can_manage();
 }
 
@@ -156,7 +164,7 @@ function novamira_filter_rest_ability_item_response(mixed $response, WP_REST_Req
 {
     // @mago-expect analysis:mixed-assignment -- Route parameters are untyped until checked below.
     $ability_name = $request['name'];
-    if (!is_string($ability_name) || !str_starts_with($ability_name, 'novamira/')) {
+    if (!is_string($ability_name)) {
         return $response;
     }
     if (novamira_current_user_can_view_ability_metadata($ability_name)) {
@@ -175,7 +183,7 @@ function novamira_filter_rest_ability_list_response(
     WP_REST_Abilities_V1_List_Controller $controller,
     WP_REST_Request $request,
 ): mixed {
-    if (novamira_current_user_can_manage()) {
+    if (novamira_current_user_can_manage() && (!function_exists('novamira_is_read_mode') || !novamira_is_read_mode())) {
         return $response;
     }
     if (!$response instanceof WP_REST_Response || $response->get_status() >= 400) {

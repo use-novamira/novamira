@@ -62,7 +62,7 @@ function remove_action(string $hook, mixed $callback, int $priority = 10): bool
     return false;
 }
 
-require $root . '/includes/abilities/stock-mcp-adapter.php';
+require_once $root . '/includes/abilities/stock-mcp-adapter.php';
 require __DIR__ . '/stock-mcp-adapter-stub.php';
 
 if ($scenario === 'hub-disabled') {

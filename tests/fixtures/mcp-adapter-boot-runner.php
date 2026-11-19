@@ -49,7 +49,7 @@ declare(strict_types=1);
  * - stock-adapter-late-priority: as foreign-adapter, with the plugin running the copy's init() on
  *                     rest_api_init:20 instead of 15.
  * - read-mode-stock-adapter: stock-adapter-registry-read in read mode, with the late write provider of
- *                     read-mode-late-provider.
+ *                     read-mode-late-provider; the copy's execute-ability is then asked to run write Abilities.
  * - stock-adapter-init-during-action: the registry read boots wp_abilities_api_init, whose priority-20
  *                     callback from another plugin runs the copy's init().
  * - stock-adapter-categories-first: only the categories registry is booted before rest_api_init.
@@ -1775,6 +1775,18 @@ echo json_encode([
                     : $result,
                 $novamira_stock_adapter->registered,
             ),
+            // The copy's execute-ability, asked to run a write Ability of another plugin and one of Novamira's.
+            'dispatch' => isset($novamira_stock_adapter->registered['mcp-adapter/execute-ability'])
+                ? array_map(
+                    static fn(string $target): mixed => is_wp_error($result = $novamira_stock_adapter->registered['mcp-adapter/execute-ability']->execute([
+                        'ability_name' => $target,
+                        'parameters' => [],
+                    ]))
+                        ? $result->get_error_code()
+                        : $result,
+                    ['late/write' => 'late/write', 'novamira/execute-php' => 'novamira/execute-php'],
+                )
+                : null,
         ]
         : null,
 ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);

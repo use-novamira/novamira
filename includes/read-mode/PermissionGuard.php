@@ -72,6 +72,12 @@ final class PermissionGuard
         $this->ability = $ability;
     }
 
+    /** Whether this guard belongs to this exact registered object and its current name. */
+    public function is_bound_to(\WP_Ability $ability): bool
+    {
+        return $this->ability === $ability && $this->ability_name === $ability->get_name();
+    }
+
     /** WordPress passes the Ability input only when the Ability declares an input schema. */
     public function __invoke(mixed ...$arguments): mixed
     {

@@ -400,6 +400,8 @@ if ($GLOBALS['wp71']) {
 }
 if ($guarded) {
     novamira_register_read_mode_hooks();
+    // Novamira's fence on the unprefixed MCP Adapter's built-ins, as novamira_register_stock_mcp_adapter_hook() attaches it.
+    add_filter('wp_register_ability_args', 'novamira_fence_stock_mcp_adapter_ability', PHP_INT_MAX - 1, 2);
 }
 if ($GLOBALS['wp71']) {
     // A plugin loaded after Novamira elevates at the same maximum priority as read mode's own filter.
@@ -511,6 +513,21 @@ add_filter('novamira_read_mode_abilities', static function (array $abilities): a
     return $abilities;
 });
 
+// In read mode, the unprefixed MCP Adapter another plugin bundles registers its built-ins through its own classes.
+$upstream_names = [
+    'mcp-adapter/discover-abilities',
+    'mcp-adapter/get-ability-info',
+    'mcp-adapter/execute-ability',
+];
+if ($read_mode_on) {
+    foreach (['Abilities/McpAbilityExposure', 'Abilities/McpAbilityHelperTrait', 'Domain/Utils/AbilityArgumentNormalizer', 'Abilities/DiscoverAbilitiesAbility', 'Abilities/GetAbilityInfoAbility', 'Abilities/ExecuteAbilityAbility'] as $file) {
+        require_once $root . '/vendor/wordpress/mcp-adapter/includes/' . $file . '.php';
+    }
+    \WP\MCP\Abilities\DiscoverAbilitiesAbility::register();
+    \WP\MCP\Abilities\GetAbilityInfoAbility::register();
+    \WP\MCP\Abilities\ExecuteAbilityAbility::register();
+}
+
 // Other code keeps the Ability objects before the sweep.
 $kept = [];
 foreach (array_keys(wp_get_abilities()) as $name) {
@@ -614,6 +631,76 @@ if ($GLOBALS['wp71']) {
         'outside_registry' => test_export((new WP_Ability('acme/outside-registry', test_foreign('outside-registry')))->execute()),
         'elevations' => $GLOBALS['elevations'],
     ];
+}
+if ($read_mode_on) {
+    $result['upstream'] = [];
+    // What a client of the other plugin's server asks for: a write Ability, Novamira's and another plugin's.
+    $targets = ['novamira/execute-php', 'novamira/write-file', 'acme/write-thing'];
+    foreach ($upstream_names as $name) {
+        $ability = wp_get_ability($name);
+        $guard = novamira_read_mode_ability_callbacks($ability)['permission'];
+        $calls = [];
+        foreach ($targets as $target) {
+            $input = ['ability_name' => $target, 'parameters' => ['code' => 'return 1;', 'path' => 'x', 'content' => 'x']];
+            $calls[$target] = [
+                'permission' => test_export($ability->check_permissions($input)),
+                'execute' => test_export($ability->execute($input)),
+            ];
+        }
+        $result['upstream'][$name] = [
+            'registered' => $ability instanceof WP_Ability,
+            'permitted' => novamira_read_mode_permits_ability($name),
+            'retained' => novamira_read_mode_retains_upstream_ability($ability),
+            'guarded' => $guard instanceof \Novamira\ReadMode\PermissionGuard,
+            'bound' => $guard instanceof \Novamira\ReadMode\PermissionGuard && $guard->is_bound_to($ability),
+            'calls' => $calls,
+        ];
+    }
+    $result['upstream_impostors'] = [];
+    foreach ($upstream_names as $name) {
+        foreach ([
+            // Another plugin's own Ability under the name, with its own callbacks and the guard bound to it.
+            'foreign-callbacks' => WP_Ability::class,
+            'permissive-class' => Acme_Permissive_Ability::class,
+            'own-execute-class' => Acme_Own_Execute_Ability::class,
+            'missing-guard' => WP_Ability::class,
+            'foreign-bound-guard' => WP_Ability::class,
+            // The adapter's own class registers it, but a later filter swaps the execute callback.
+            'swapped-execute' => WP_Ability::class,
+        ] as $variant => $class) {
+            wp_unregister_ability($name);
+            if ($variant === 'swapped-execute') {
+                $swap = static fn(array $args, string $registering): array => $registering === $name
+                    ? array_merge($args, ['execute_callback' => test_foreign('upstream-impostor')['execute_callback']])
+                    : $args;
+                add_filter('wp_register_ability_args', $swap, PHP_INT_MAX, 2);
+                [NOVAMIRA_STOCK_MCP_ADAPTER_ABILITY_CLASSES[$name], 'register']();
+                remove_filter('wp_register_ability_args', $swap, PHP_INT_MAX);
+                $impostor = wp_get_ability($name);
+            } else {
+                $impostor = wp_register_ability($name, array_merge(test_foreign('upstream-impostor'), [
+                    'ability_class' => $class,
+                ]));
+            }
+            if ($variant === 'missing-guard') {
+                novamira_read_mode_set_private_property(
+                    $impostor, WP_Ability::class, 'permission_callback', static fn(): bool => true,
+                );
+            } elseif ($variant === 'foreign-bound-guard') {
+                $guard = novamira_read_mode_ability_callbacks($impostor)['permission'];
+                $guard->bind(new WP_Ability($name, []));
+            }
+            novamira_apply_read_mode_policy();
+            $registered = wp_get_ability($name);
+            $result['upstream_impostors'][$name][$variant] = [
+                'registered' => $registered !== null,
+                // Registry dispatch, as used by core REST and server construction, cannot reach a removed object.
+                'execute' => test_export($registered?->execute()),
+            ];
+        }
+        wp_unregister_ability($name);
+        $GLOBALS['abilities'][$name] = $kept[$name];
+    }
 }
 $result['file_written'] = is_file($written);
 $result['doing_it_wrong_registration'] = array_values(array_filter(

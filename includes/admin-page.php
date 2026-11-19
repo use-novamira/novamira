@@ -65,6 +65,10 @@ function novamira_collect_ability_hub_rows(): array
  */
 function novamira_build_registered_ability_row(WP_Ability $ability, array $rules): ?array
 {
+    if (novamira_is_read_mode() && novamira_read_mode_keeps_upstream_ability($ability->get_name())) {
+        return null;
+    }
+
     $row = novamira_build_registered_ability_row_from_registry($ability, $rules);
     if ($row === null || !novamira_is_read_mode()) {
         return $row;
