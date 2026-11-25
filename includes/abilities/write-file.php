@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 wp_register_ability('novamira/write-file', [
     'label' => __('Write File', domain: 'novamira'),
     'description' => __(
-        'Writes small UTF-8 text content to a file on the server filesystem. PHP files (*.php) and PHP execution control files can ONLY be written to the sandbox directory (wp-content/novamira-sandbox/). Other non-PHP files can intentionally go anywhere under ABSPATH. The sandbox is for loading and crash recovery of generated PHP, not security isolation for all filesystem writes. Does not accept base64 or binary uploads; use novamira/create-upload-link for ZIPs, plugins, themes, media, binary files, or other large uploads. Automatically creates parent directories when needed.',
+        'Writes small UTF-8 text content to a file on the server filesystem. PHP files (*.php, and *.phtml, *.phar and the like) and PHP execution control files can ONLY be written to the sandbox directory (wp-content/novamira-sandbox/). Other non-PHP files can intentionally go anywhere under ABSPATH. The sandbox is for loading and crash recovery of generated PHP, not security isolation for all filesystem writes. Does not accept base64 or binary uploads; use novamira/create-upload-link for ZIPs, plugins, themes, media, binary files, or other large uploads. Automatically creates parent directories when needed.',
         domain: 'novamira',
     ),
     'category' => 'filesystem',
@@ -68,6 +68,11 @@ wp_register_ability('novamira/write-file', [
                 'items' => ['type' => 'string'],
             ],
             'size' => ['type' => 'integer', 'description' => 'Final file size in bytes.'],
+            'runs_on_every_request' => [
+                'type' => 'boolean',
+                'description' => 'Present when the file is sandbox PHP that is enabled and loads on every request.',
+            ],
+            'note' => ['type' => 'string', 'description' => 'What the write means for the site, when it matters.'],
         ],
     ],
     'execute_callback' => 'novamira_write_file',
@@ -78,8 +83,9 @@ wp_register_ability('novamira/write-file', [
         'annotations' => [
             'instructions' => implode("\n", [
                 'PHP FILE SANDBOX:',
-                '- PHP files (*.php) and PHP execution control files can ONLY be written to: wp-content/novamira-sandbox/',
+                '- PHP files (*.php, and *.phtml, *.phar and the like) and PHP execution control files can ONLY be written to: wp-content/novamira-sandbox/',
                 '- Use a path like "wp-content/novamira-sandbox/my-feature.php"',
+                "- Start every PHP file with if (!defined('ABSPATH')) { exit; }, right after <?php and any declare, namespace or use line: without it the file is not saved.",
                 '- Other non-PHP files can intentionally be written anywhere under ABSPATH.',
                 '- Use this ability only for small UTF-8 text files. Do NOT use base64 here.',
                 '- For ZIPs, plugins, themes, media, binary files, or other large uploads, use novamira/create-upload-link instead.',
@@ -90,6 +96,7 @@ wp_register_ability('novamira/write-file', [
                 '- If a sandbox plugin causes a fatal error, the loader auto-detects the crash',
                 '  and enters safe mode on the next request. All sandbox plugins are skipped.',
                 '- In safe mode, MCP still works. You can read, fix, or delete the broken file.',
+                '- The error details, with the broken file: get_site_option(\'novamira_sandbox_crash\').',
                 '- After fixing, delete the file "wp-content/novamira-sandbox/.crashed"',
                 '  to exit safe mode and resume loading sandbox plugins.',
                 '- If MCP suddenly stops responding after you wrote a PHP file, wait — the next',
@@ -128,6 +135,25 @@ function novamira_decode_write_content(string $content, string $encoding): strin
     return $content;
 }
 
+/** Refuse a write that would put secret placeholders read earlier back into the file. */
+function novamira_check_write_placeholder(string $resolved, string $content, string $mode): ?WP_Error
+{
+    // Appending overwrites nothing, and a file is read only when the new text holds the placeholder at all.
+    if ($mode === 'append' || !str_contains($content, \Novamira\Secrets\REDACTED)) {
+        return null;
+    }
+    $existing = is_file($resolved) && is_readable($resolved) ? file_get_contents($resolved) : '';
+    $existing = is_string($existing) ? $existing : '';
+    return \Novamira\Secrets\introduces_placeholder($existing, $content) ? \Novamira\Secrets\placeholder_error() : null;
+}
+
+/** Refuse a PHP file that would not stop at once when opened directly, as it will be once written. */
+function novamira_check_write_guard(string $resolved, string $content, string $mode): ?WP_Error
+{
+    $existing = $mode === 'append' && is_file($resolved) ? (string) file_get_contents($resolved) : '';
+    return novamira_php_guard_error($resolved, $existing . $content);
+}
+
 /**
  * Write content to a file.
  *
@@ -161,6 +187,14 @@ function novamira_write_file($input)
     }
 
     $created = !file_exists($resolved);
+    $content_error = novamira_check_write_placeholder($resolved, $content, $mode) ?? novamira_check_write_guard(
+        $resolved,
+        $content,
+        $mode,
+    );
+    if (is_wp_error($content_error)) {
+        return $content_error;
+    }
     $parent_dir = dirname($resolved);
 
     if (!is_dir($parent_dir) && !$create_directories) {
@@ -191,5 +225,6 @@ function novamira_write_file($input)
         'created' => $created,
         'directories_created' => $directories_created,
         'size' => filesize($resolved),
+        ...novamira_sandbox_write_result($resolved),
     ];
 }

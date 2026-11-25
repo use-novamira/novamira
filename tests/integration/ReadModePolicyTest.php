@@ -382,6 +382,7 @@ final class ReadModePolicyTest extends TestCase
         self::assertStringStartsWith('Novamira gives you unrestricted control', $result['off']);
         self::assertStringNotContainsString('READ MODE', $result['off']);
         self::assertStringContainsString('## WordPress-native development', $result['off']);
+        self::assertStringContainsString('## Writing PHP for execute-php', $result['off']);
         self::assertStringContainsString('## Building pages and layout', $result['off']);
 
         // Read-mode guidance only: what is available, what is not, and no workarounds.
@@ -389,7 +390,7 @@ final class ReadModePolicyTest extends TestCase
         foreach (['novamira/read-file', 'novamira/get-object', 'novamira/get-options', 'novamira/describe-schema', 'novamira/read-query', 'Not available:', 'curl'] as $expected) {
             self::assertStringContainsString($expected, $result['on']);
         }
-        foreach (['unrestricted control', '## Connection safety', '## Environment', '## WordPress-native development', '## Building pages and layout'] as $absent) {
+        foreach (['unrestricted control', '## Connection safety', '## Environment', '## WordPress-native development', '## Writing PHP for execute-php', '## Building pages and layout'] as $absent) {
             self::assertStringNotContainsString($absent, $result['on']);
         }
 

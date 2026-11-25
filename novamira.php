@@ -8,8 +8,8 @@ declare(strict_types=1);
 /**
  * Plugin Name: Novamira
  * Plugin URI: https://novamira.ai
- * Description: MCP server that gives AI agents full access to WordPress through PHP execution and filesystem operations. For development and staging environments only.
- * Version: 1.12.16
+ * Description: MCP server that gives AI agents full access to WordPress through PHP execution and filesystem operations. Your AI asks you before the actions it rates as important, and the AI change history records its database changes, with their previous values when it can.
+ * Version: 2.0.0
  * Requires at least: 6.9
  * Requires PHP: 8.0
  * Author: Dynamic.ooo
@@ -147,7 +147,6 @@ function novamira_render_mcp_dependency_notice(): void
                 'novamira-connections',
                 'novamira-abilities',
                 'novamira-chat',
-                'novamira-sandbox',
                 'novamira-uninstall',
             ],
             strict: true,
@@ -178,9 +177,13 @@ function novamira_register_missing_mcp_endpoint(): void
     }
 
     $routes = rest_get_server()->get_routes();
-    $callback = static fn() => new WP_Error('novamira_mcp_adapter_unavailable', $error->get_error_message(), [
-        'status' => 500,
-    ]);
+    $callback = static fn() => new WP_Error(
+        'novamira_mcp_adapter_unavailable',
+        novamira_current_user_can_manage()
+            ? $error->get_error_message()
+            : __('The Novamira MCP endpoint is unavailable.', domain: 'novamira'),
+        ['status' => 500],
+    );
 
     foreach (['novamira', 'mcp-adapter-default-server'] as $route_slug) {
         if (array_key_exists('/mcp/' . $route_slug, $routes)) {
@@ -204,7 +207,17 @@ function novamira_initialize_mcp_adapter(): bool
     }
 
     try {
-        \Novamira\Vendor\WP\MCP\Core\McpAdapter::instance();
+        $adapter = \Novamira\Vendor\WP\MCP\Core\McpAdapter::instance();
+        // Under WP-CLI the adapter builds its server at init priority 20, and building it boots the Abilities registry.
+        // A plugin bundling its own copy of the adapter attaches its built-ins at that same priority: if the registry
+        // boots first they are never registered, and that copy prints an error on every command.
+        if (
+            defined('WP_CLI')
+            && constant('WP_CLI') === true
+            && remove_action('init', [$adapter, 'init'], priority: 20)
+        ) {
+            add_action('init', [$adapter, 'init'], priority: 100);
+        }
         return true;
     } catch (\Throwable $e) {
         novamira_set_mcp_dependency_error(
@@ -236,6 +249,7 @@ add_action('network_admin_notices', callback: 'novamira_render_mcp_dependency_no
 add_action('rest_api_init', callback: 'novamira_register_missing_mcp_endpoint', priority: 999);
 
 require_once __DIR__ . '/includes/helpers.php';
+require_once __DIR__ . '/includes/secrets/bootstrap.php';
 require_once __DIR__ . '/includes/read-mode/policy.php';
 require_once __DIR__ . '/includes/mcp-mirror-server.php';
 require_once __DIR__ . '/includes/ghost-mode/bootstrap.php';
@@ -249,6 +263,7 @@ require_once __DIR__ . '/includes/uninstall-review.php';
 register_activation_hook(__FILE__, callback: 'novamira_clear_uninstall_plan');
 require_once __DIR__ . '/includes/hosting/detector.php';
 require_once __DIR__ . '/includes/connect-page.php';
+require_once __DIR__ . '/includes/activation-dialog.php';
 require_once __DIR__ . '/includes/oauth/connections.php';
 add_action('admin_menu', callback: static function (): void {
     \Novamira\OAuth\Connections\register();
@@ -263,6 +278,10 @@ require_once __DIR__ . '/includes/cache-purge.php';
 \Novamira\CachePurge\register();
 require_once __DIR__ . '/includes/troubleshoot/bootstrap.php';
 require_once __DIR__ . '/includes/instructions-admin.php';
+require_once __DIR__ . '/includes/confirmations/bootstrap.php';
+register_deactivation_hook(__FILE__, callback: static function (): void {
+    \Novamira\Confirmations\deactivate();
+});
 
 \Novamira\Context\boot_context_admin();
 novamira_register_wordpress_compatibility_notice();
@@ -290,6 +309,11 @@ function novamira_boot_design_feature(): void
 function novamira_boot_visual_feature(): void
 {
     require_once __DIR__ . '/novamira-visual/bootstrap.php';
+}
+
+function novamira_boot_ai_change_history_feature(): void
+{
+    require_once __DIR__ . '/includes/journal/bootstrap.php';
 }
 
 function novamira_boot_chat_feature(): void
@@ -402,7 +426,10 @@ function novamira_register_admin_bar_toggle(\WP_Admin_Bar $wp_admin_bar): void
         action: 'novamira_toggle_ai_abilities',
     );
 
-    $wp_admin_bar->add_node(\Novamira\ReadMode\admin_bar_node([
+    $waiting = function_exists('Novamira\\Confirmations\\admin_bar_waiting')
+        ? \Novamira\Confirmations\admin_bar_waiting()
+        : ['count' => 0, 'items' => []];
+    $status = \Novamira\ReadMode\admin_bar_node([
         'id' => 'novamira-mcp-status',
         'title' => match (true) {
             $active => esc_html__('Novamira ON', domain: 'novamira'),
@@ -417,7 +444,16 @@ function novamira_register_admin_bar_toggle(\WP_Admin_Bar $wp_admin_bar): void
                 default => 'novamira-mcp-off',
             },
         ],
-    ]));
+    ]);
+    if ($waiting['count'] > 0) {
+        $status['meta']['class'] .= ' novamira-waiting';
+        $status['title'] .=
+            ' <span class="novamira-waiting-count">' . number_format_i18n($waiting['count']) . '</span>';
+    }
+    $wp_admin_bar->add_node($status);
+    foreach ($waiting['items'] as $item) {
+        $wp_admin_bar->add_node(array_merge($item, ['parent' => 'novamira-mcp-status']));
+    }
 
     $wp_admin_bar->add_node([
         'id' => 'novamira-mcp-status-label',
@@ -461,7 +497,7 @@ function novamira_register_admin_bar_toggle(\WP_Admin_Bar $wp_admin_bar): void
 }
 
 /**
- * Style the admin-bar status chip and require confirmation before enabling from the dropdown.
+ * Style the admin-bar status chip, and open the activation dialog before enabling from the dropdown.
  */
 function novamira_render_admin_bar_toggle_assets(): void
 {
@@ -469,22 +505,35 @@ function novamira_render_admin_bar_toggle_assets(): void
         return;
     }
 
-    $looks_production = novamira_looks_like_production();
-    $confirm_message = $looks_production
-        ? __(
-            'This looks like a production site. AI Abilities are intended for staging or development sites. Continue anyway?',
-            domain: 'novamira',
-        )
-        : __('AI agents will be able to execute PHP code and access the filesystem. Continue?', domain: 'novamira');
     ?>
     <style>
-    #wp-admin-bar-novamira-mcp-status.novamira-mcp-on > .ab-item {
-        background: #c00 !important;
-        color: #fff !important;
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-waiting > .ab-item,
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-waiting.hover > .ab-item,
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-waiting > .ab-item:hover,
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-waiting > .ab-item:focus {
+        background: var(--wp-admin-theme-color, #3858e9);
+        color: #fff;
     }
-    #wp-admin-bar-novamira-mcp-status.novamira-mcp-error > .ab-item {
-        background: #996800 !important;
-        color: #fff !important;
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-mcp-error > .ab-item,
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-mcp-error.hover > .ab-item,
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-mcp-error > .ab-item:hover,
+    #wpadminbar #wp-admin-bar-novamira-mcp-status.novamira-mcp-error > .ab-item:focus {
+        background: #dba617;
+        color: #1d2327;
+    }
+    #wpadminbar #wp-admin-bar-novamira-mcp-status .novamira-waiting-count {
+        display: inline-block;
+        min-width: 18px;
+        height: 18px;
+        margin-left: 4px;
+        padding: 0 5px;
+        box-sizing: border-box;
+        border-radius: 9px;
+        background: #f0f0f1;
+        color: #1d2327;
+        font-size: 11px;
+        line-height: 18px;
+        text-align: center;
     }
     #wp-admin-bar-novamira-mcp-status-label > .ab-item {
         cursor: default;
@@ -497,10 +546,13 @@ function novamira_render_admin_bar_toggle_assets(): void
         if (!toggle) {
             return;
         }
+        // Turning on waits for the dialog that says what approvals do not cover, and for "I understand".
         toggle.addEventListener('click', function (event) {
-            if (!window.confirm(<?php echo wp_json_encode($confirm_message); ?>)) {
-                event.preventDefault();
+            if (typeof window.novamiraConfirmActivation !== 'function') {
+                return;
             }
+            event.preventDefault();
+            window.novamiraConfirmActivation(function () { window.location.href = toggle.href; });
         });
     });
     </script>
@@ -559,13 +611,12 @@ add_action('admin_head', static function () {
 // Handle form actions early (before headers are sent) for PRG redirect.
 add_action('admin_init', static function () {
     $page = $_GET['page'] ?? null;
-    if ($page === 'novamira-sandbox') {
+    if (novamira_is_ai_activity_tab('sandbox')) {
         novamira_handle_sandbox_actions();
     }
     if ($page === 'novamira-connect') {
         novamira_handle_settings_form();
         novamira_handle_revoke_password();
-        novamira_handle_dismiss_production_warning();
     }
     if ($page === 'novamira-abilities') {
         novamira_handle_ability_hub_actions();
@@ -574,6 +625,7 @@ add_action('admin_init', static function () {
 
 // Single-row toggle over AJAX so the page state (open sections) is preserved.
 add_action('wp_ajax_novamira_toggle_ability', callback: 'novamira_handle_ability_toggle_ajax');
+add_action('wp_ajax_novamira_set_ability_choice', callback: 'novamira_handle_ability_choice_ajax');
 
 // Admin page stylesheets — card layouts matching Skills.
 add_action('admin_enqueue_scripts', static function (string $hook): void {
@@ -582,7 +634,8 @@ add_action('admin_enqueue_scripts', static function (string $hook): void {
         ? (string) filemtime($path)
         : NOVAMIRA_VERSION;
 
-    if (in_array($hook, ['novamira_page_novamira-abilities', 'novamira_page_novamira-sandbox'], strict: true)) {
+    $sandbox_tab = novamira_is_ai_activity_tab('sandbox');
+    if ($hook === 'novamira_page_novamira-abilities' || $sandbox_tab) {
         wp_enqueue_style(
             'novamira-admin-list',
             (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/admin-list.css',
@@ -607,7 +660,7 @@ add_action('admin_enqueue_scripts', static function (string $hook): void {
         );
     }
 
-    if ($hook === 'novamira_page_novamira-sandbox') {
+    if ($sandbox_tab) {
         wp_enqueue_style(
             'novamira-sandbox-admin',
             (string) NOVAMIRA_PLUGIN_URL . 'includes/assets/sandbox.css',
@@ -664,22 +717,6 @@ add_action(
         );
     },
     priority: 25,
-);
-
-// Sandbox sub-page — priority 50 places it after Context (30) and Skills (40).
-add_action(
-    'admin_menu',
-    static function () {
-        add_submenu_page(
-            parent_slug: 'novamira-connect',
-            page_title: __('Sandbox', domain: 'novamira'),
-            menu_title: __('Sandbox', domain: 'novamira'),
-            capability: novamira_manage_capability(),
-            menu_slug: 'novamira-sandbox',
-            callback: 'novamira_render_sandbox_page',
-        );
-    },
-    priority: 50,
 );
 
 $is_enabled = novamira_is_enabled();

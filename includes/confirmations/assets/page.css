@@ -1,0 +1,1031 @@
+/* SPDX-FileCopyrightText: 2026 Ovation S.r.l. <dev@novamira.ai> */
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/* AI Activity: approvals, change history and settings. Same card language as the other Novamira pages. */
+
+#novamira-confirmations {
+    max-width: 980px;
+}
+
+#novamira-confirmations .nav-tab-wrapper {
+    margin-bottom: 20px;
+}
+
+.nm-lead {
+    margin: 0 0 12px;
+    color: #50575e;
+    font-size: 14px;
+}
+
+.nm-help {
+    margin: 0 0 20px;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #f6f7f7;
+}
+
+.nm-help > summary {
+    padding: 10px 16px;
+    cursor: pointer;
+    color: #2c3338;
+    font-weight: 600;
+}
+
+.nm-help > div {
+    padding: 0 16px 12px;
+}
+
+.nm-help p {
+    margin: 0 0 8px;
+    color: #3c434a;
+}
+
+/* Bar above a list: what it is, how many, and whether the page is live. */
+.nm-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 12px;
+}
+
+.nm-bar.is-section {
+    margin-top: 32px;
+}
+
+.nm-bar h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.nm-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #d63638;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 20px;
+    text-align: center;
+}
+
+.nm-count:empty {
+    display: none;
+}
+
+.nm-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    color: #50575e;
+    font-size: 13px;
+}
+
+/* Only when the page lost the site: while it is connected there is nothing to say. */
+.nm-live.is-off::before {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d63638;
+    content: "";
+}
+
+.nm-empty {
+    margin: 0 0 16px;
+    padding: 24px;
+    border: 1px dashed #c3c4c7;
+    border-radius: 8px;
+    color: #50575e;
+    text-align: center;
+}
+
+.nm-message:empty {
+    display: none;
+}
+
+.nm-message {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-left: 4px solid #2271b1;
+    background: #fff;
+}
+
+/* A card: a request to decide, a held email, or one piece of AI work. */
+.nm-card {
+    margin: 0 0 12px;
+    padding: 16px 20px;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    background: #fff;
+    overflow-wrap: anywhere;
+}
+
+.nm-card.is-pending {
+    border-color: #c3c4c7;
+}
+
+.nm-head [hidden],
+.nm-block-progress[hidden] {
+    display: none;
+}
+
+/* Show the calls that would ask on their own; the smaller ones are inside a disclosure. */
+.nm-block-action {
+    margin: 0 0 12px;
+    padding-top: 12px;
+    border-top: 1px solid #dcdcde;
+}
+
+.nm-block-action .nm-title {
+    font-size: 14px;
+}
+
+/* Full order of a mixed block, either standalone or inside Show details. */
+.nm-execution {
+    margin: 8px 0 12px;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+    background: #f6f7f7;
+}
+
+.nm-execution > summary {
+    padding: 8px 12px;
+    color: #2271b1;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.nm-execution > ol {
+    margin: 0 12px 8px;
+    padding-inline-start: 2em;
+    list-style: decimal;
+    color: #3c434a;
+}
+
+.nm-execution li {
+    margin: 0;
+    padding: 6px 0;
+    border-top: 1px solid #dcdcde;
+}
+
+.nm-execution-line {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 2px 12px;
+}
+
+.nm-execution-line .nm-pill {
+    font-size: 12px;
+    white-space: normal;
+}
+
+.nm-execution .nm-code {
+    margin: 0;
+}
+
+.nm-details-hint {
+    margin-inline-start: 4px;
+    color: #3c434a;
+}
+
+.nm-block-progress ol {
+    margin: 8px 0 0 20px;
+}
+
+.nm-block-progress li .nm-pill {
+    margin-left: 4px;
+}
+
+.nm-bar.is-quiet {
+    justify-content: flex-end;
+}
+
+.nm-facts {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 10px 16px;
+    margin: 0 0 16px;
+}
+
+.nm-facts dt {
+    color: #50575e;
+}
+
+.nm-facts dd {
+    margin: 0;
+}
+
+@media (max-width: 600px) {
+    .nm-facts {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+    }
+
+    .nm-facts dd {
+        margin-bottom: 8px;
+    }
+}
+
+/* Which actions ask, above the requests. */
+.nm-asks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+    margin: 0 0 16px;
+    padding: 12px 16px;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.nm-asks-label {
+    color: #50575e;
+}
+
+.nm-asks .nm-asks-change {
+    margin-left: auto;
+}
+
+.nm-level-change .nm-asks {
+    margin-bottom: 0;
+}
+
+.nm-level-change {
+    margin: 0 0 16px;
+}
+
+.nm-level-panel {
+    margin: 8px 0 0;
+}
+
+.nm-info {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border-left: 4px solid #72aee6;
+    border-radius: 0 6px 6px 0;
+    background: #f0f6fc;
+    color: #3c434a;
+}
+
+.nm-info ul {
+    margin: 0;
+    padding-left: 18px;
+    list-style: disc;
+}
+
+.nm-card.is-linked {
+    box-shadow: 0 0 0 2px #2271b1;
+}
+
+.nm-card.is-done {
+    padding: 12px 20px;
+}
+
+.nm-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+}
+
+.nm-meta {
+    color: #646970;
+    font-size: 12px;
+}
+
+.nm-head .nm-meta:last-child {
+    margin-left: auto;
+}
+
+/* A state as WordPress lists show one, such as Published or Draft: words in a colour, no badge. */
+.nm-pill {
+    display: inline-block;
+    color: #50575e;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.nm-pill.is-wait { color: #8a6116; }
+.nm-pill.is-ok { color: #00731f; }
+.nm-pill.is-bad { color: #b32d2e; }
+.nm-pill.is-run { color: #135e96; }
+
+.nm-label {
+    margin: 0 0 2px;
+    color: #646970;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.nm-title {
+    margin: 0 0 12px;
+    color: #1d2327;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.nm-card.is-done .nm-title {
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+.nm-danger {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-left: 4px solid #d63638;
+    border-radius: 0 6px 6px 0;
+    background: #fcf0f1;
+    color: #3c434a;
+}
+
+.nm-danger p {
+    margin: 0 0 4px;
+}
+
+.nm-danger p:last-child {
+    margin-bottom: 0;
+}
+
+.nm-danger .nm-danger-title {
+    color: #b32d2e;
+    font-weight: 600;
+}
+
+.nm-means {
+    margin: 2px 0 0;
+    color: #1d2327;
+    font-weight: 600;
+}
+
+.nm-details {
+    margin: -6px 0 12px;
+    color: #50575e;
+}
+
+.nm-found {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 12px;
+}
+
+.nm-chip {
+    padding: 2px 8px;
+    border: 1px solid #f0c33c;
+    border-radius: 4px;
+    background: #fcf9e8;
+    color: #614200;
+    font-size: 12px;
+}
+
+.nm-undo {
+    position: relative;
+    padding-left: 18px;
+}
+
+.nm-undo::before {
+    content: "";
+    position: absolute;
+    top: 0.45em;
+    left: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #00a32a;
+}
+
+.nm-undo.is-no {
+    color: #8a2424;
+    font-weight: 600;
+}
+
+.nm-undo.is-no::before {
+    background: #d63638;
+}
+
+.nm-code {
+    margin: 0 0 12px;
+}
+
+.nm-code summary {
+    color: #2271b1;
+    cursor: pointer;
+}
+
+.nm-code-file {
+    margin: 8px 0 4px;
+    color: #50575e;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 12px;
+}
+
+.nm-code pre {
+    max-height: 320px;
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border-radius: 6px;
+    background: #1d2327;
+    color: #f0f0f1;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.nm-box {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #f6f7f7;
+}
+
+.nm-box ul,
+.nm-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    list-style: disc;
+}
+
+.nm-box li,
+.nm-list li {
+    margin: 0 0 2px;
+}
+
+.nm-warn {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-left: 4px solid #dba617;
+    border-radius: 0 6px 6px 0;
+    background: #fcf9e8;
+    color: #3c434a;
+}
+
+.nm-warn ul {
+    margin: 0;
+    padding-left: 18px;
+    list-style: disc;
+}
+
+.nm-card .nm-list + .nm-warn,
+.nm-card .nm-meta + .nm-warn {
+    margin-top: 12px;
+}
+
+.nm-said {
+    margin: 0 0 12px;
+    color: #50575e;
+    font-style: italic;
+}
+
+.nm-more {
+    margin: 0 0 12px;
+}
+
+.nm-more > summary {
+    color: #2271b1;
+    cursor: pointer;
+}
+
+.nm-more pre {
+    max-height: 320px;
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    overflow: auto;
+    border-radius: 6px;
+    background: #1d2327;
+    color: #f0f0f1;
+    white-space: pre-wrap;
+}
+
+.nm-step {
+    margin: 8px 0 0;
+    padding: 8px 0 0;
+    border-top: 1px solid #f0f0f1;
+}
+
+.nm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.nm-actions .nm-state {
+    color: #50575e;
+}
+
+.nm-actions .nm-note {
+    margin: 0;
+    color: #646970;
+    font-size: 12px;
+}
+
+.nm-history-link {
+    display: inline-block;
+    margin: 8px 0 0;
+}
+
+.nm-empty-icon {
+    display: block;
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 8px;
+    color: #00a32a;
+    font-size: 32px;
+}
+
+.nm-empty-title {
+    margin: 0 0 6px;
+    color: #1d2327;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.nm-empty p {
+    max-width: 560px;
+    margin-right: auto;
+    margin-left: auto;
+}
+
+/* How often the AI asks: three steps on one scale, then what asks and what runs on its own at the chosen one. */
+.nm-levels {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.nm-levels-title {
+    margin: 0 0 10px;
+    padding: 0;
+    color: #1d2327;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.nm-level-scale {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0;
+    margin: 0 0 10px;
+    border: 1px solid #c3c4c7;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.nm-level {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    border-left: 1px solid #dcdcde;
+    background: #fff;
+    cursor: pointer;
+}
+
+.nm-level:first-child {
+    border-left: 0;
+}
+
+.nm-level input {
+    position: absolute;
+    opacity: 0;
+}
+
+.nm-level:has(input:checked) {
+    background: #f0f6fc;
+    box-shadow: inset 0 -3px 0 #2271b1;
+}
+
+.nm-level:has(input:focus-visible) {
+    outline: 2px solid #2271b1;
+    outline-offset: -2px;
+}
+
+.nm-level-name {
+    color: #1d2327;
+    font-weight: 600;
+}
+
+.nm-level-default {
+    margin-left: 4px;
+    color: #646970;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+.nm-level-line {
+    color: #50575e;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.nm-level-count {
+    color: #2271b1;
+    font-size: 12px;
+}
+
+@media (max-width: 782px) {
+    .nm-level {
+        border-top: 1px solid #dcdcde;
+        border-left: 0;
+    }
+
+    .nm-level:first-child {
+        border-top: 0;
+    }
+}
+
+.nm-actions .button-reject {
+    border-color: #d63638;
+    color: #b32d2e;
+}
+
+/* History: one list by day, each request with its operations one per line, and each decision closed the same way. */
+.nm-request {
+    margin: 0 0 8px;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.nm-request > summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+}
+
+.nm-request-title {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.nm-request .nm-ops {
+    border-top: 1px solid #f0f0f1;
+}
+
+.nm-decision-body {
+    padding: 8px 12px 12px;
+}
+
+.nm-decision-body .nm-details {
+    margin: 8px 0 0;
+    color: #3c434a;
+}
+
+.nm-op {
+    padding: 8px 12px;
+}
+
+.nm-op + .nm-op {
+    border-top: 1px solid #f0f0f1;
+}
+
+.nm-op-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.nm-op-time {
+    /* One column wide enough for a range such as 16:28–16:30, so every summary starts at the same place. */
+    flex: 0 0 92px;
+    color: #646970;
+    font-variant-numeric: tabular-nums;
+}
+
+/* A single item has the same height and spacing as a group's summary line. */
+.nm-request.is-single > .nm-op {
+    padding: 10px 12px;
+}
+
+.nm-op-what {
+    flex: 1 1 240px;
+    min-width: 0;
+}
+
+.nm-op-flag {
+    color: #646970;
+    font-size: 13px;
+}
+
+/* Under an open request: how many steps it took and who asked, aligned with its rows. */
+.nm-request .nm-ops > .nm-meta {
+    margin: 0;
+    padding: 8px 12px 0;
+    color: #646970;
+    font-size: 12px;
+}
+
+.nm-op-copy {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.nm-op-copy .nm-copied {
+    flex-basis: 100%;
+}
+
+.nm-op-more > summary {
+    margin-top: 4px;
+    color: #2271b1;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+/* One heading per day, then each piece of work. */
+.nm-day {
+    margin: 24px 0 8px;
+    color: #50575e;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.nm-restore {
+    width: 100%;
+}
+
+.nm-restore p {
+    margin: 0;
+    color: #646970;
+    font-size: 12px;
+}
+
+.nm-restore-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.nm-copied {
+    margin: 8px 0 0;
+}
+
+.nm-copied textarea {
+    width: 100%;
+    min-height: 64px;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 12px;
+}
+
+.nm-ok {
+    color: #00731f;
+    font-weight: 600;
+}
+
+.nm-danger-zone {
+    margin: 32px 0 0;
+    padding-top: 16px;
+    border-top: 1px solid #dcdcde;
+}
+
+.nm-danger-zone p {
+    color: #646970;
+}
+
+.nm-settings .nm-card label {
+    font-weight: 600;
+}
+
+.nm-settings .nm-card p.description {
+    margin: 4px 0 0;
+}
+
+.nm-settings .nm-destinations .nm-card-title {
+    margin: 0;
+    font-weight: 600;
+}
+
+.nm-settings .nm-destinations label.nm-destination {
+    display: block;
+    margin-top: 6px;
+    font-weight: 400;
+}
+
+@media (max-width: 782px) {
+    .nm-head .nm-meta:last-child {
+        margin-left: 0;
+    }
+
+    .nm-live {
+        margin-left: 0;
+    }
+}
+
+.nm-level-more {
+    margin: 10px 0 0;
+}
+
+/* What asks at each level, side by side: the chosen column is marked, the rest stays readable. */
+.nm-level-note {
+    margin: 0 0 8px;
+    color: #50575e;
+}
+
+.nm-level-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #dcdcde;
+    font-size: 13px;
+}
+
+.nm-level-table th,
+.nm-level-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid #f0f0f1;
+    text-align: center;
+    font-weight: 400;
+}
+
+.nm-level-table thead th {
+    color: #1d2327;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.nm-level-table tbody th[scope="row"] {
+    color: #1d2327;
+    text-align: left;
+}
+
+.nm-level-table[data-chosen="most"] [data-level="most"],
+.nm-level-table[data-chosen="big"] [data-level="big"],
+.nm-level-table[data-chosen="almost_none"] [data-level="almost_none"] {
+    background: #f0f6fc;
+}
+
+.nm-level-table[data-chosen="most"] thead [data-level="most"],
+.nm-level-table[data-chosen="big"] thead [data-level="big"],
+.nm-level-table[data-chosen="almost_none"] thead [data-level="almost_none"] {
+    box-shadow: inset 0 -2px 0 #2271b1;
+}
+
+/* With approvals skipped nothing asks: the table and its notes give way to one line. */
+.nm-level-more:has(.nm-level-table[data-chosen="skip"]) > :not(.nm-level-skip-note, .description) {
+    display: none;
+}
+
+.nm-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.nm-dot.is-asks {
+    background: #2271b1;
+}
+
+.nm-dot.is-maybe {
+    border: 2px solid #2271b1;
+    background: linear-gradient(90deg, #2271b1 50%, transparent 50%);
+    box-sizing: border-box;
+}
+
+.nm-dot.is-runs {
+    width: 4px;
+    height: 4px;
+    background: #a7aaad;
+}
+
+.nm-level-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 8px 0 4px;
+    color: #50575e;
+    font-size: 12px;
+}
+
+.nm-level-skip-note {
+    display: none;
+    margin: 8px 0 0;
+    font-weight: 600;
+}
+
+.nm-level-more:has(.nm-level-table[data-chosen="skip"]) .nm-level-skip-note {
+    display: block;
+}
+
+.nm-level-table + .nm-level-legend {
+    margin-bottom: 14px;
+}
+
+.nm-level-intro {
+    margin: -4px 0 10px;
+    color: #50575e;
+}
+
+
+.nm-level-warning {
+    margin: 12px 0 0;
+    color: #646970;
+    font-size: 13px;
+}
+
+.nm-facts .nm-found {
+    margin: 0;
+}
+
+.nm-found.is-past {
+    margin: 6px 0 0;
+}
+
+.nm-found.is-past .nm-chip {
+    font-size: 11px;
+}
+
+.nm-done-meta {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.nm-settings-title {
+    margin: 24px 0 8px;
+    font-size: 15px;
+}
+
+.nm-settings-title:first-child {
+    margin-top: 8px;
+}
+
+/* Asked before approvals are skipped. */
+.nm-skip-dialog {
+    max-width: 480px;
+    padding: 24px;
+    border: 0;
+    border-radius: 8px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
+}
+
+.nm-skip-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.nm-skip-dialog h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+}
+
+.nm-skip-dialog p {
+    margin: 0 0 10px;
+}
+
+.nm-skip-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px !important;
+}
+
+/* Change History: search and day filter above the list. */
+.nm-history-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+}
+
+.nm-history-filters input[type="search"] {
+    flex: 1 1 260px;
+    max-width: 420px;
+}
+
+
+/* WordPress buttons set their own display, which would show a hidden Clear search. */
+.nm-history-filters [hidden] {
+    display: none !important;
+}
+
+.nm-request-last {
+    display: block;
+    margin-top: 2px;
+    color: #646970;
+    font-size: 12px;
+    font-weight: 400;
+}

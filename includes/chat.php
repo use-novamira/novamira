@@ -35,6 +35,15 @@ const NOVAMIRA_CHAT_CONSENT_META = 'novamira_chat_consent';
 // until the whole response, often a tool call carrying a large file, is generated.
 const NOVAMIRA_CHAT_REQUEST_TIMEOUT = 120.0;
 
+/** What Novamira Chat says while AI Abilities are off: they are turned on in Configuration, with what they allow. */
+function novamira_chat_abilities_off_text(): string
+{
+    return __(
+        'Novamira Chat needs AI Abilities, and they are off right now. Turn them on from Novamira > Configuration, then come back here.',
+        domain: 'novamira',
+    );
+}
+
 /** Whether the Novamira Chat feature is active. */
 function novamira_chat_is_enabled(): bool
 {
@@ -119,6 +128,8 @@ function novamira_enqueue_chat_assets(string $hook): void
     $settings_json = wp_json_encode([
         'root' => esc_url_raw(rest_url(NOVAMIRA_CHAT_REST_NAMESPACE)),
         'nonce' => wp_create_nonce('wp_rest'),
+        // Only this page can decide on the chat's waiting calls: an Application Password or an OAuth token cannot.
+        'decisionNonce' => wp_create_nonce(NOVAMIRA_CHAT_DECISION_NONCE_ACTION),
         'status' => novamira_chat_status(),
         'connectorsUrl' => admin_url('options-connectors.php'),
         'consented' => novamira_chat_user_has_consented(),
@@ -134,6 +145,27 @@ function novamira_enqueue_chat_assets(string $hook): void
 function novamira_render_chat_page(): void
 {
     if (!novamira_chat_is_enabled() || !novamira_current_user_can_manage()) {
+        return;
+    }
+    if (!novamira_is_enabled()) {
+        novamira_render_admin_header(
+            logo_file: 'novamira-chat-logo.svg',
+            logo_alt: 'Novamira Chat',
+            logo_width: 306,
+            logo_height: 40,
+        );
+        ?>
+        <div class="wrap novamira-chat-wrap">
+            <h1 class="screen-reader-text"><?php esc_html_e('Novamira Chat', domain: 'novamira'); ?></h1>
+            <div class="notice notice-info inline">
+                <p><?php echo esc_html(novamira_chat_abilities_off_text()); ?></p>
+                <p><a class="button button-primary" href="<?php echo
+                    esc_url(admin_url('admin.php?page=novamira-connect'))
+                ; ?>"><?php esc_html_e('Open Configuration', domain: 'novamira'); ?></a></p>
+            </div>
+        </div>
+        <?php
+
         return;
     }
 
@@ -238,7 +270,7 @@ function novamira_register_chat_routes(): void
             ],
             [
                 'methods' => WP_REST_Server::EDITABLE,
-                'callback' => 'novamira_chat_rest_update_session',
+                'callback' => novamira_chat_one_at_a_time('novamira_chat_rest_update_session', wait_seconds: 5),
                 'permission_callback' => 'novamira_chat_rest_permission',
             ],
             [
@@ -251,7 +283,7 @@ function novamira_register_chat_routes(): void
 
     register_rest_route(route_namespace: NOVAMIRA_CHAT_REST_NAMESPACE, route: '/chat/model-step', args: [
         'methods' => WP_REST_Server::CREATABLE,
-        'callback' => 'novamira_chat_rest_model_step',
+        'callback' => novamira_chat_one_at_a_time('novamira_chat_rest_model_step', wait_seconds: 0),
         'permission_callback' => 'novamira_chat_rest_permission',
     ]);
 
@@ -275,13 +307,13 @@ function novamira_register_chat_routes(): void
 
     register_rest_route(route_namespace: NOVAMIRA_CHAT_REST_NAMESPACE, route: '/chat/tools/execute', args: [
         'methods' => WP_REST_Server::CREATABLE,
-        'callback' => 'novamira_chat_rest_execute_tool',
+        'callback' => novamira_chat_one_at_a_time('novamira_chat_rest_execute_tool', wait_seconds: 0),
         'permission_callback' => 'novamira_chat_rest_permission',
     ]);
 
     register_rest_route(route_namespace: NOVAMIRA_CHAT_REST_NAMESPACE, route: '/chat/approvals', args: [
         'methods' => WP_REST_Server::CREATABLE,
-        'callback' => 'novamira_chat_rest_approval',
+        'callback' => novamira_chat_one_at_a_time('novamira_chat_rest_approval', wait_seconds: 5),
         'permission_callback' => 'novamira_chat_rest_permission',
     ]);
 }
@@ -350,7 +382,6 @@ function novamira_chat_rest_create_session(WP_REST_Request $request): array|WP_E
             ],
         ],
         'tool_calls' => [],
-        'allowlist' => [],
         'error' => '',
     ];
 
@@ -808,25 +839,6 @@ function novamira_chat_session_list(array $session, string $key): array
 }
 
 /**
- * @param array<string, mixed> $session
- * @return list<string>
- */
-function novamira_chat_string_list(array $session, string $key): array
-{
-    $items = is_array($session[$key] ?? null) ? $session[$key] : [];
-    $list = [];
-    // @mago-expect analysis:mixed-assignment
-    foreach ($items as $item) {
-        if (!is_string($item)) {
-            continue;
-        }
-        $list[] = $item;
-    }
-
-    return $list;
-}
-
-/**
  * @param array<array-key, mixed> $items
  * @return array<string, mixed>
  */
@@ -928,7 +940,7 @@ function novamira_chat_build_tool_call_record(
  * @param array<string, mixed> $session
  * @param array<string, mixed> $model_arguments
  * @param list<array<string, mixed>> $tools
- * @return array{kind: string, ability: string, arguments: array<string, mixed>, status: string, risk: array<string, mixed>, reason: string}
+ * @return array{kind: string, ability: string, arguments: array<string, mixed>, display_arguments: array<string, mixed>, status: string, risk: array<string, mixed>, reason: string, model_reason: string, model_attention: int|null}
  */
 function novamira_chat_resolve_ability_call(
     array $session,
@@ -949,23 +961,61 @@ function novamira_chat_resolve_ability_call(
             $arguments,
             novamira_chat_confirmation_reason_from_arguments($model_arguments),
             $tools,
+            novamira_chat_attention_from_arguments($model_arguments),
         );
     }
 
-    // Legacy/direct ability call: the arguments carry confirmation_reason inline.
+    // Legacy/direct ability call: the arguments carry confirmation_reason and attention inline.
     $reason = novamira_chat_confirmation_reason_from_arguments($model_arguments);
-    unset($model_arguments['confirmation_reason']);
+    $attention = novamira_chat_attention_from_arguments($model_arguments);
+    unset($model_arguments['confirmation_reason'], $model_arguments['attention']);
 
-    return novamira_chat_ability_call_fields($session, $parsed_name, $model_arguments, $reason, $tools);
+    return novamira_chat_ability_call_fields($session, $parsed_name, $model_arguments, $reason, $tools, $attention);
 }
 
+/**
+ * The model's attention for a call, 0-10, or null when it sent none or something else.
+ *
+ * @param array<array-key, mixed> $arguments
+ */
+function novamira_chat_attention_from_arguments(array $arguments): ?int
+{
+    // @mago-expect analysis:mixed-assignment -- The model's value is checked below.
+    $attention = $arguments['attention'] ?? null;
+    if (is_string($attention) && ctype_digit($attention)) {
+        $attention = (int) $attention;
+    }
+    return is_int($attention) && $attention >= 0 && $attention <= 10 ? $attention : null;
+}
+
+/**
+ * The arguments as the card shows them: PHP sent on one line is laid out again, one statement per line. What runs is
+ * always the arguments as sent.
+ *
+ * @param array<string, mixed> $arguments
+ * @return array<string, mixed>
+ */
+function novamira_chat_display_arguments(string $ability_name, array $arguments): array
+{
+    if (
+        $ability_name !== 'novamira/execute-php'
+        || !is_string($arguments['code'] ?? null)
+        || !function_exists('Novamira\\Confirmations\\readable_code')
+    ) {
+        return $arguments;
+    }
+    $arguments['code'] = \Novamira\Confirmations\readable_code($arguments['code']);
+    return $arguments;
+}
+
+// @mago-expect lint:excessive-parameter-list -- The model's reason and attention travel with the call's fields.
 /**
  * Assemble the shared ability-execution fields (risk + approval status).
  *
  * @param array<string, mixed> $session
  * @param array<string, mixed> $arguments
  * @param list<array<string, mixed>> $tools
- * @return array{kind: string, ability: string, arguments: array<string, mixed>, status: string, risk: array<string, mixed>, reason: string}
+ * @return array{kind: string, ability: string, arguments: array<string, mixed>, display_arguments: array<string, mixed>, status: string, risk: array<string, mixed>, reason: string, model_reason: string, model_attention: int|null}
  */
 function novamira_chat_ability_call_fields(
     array $session,
@@ -973,22 +1023,139 @@ function novamira_chat_ability_call_fields(
     array $arguments,
     string $reason,
     array $tools,
+    ?int $attention = null,
 ): array {
     $tool = novamira_chat_find_tool($ability_name, $tools);
     $risk = $tool !== null && is_array($tool['risk'] ?? null)
         ? novamira_chat_assoc_array($tool['risk'])
         : novamira_chat_unknown_risk();
+    $risk = novamira_chat_explained_risk(
+        novamira_chat_checked_risk($session, $ability_name, $arguments, $risk, $attention),
+        $reason,
+    );
 
     return [
         'kind' => 'ability',
         'ability' => $ability_name,
         'arguments' => $arguments,
-        'status' => novamira_chat_tool_needs_approval($session, $ability_name, $risk, yolo: false)
-            ? 'pending_approval'
-            : 'approved',
+        'display_arguments' => novamira_chat_display_arguments($ability_name, $arguments),
+        'status' => novamira_chat_tool_needs_approval($risk) ? 'pending_approval' : 'approved',
         'risk' => $risk,
-        'reason' => $reason,
+        'reason' => novamira_chat_checked_reason($reason, $risk),
+        'model_reason' => $reason,
+        'model_attention' => $attention,
     ];
+}
+
+/**
+ * The risk of a call with the fixed checks applied to what the site holds now.
+ *
+ * @param array<string, mixed> $session
+ * @param array<string, mixed> $arguments
+ * @param array<string, mixed> $risk
+ * @return array<string, mixed>
+ */
+function novamira_chat_checked_risk(
+    array $session,
+    string $ability_name,
+    array $arguments,
+    array $risk,
+    ?int $attention = null,
+): array {
+    $check = \Novamira\Confirmations\chat_call_check($ability_name, $arguments, $attention);
+    $risk['refused'] = $check['refused'];
+    $risk['must_ask'] = $check['must_ask'];
+    $risk['fingerprint'] = $check['fingerprint'];
+    $risk['why'] = $check['why'];
+    // Chat asks as MCP does: only what reaches the cutoff or always asks. With approvals skipped, nothing waits.
+    $mode = \Novamira\Confirmations\chat_approval_mode();
+    if ($mode !== 'chat') {
+        $risk['requires_approval'] = $mode === 'novamira' && $check['must_ask'];
+    }
+    if ($check['refused'] !== '') {
+        // Not worth a person's decision: it fails at once and the model rewrites it.
+        $risk['requires_approval'] = false;
+    }
+    if ($check['must_ask']) {
+        $risk['requires_approval'] = true;
+    }
+    return $risk;
+}
+
+/**
+ * Whatever can ask a person comes with the model's words for what the call does: a card nobody can understand is not a
+ * decision. Without them the call fails at once and the model sends it again with them.
+ *
+ * @param array<string, mixed> $risk
+ * @return array<string, mixed>
+ */
+function novamira_chat_explained_risk(array $risk, string $reason): array
+{
+    if (($risk['requires_approval'] ?? false) !== true || trim($reason) !== '') {
+        return $risk;
+    }
+    $risk['refused'] = 'This call needs confirmation_reason: one plain sentence saying what it does. Nothing has executed.';
+    $risk['requires_approval'] = false;
+    $risk['must_ask'] = false;
+    return $risk;
+}
+
+/**
+ * The model's reason followed by what the checks found. What they found last time is replaced, not added to.
+ *
+ * @param array<string, mixed> $risk
+ */
+function novamira_chat_checked_reason(string $reason, array $risk): string
+{
+    $why = is_string($risk['why'] ?? null) ? $risk['why'] : '';
+    return $why === '' ? $reason : trim($reason . ' ' . $why);
+}
+
+/**
+ * Check a call again right before it runs: the file or the settings may have changed since it was proposed. A call
+ * needing a person goes back to waiting for one, unless a person approved exactly what the checks see now. A refused
+ * call stays refused: the model sends a new one, which gets every check from the start.
+ *
+ * @param array<string, mixed> $session
+ * @return array<string, mixed>
+ */
+function novamira_chat_recheck_call(array $session, int $call_index): array
+{
+    $tool_calls = novamira_chat_session_list($session, key: 'tool_calls');
+    $call = $tool_calls[$call_index];
+    $ability_name = (string) ($call['ability'] ?? '');
+    $arguments = novamira_chat_execution_arguments($call);
+    $before = is_array($call['risk'] ?? null) ? novamira_chat_assoc_array($call['risk']) : novamira_chat_unknown_risk();
+    if (($before['refused'] ?? '') !== '') {
+        return $session;
+    }
+    $base_reason = is_string($call['model_reason'] ?? null) ? $call['model_reason'] : (string) ($call['reason'] ?? '');
+    $attention = is_int($call['model_attention'] ?? null) ? $call['model_attention'] : null;
+    $risk = novamira_chat_explained_risk(
+        novamira_chat_checked_risk($session, $ability_name, $arguments, $before, $attention),
+        $base_reason,
+    );
+    $call['risk'] = $risk;
+    $call['model_reason'] = $base_reason;
+    $call['reason'] = novamira_chat_checked_reason($base_reason, $risk);
+    if (novamira_chat_waits_for_person($call, $risk)) {
+        $call['status'] = 'pending_approval';
+    }
+    $tool_calls[$call_index] = $call;
+    $session['tool_calls'] = $tool_calls;
+    return $session;
+}
+
+/**
+ * @param array<string, mixed> $call
+ * @param array<string, mixed> $risk
+ */
+function novamira_chat_waits_for_person(array $call, array $risk): bool
+{
+    return (
+        ($risk['must_ask'] ?? false) === true
+        && ($call['approved_fingerprint'] ?? '') !== ($risk['fingerprint'] ?? '')
+    );
 }
 
 /**
@@ -1028,8 +1195,10 @@ function novamira_chat_model_arguments(array $tool_call): array
     }
 
     $arguments = is_array($tool_call['arguments'] ?? null) ? novamira_chat_assoc_array($tool_call['arguments']) : [];
-    $reason = is_string($tool_call['reason'] ?? null)
-        ? sanitize_text_field($tool_call['reason'])
+    // @mago-expect analysis:mixed-assignment -- Checked to be a string just below.
+    $sent_reason = $tool_call['model_reason'] ?? $tool_call['reason'] ?? null;
+    $reason = is_string($sent_reason)
+        ? sanitize_text_field($sent_reason)
         : novamira_chat_confirmation_reason_from_arguments($arguments);
     unset($arguments['confirmation_reason']);
     if ($reason !== '') {
@@ -1039,6 +1208,8 @@ function novamira_chat_model_arguments(array $tool_call): array
     return $arguments;
 }
 
+const NOVAMIRA_CHAT_DECISION_NONCE_ACTION = 'novamira_chat_decision';
+
 function novamira_chat_rest_approval(WP_REST_Request $request): array|WP_Error
 {
     $session = novamira_chat_request_session($request);
@@ -1047,9 +1218,17 @@ function novamira_chat_rest_approval(WP_REST_Request $request): array|WP_Error
     }
 
     $params = $request->get_json_params();
+    $nonce = is_string($params['decision_nonce'] ?? null) ? $params['decision_nonce'] : '';
+    if (wp_verify_nonce($nonce, NOVAMIRA_CHAT_DECISION_NONCE_ACTION) === false) {
+        return new WP_Error(
+            'novamira_chat_decision_nonce',
+            __('Reload Novamira Chat and decide again.', domain: 'novamira'),
+            ['status' => 403],
+        );
+    }
     $call_id = is_string($params['tool_call_id'] ?? null) ? sanitize_text_field($params['tool_call_id']) : '';
     $decision = is_string($params['decision'] ?? null) ? sanitize_key($params['decision']) : '';
-    if ($call_id === '' || !in_array($decision, ['approve', 'deny', 'allow_session', 'yolo'], strict: true)) {
+    if ($call_id === '' || !in_array($decision, ['approve', 'deny'], strict: true)) {
         return novamira_chat_bad_request();
     }
 
@@ -1108,15 +1287,63 @@ function novamira_chat_apply_approval(array $session, array &$tool_call, string 
     }
 
     $tool_call['status'] = 'approved';
-    if ($decision === 'allow_session') {
-        $ability = (string) ($tool_call['ability'] ?? '');
-        if ($ability !== '') {
-            $allowlist = novamira_chat_string_list($session, key: 'allowlist');
-            $allowlist[] = $ability;
-            $session['allowlist'] = array_values(array_unique($allowlist));
-        }
+    // The addresses this call sends to are approved from now on, as on the AI Activity page.
+    if (function_exists('Novamira\\Confirmations\\remember_destinations_of')) {
+        \Novamira\Confirmations\remember_destinations_of(
+            (string) ($tool_call['ability'] ?? ''),
+            novamira_chat_execution_arguments($tool_call),
+        );
+    }
+    $risk = is_array($tool_call['risk'] ?? null) ? $tool_call['risk'] : [];
+    // A click on a card that asked because of a check covers what that card showed, and nothing else.
+    if (($risk['must_ask'] ?? false) === true) {
+        $tool_call['approved_fingerprint'] = $risk['fingerprint'] ?? '';
     }
     return $session;
+}
+
+/**
+ * Run the ability, through the AI change history when that feature is on.
+ *
+ * @param array<string, mixed> $session
+ * @param array{ability: WP_Ability, ability_name: string, tool_call: array<string, mixed>} $prepared
+ * @param array<string, mixed> $arguments
+ * @return mixed
+ */
+function novamira_chat_run_ability(array $session, array $prepared, array $arguments)
+{
+    $risk = is_array($prepared['tool_call']['risk'] ?? null) ? $prepared['tool_call']['risk'] : [];
+    if (is_string($risk['refused'] ?? null) && $risk['refused'] !== '') {
+        return new WP_Error('novamira_chat_refused', $risk['refused']);
+    }
+    $run = static fn(): mixed => $prepared['ability']->execute($arguments);
+    if (!function_exists('Novamira\\Journal\\run_direct_call')) {
+        return $run();
+    }
+    $session_id = is_string($session['id'] ?? null) ? $session['id'] : '';
+    \Novamira\Confirmations\session_id(chat: $session_id);
+    return \Novamira\Journal\run_direct_call(
+        $prepared['ability_name'],
+        $arguments,
+        novamira_chat_last_user_message_id($session),
+        $run,
+        says: is_string($prepared['tool_call']['model_reason'] ?? null) ? $prepared['tool_call']['model_reason'] : '',
+    );
+}
+
+/**
+ * The message a tool call answers: all the calls made for it are one request in the AI change history.
+ *
+ * @param array<string, mixed> $session
+ */
+function novamira_chat_last_user_message_id(array $session): string
+{
+    foreach (array_reverse(novamira_chat_session_list($session, key: 'messages')) as $message) {
+        if (($message['role'] ?? '') === 'user' && is_string($message['id'] ?? null)) {
+            return $message['id'];
+        }
+    }
+    return '';
 }
 
 /**
@@ -1147,6 +1374,61 @@ function novamira_chat_execute_meta_call(array $session, int $call_index): array
     return ['session' => $session, 'tool_call' => $tool_calls[$call_index]];
 }
 
+/**
+ * Not an error: the call now waits for a person, and the card shows why.
+ *
+ * @param array<string, mixed> $session
+ * @return array{session: array<string, mixed>, tool_call: array<string, mixed>}|null
+ */
+function novamira_chat_response_if_waiting(array $session, int $call_index): ?array
+{
+    $call = novamira_chat_session_list($session, key: 'tool_calls')[$call_index];
+    $risk = is_array($call['risk'] ?? null) ? novamira_chat_assoc_array($call['risk']) : [];
+    if (!novamira_chat_waits_for_person($call, $risk)) {
+        return null;
+    }
+    $session['updated_at'] = time();
+    novamira_chat_save_session($session);
+    return ['session' => $session, 'tool_call' => $call];
+}
+
+/**
+ * Two requests of one conversation must not run together: each saves the whole session, so the later save could mark
+ * a finished call as still to run, or drop a message. The lock is the database's, taken before the session is read,
+ * and goes with the connection if the request dies. Where the database gives no answer about the lock the request goes
+ * ahead, so Chat works on every host, and there two requests sent together can still overlap.
+ *
+ * @param callable(WP_REST_Request): (array|WP_Error) $route
+ * @return Closure(WP_REST_Request): (array|WP_Error)
+ */
+function novamira_chat_one_at_a_time(callable $route, int $wait_seconds): Closure
+{
+    return static function (WP_REST_Request $request) use ($route, $wait_seconds): array|WP_Error {
+        $wpdb = novamira_chat_wpdb();
+        $lock = 'nm_chat_' . md5(get_current_user_id() . '|' . novamira_chat_request_session_id($request));
+        $claim = $wpdb->prepare('SELECT GET_LOCK(%s, %d)', $lock, $wait_seconds);
+        $answer = is_string($claim) ? $wpdb->get_var($claim) : null;
+        if ($answer === '0') {
+            return new WP_Error(
+                'novamira_chat_busy',
+                __(
+                    'Another request of this conversation is still running. Nothing was changed: try again in a moment.',
+                    domain: 'novamira',
+                ),
+                ['status' => 409],
+            );
+        }
+        try {
+            return $route($request);
+        } finally {
+            $release = $answer === '1' ? $wpdb->prepare('SELECT RELEASE_LOCK(%s)', $lock) : null;
+            if (is_string($release)) {
+                $wpdb->get_var($release);
+            }
+        }
+    };
+}
+
 function novamira_chat_rest_execute_tool(WP_REST_Request $request): array|WP_Error
 {
     $session = novamira_chat_request_session($request);
@@ -1167,7 +1449,16 @@ function novamira_chat_rest_execute_tool(WP_REST_Request $request): array|WP_Err
         return novamira_chat_execute_meta_call($session, $call_index);
     }
 
-    $prepared = novamira_chat_prepare_tool_execution($session, $call_index, ($params['yolo'] ?? false) === true);
+    // A call that already ran, failed or was denied stays as it is: checking it again could offer to run it twice.
+    if (in_array($session['tool_calls'][$call_index]['status'] ?? '', ['approved', 'pending_approval'], strict: true)) {
+        $session = novamira_chat_recheck_call($session, $call_index);
+        $waiting = novamira_chat_response_if_waiting($session, $call_index);
+        if ($waiting !== null) {
+            return $waiting;
+        }
+    }
+
+    $prepared = novamira_chat_prepare_tool_execution($session, $call_index);
     if (is_wp_error($prepared)) {
         return $prepared;
     }
@@ -1181,13 +1472,27 @@ function novamira_chat_rest_execute_tool(WP_REST_Request $request): array|WP_Err
 
     $arguments = novamira_chat_execution_arguments($prepared['tool_call']);
     // @mago-expect analysis:mixed-assignment
-    $result = $prepared['ability']->execute($arguments);
+    $result = novamira_chat_run_ability($session, $prepared, $arguments);
     if (is_wp_error($result)) {
-        return novamira_chat_record_tool_error($session, $call_index, $result->get_error_message());
+        return novamira_chat_record_tool_error(
+            $session,
+            $call_index,
+            \Novamira\Secrets\redact_string($result->get_error_message()),
+        );
     }
-    // @mago-expect analysis:mixed-assignment
-    $result = novamira_chat_prepare_tool_result($prepared['ability_name'], $result);
+    return novamira_chat_record_tool_result(
+        $session,
+        $call_index,
+        novamira_chat_prepare_tool_result($prepared['ability_name'], \Novamira\Secrets\redact($result)),
+    );
+}
 
+/**
+ * @param array<string, mixed> $session
+ * @return array{session: array<string, mixed>, tool_call: array<string, mixed>}
+ */
+function novamira_chat_record_tool_result(array $session, int $call_index, mixed $result): array
+{
     $now = time();
     $tool_calls = novamira_chat_session_list($session, key: 'tool_calls');
     $tool_calls[$call_index]['status'] = 'succeeded';
@@ -1337,6 +1642,9 @@ function novamira_chat_gutenberg_watch_instruction(array $runtime): string
  */
 function novamira_chat_tool_ability(string $ability_name): WP_Ability|WP_Error
 {
+    if (!novamira_is_enabled()) {
+        return new WP_Error('novamira_chat_abilities_off', novamira_chat_abilities_off_text(), ['status' => 403]);
+    }
     if (function_exists('novamira_enforce_read_mode_registry')) {
         novamira_enforce_read_mode_registry();
     }
@@ -1366,7 +1674,7 @@ function novamira_chat_tool_ability(string $ability_name): WP_Ability|WP_Error
  * @param array<string, mixed> $session
  * @return array{ability: WP_Ability, ability_name: string, tool_call: array<string, mixed>}|WP_Error
  */
-function novamira_chat_prepare_tool_execution(array $session, int $call_index, bool $yolo): array|WP_Error
+function novamira_chat_prepare_tool_execution(array $session, int $call_index): array|WP_Error
 {
     $tool_call = is_array($session['tool_calls'][$call_index] ?? null) ? $session['tool_calls'][$call_index] : [];
     $ability_name = (string) ($tool_call['ability'] ?? '');
@@ -1378,9 +1686,7 @@ function novamira_chat_prepare_tool_execution(array $session, int $call_index, b
     $risk = is_array($tool_call['risk'] ?? null)
         ? novamira_chat_assoc_array($tool_call['risk'])
         : novamira_chat_ability_risk($ability);
-    $approval_missing =
-        novamira_chat_tool_needs_approval($session, $ability_name, $risk, $yolo)
-        && ($tool_call['status'] ?? '') !== 'approved';
+    $approval_missing = novamira_chat_tool_needs_approval($risk) && ($tool_call['status'] ?? '') !== 'approved';
     if ($approval_missing) {
         return new WP_Error(
             'novamira_chat_approval_required',
@@ -1408,14 +1714,18 @@ function novamira_chat_prepare_tool_execution(array $session, int $call_index, b
  */
 function novamira_chat_request_session(WP_REST_Request $request): array|WP_Error
 {
+    $session = novamira_chat_get_session(novamira_chat_request_session_id($request));
+    return $session ?? novamira_chat_not_found();
+}
+
+function novamira_chat_request_session_id(WP_REST_Request $request): string
+{
     $params = $request->get_json_params();
     $session_id = is_string($params['session_id'] ?? null) ? sanitize_text_field($params['session_id']) : '';
     if ($session_id === '' && is_string($request['id'] ?? null)) {
         $session_id = sanitize_text_field($request['id']);
     }
-
-    $session = novamira_chat_get_session($session_id);
-    return $session ?? novamira_chat_not_found();
+    return $session_id;
 }
 
 function novamira_chat_not_found(): WP_Error
@@ -2309,7 +2619,7 @@ function novamira_chat_risk_reason(
         $code_execution => __('Code execution or WP-CLI ability.', domain: 'novamira'),
         $filesystem_write => __('Filesystem or content write ability.', domain: 'novamira'),
         $destructive => __('Destructive ability.', domain: 'novamira'),
-        $unknown => __('Unknown risk metadata.', domain: 'novamira'),
+        $unknown => __('Unknown ability metadata.', domain: 'novamira'),
         default => __('Non-read ability.', domain: 'novamira'),
     };
 }
@@ -2346,21 +2656,13 @@ function novamira_chat_find_tool(string $name, array $tools): ?array
 }
 
 /**
- * @param array<string, mixed> $session
+ * Whether a call waits for a person: what the approvals say must ask, or what Chat's own rule asks in read mode.
+ *
  * @param array<string, mixed> $risk
  */
-// @mago-expect lint:no-boolean-flag-parameter
-function novamira_chat_tool_needs_approval(array $session, string $ability_name, array $risk, bool $yolo): bool
+function novamira_chat_tool_needs_approval(array $risk): bool
 {
-    if (($risk['requires_approval'] ?? true) !== true) {
-        return false;
-    }
-    if ($yolo) {
-        return false;
-    }
-    $allowlist = is_array($session['allowlist'] ?? null) ? $session['allowlist'] : [];
-
-    return !in_array($ability_name, $allowlist, strict: true);
+    return ($risk['must_ask'] ?? false) === true || ($risk['requires_approval'] ?? true) === true;
 }
 
 /**
@@ -2493,6 +2795,7 @@ function novamira_chat_meta_tool_specs(): array
                         'description' => 'Required approval reason. A very short single-line question to the user, e.g. "May I update this post now?"',
                         'minLength' => 1,
                     ],
+                    'attention' => NOVAMIRA_CHAT_ATTENTION_SCHEMA,
                 ],
                 'required' => ['ability_name', 'confirmation_reason'],
             ],
@@ -2592,11 +2895,35 @@ function novamira_chat_meta_ability_info(array $args, array $tools): array
         return ['error' => sprintf('Unknown ability: %s. Call discover-abilities to get valid ability names.', $name)];
     }
 
-    return [
+    $info = [
         'ability_name' => $name,
         'description' => (string) ($tool['description'] ?? ''),
         'input_schema' => $tool['input_schema'] ?? null,
     ];
+    // How to use the ability, as MCP's get-ability-info gives it (execute-php keeps its PHP rules there).
+    $instructions = novamira_chat_ability_instructions($name);
+    if ($instructions !== '') {
+        $info['instructions'] = $instructions;
+    }
+    return $info;
+}
+
+/** The instructions an ability carries in its annotations, or nothing. */
+function novamira_chat_ability_instructions(string $name): string
+{
+    if (!function_exists('wp_get_ability')) {
+        return '';
+    }
+    $ability = wp_get_ability($name);
+    if (!$ability instanceof WP_Ability) {
+        return '';
+    }
+    /** @var mixed $annotations */
+    $annotations = $ability->get_meta_item('annotations');
+    if (!is_array($annotations) || !is_string($annotations['instructions'] ?? null)) {
+        return '';
+    }
+    return trim($annotations['instructions']);
 }
 
 /**
@@ -2625,6 +2952,13 @@ function novamira_chat_prepare_function_schema(array $schema): array
     return $schema;
 }
 
+const NOVAMIRA_CHAT_ATTENTION_SCHEMA = [
+    'type' => 'integer',
+    'minimum' => 0,
+    'maximum' => 10,
+    'description' => 'How much a person should look at this call before it runs, 0-10. Required for Novamira abilities that run code or change the site.',
+];
+
 /**
  * @param array<string, mixed>|null $schema
  * @return array<string, mixed>
@@ -2652,6 +2986,7 @@ function novamira_chat_schema_with_confirmation_reason(?array $schema): array
         'description' => 'Required approval reason. Phrase it as a very short single-line question to the user, such as "May I update this file now?"',
         'minLength' => 1,
     ];
+    $properties['attention'] = NOVAMIRA_CHAT_ATTENTION_SCHEMA;
     $schema['properties'] = $properties;
 
     $required = is_array($schema['required'] ?? null)
@@ -2687,6 +3022,7 @@ function novamira_chat_system_instruction(): string
         'Prefer a specific, scoped ability (for example updating a post or a product) over general code execution. Reach for code execution only when no scoped ability fits the task.',
         'Do not emit JSON-encoded tool calls in text.',
         'execute-ability must include confirmation_reason: a very short, single-line question for the user, ideally under 12 words. Discovery calls do not need it.',
+        ...novamira_chat_approval_lines(),
         'This Novamira Chat page embeds the Gutenberg finalizer runtime needed to serialize native/static Gutenberg blocks. For Gutenberg queue abilities, do not ask the user to open or keep a separate Block Editor Queue/finalization page while this dashboard is open. If finalizer_runtime.online is false, ask the user to reload Novamira Chat; after enabling a batch, use Gutenberg pending-batch status abilities until it is finalized, failed, or conflicted.',
         'If the task is complete, answer normally in text.',
     ];
@@ -2695,6 +3031,30 @@ function novamira_chat_system_instruction(): string
     // server (which carries no init instructions), it reaches the model through the
     // discover-abilities result, keeping a single copy.
     return implode("\n", $lines);
+}
+
+/**
+ * Approvals and the AI change history, in the same words MCP and REST use: only how the rating is sent differs.
+ *
+ * @return list<string>
+ */
+function novamira_chat_approval_lines(): array
+{
+    $lines = [];
+    if (function_exists('Novamira\\Confirmations\\active') && \Novamira\Confirmations\active()) {
+        $lines[] = 'AI approvals are on. For abilities that change the site, other plugins\' included, also send attention, an integer 0-10 for how much a person should look before it runs. A call at or above the cutoff waits for the user; below it runs at once.';
+        $lines[] = \Novamira\Confirmations\scoring_rules();
+        $lines[] = \Novamira\Confirmations\decision_rule();
+        $lines[] = 'These are estimates that help avoid mistakes, not a security boundary.';
+    }
+    if (
+        function_exists('Novamira\\Journal\\history_instructions')
+        && function_exists('Novamira\\Confirmations\\history_is_on')
+        && \Novamira\Confirmations\history_is_on()
+    ) {
+        $lines[] = \Novamira\Journal\history_instructions();
+    }
+    return $lines;
 }
 
 /**
@@ -2713,7 +3073,7 @@ function novamira_chat_server_instructions(): string
         ? novamira_agent_instructions()
         : apply_filters('novamira_discover_abilities_instructions', novamira_build_server_instructions());
 
-    return is_string($instructions) ? trim($instructions) : '';
+    return is_string($instructions) ? trim(novamira_without_rules_code($instructions)) : '';
 }
 
 /**

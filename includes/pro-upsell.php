@@ -193,16 +193,11 @@ function novamira_render_pro_welcome_notice(): void
     if (novamira_pro_is_active()) {
         return;
     }
-    // Don't show on the Pro page itself or irrelevant screens outside Novamira admin.
+    // Only inside Novamira's own pages: the rest of the dashboard stays free of offers.
     $screen = function_exists('get_current_screen') ? get_current_screen() : null;
     $on_novamira =
         $screen
-        && (
-            str_starts_with($screen->id, 'toplevel_page_novamira')
-            || str_starts_with($screen->id, 'novamira_page_')
-            || $screen->id === 'dashboard'
-            || $screen->id === 'plugins'
-        );
+        && (str_starts_with($screen->id, 'toplevel_page_novamira') || str_starts_with($screen->id, 'novamira_page_'));
     if (!$on_novamira) {
         return;
     }

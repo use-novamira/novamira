@@ -1,3 +1,4 @@
+import { reportApprovals } from "./workspace-approvals";
 import { workspaceData } from "./workspace-config";
 
 /**
@@ -46,9 +47,11 @@ async function refreshReadMode(): Promise<void> {
 			cache: "no-store",
 			headers: { Accept: "application/json" },
 		});
-		const body = (await response.json().catch(() => null)) as { data?: { readMode?: unknown; readModeMessage?: unknown } } | null;
+		const body = (await response.json().catch(() => null)) as { data?: { readMode?: unknown; readModeMessage?: unknown; approvals?: unknown } } | null;
 		const data = body?.data;
 		if (!data || typeof data !== "object") return;
+		// The same check says whether approvals were turned on or skipped since the workspace loaded.
+		reportApprovals(data.approvals);
 		reportedMessage = data.readMode === true ? (typeof data.readModeMessage === "string" && data.readModeMessage !== "" ? data.readModeMessage : FALLBACK_MESSAGE) : "";
 	} catch {
 		// The next check tries again.

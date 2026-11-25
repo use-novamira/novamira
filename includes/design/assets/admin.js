@@ -22,7 +22,7 @@
     }
 
     function cssValue(v) {
-        return v.replace(/[;{}<>]/g, '').trim();
+        return v.replace(/[;{}<>]/g, '').replace(/\b(?:url|image-set|image|cross-fade|element|src)\s*\(/gi, '(').trim();
     }
 
     function cssLength(v) {

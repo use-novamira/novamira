@@ -1,6 +1,7 @@
 import "./workspace.css";
 
 import { WorkspaceAgentGuidance } from "./workspace-agent-guidance";
+import { approvalInstructions, javascriptFindings, pageActionDecision } from "./workspace-approvals";
 import { WorkspaceBackendTools } from "./workspace-backend-tools";
 import { WorkspaceConfirmations } from "./workspace-confirmations";
 import {
@@ -10,6 +11,7 @@ import {
 	WORKSPACE_PROTOCOL_NAME,
 	WORKSPACE_PROTOCOL_VERSION,
 	WORKSPACE_TABS_KEY,
+	cardString,
 	workspaceData,
 } from "./workspace-config";
 import { WorkspaceDispatcher } from "./workspace-dispatcher";
@@ -19,7 +21,6 @@ import type {
 	ConfirmableModelAction,
 	PageElementRefStore,
 	PageInteractionName,
-	PendingConfirmation,
 	StoredWorkspaceTabs,
 	WorkspacePage,
 	WorkspaceState,
@@ -35,6 +36,12 @@ const AGENT_ACTION_INDICATOR_MS = 8000;
  * WordPress uses different separators per context (admin "‹ … —", frontend "–"),
  * so we remove known segments rather than splitting on a single delimiter.
  */
+/** What the site's administrator wants to approve, added to the request guide while approvals are on. */
+function approvalGuide(): string {
+	const instructions = approvalInstructions();
+	return instructions === "" ? "" : ` ${instructions}`;
+}
+
 function cleanPageTitle(rawTitle: string | null | undefined, fallback: string): string {
 	let title = (rawTitle ?? "").replace(/\s+/g, " ").trim();
 	if (!title) return fallback;
@@ -90,7 +97,6 @@ const NOVAMIRA_VISUAL_LOGO =
 class AgentWorkspace {
 	private root: HTMLElement;
 	private statusText!: HTMLSpanElement;
-	private allToolsStatusEl!: HTMLButtonElement;
 	private connectionInput!: HTMLInputElement;
 	private connectionBtn!: HTMLButtonElement;
 	private connectionForm!: HTMLFormElement;
@@ -107,7 +113,6 @@ class AgentWorkspace {
 	private welcomeMain: HTMLElement | null = null;
 	private welcomeDismissed = false;
 	private abilitiesConsentSection: HTMLElement | null = null;
-	private abilitiesJustEnabled = false;
 	private configureViewEl: HTMLElement | null = null;
 	private connectViewEl: HTMLElement | null = null;
 	private showConnectView: boolean | null = null;
@@ -155,12 +160,10 @@ class AgentWorkspace {
 		this.render();
 		this.confirmations = new WorkspaceConfirmations(this.confirmationsEl, {
 			log: (message) => this.log(message),
-			setAllToolsAllowed: (allowed) => this.setAllToolsAllowed(allowed),
 		});
 		this.backendTools = new WorkspaceBackendTools({
 			log: (message) => this.log(message),
-			confirmToolAction: (action, request, run) => this.confirmations.enqueueToolConfirmation(action, request, run),
-			isToolAllowed: (action) => this.confirmations.isToolAllowed(action),
+			confirmToolAction: (action, request, run, onDeny) => this.confirmations.enqueueToolConfirmation(action, request, run, onDeny),
 		});
 		this.dispatcher = new WorkspaceDispatcher({
 			getActivePageId: () => this.getActivePageId(),
@@ -171,11 +174,11 @@ class AgentWorkspace {
 			reloadPage: (pageId, agentAction) => this.reloadPage(pageId, agentAction),
 			inspectPage: (pageId, agentAction, includeText, textLimit, includeToolInputs) => this.inspectPage(pageId, agentAction, includeText, textLimit, includeToolInputs),
 			confirmPageInteraction: (name, params, agentAction, run) => this.confirmPageInteraction(name, params, agentAction, run),
-			evalInPage: (pageId, code, agentAction) => this.evalInPage(pageId, code, agentAction),
+			evalInPage: (pageId, code, params, agentAction) => this.evalInPage(pageId, code, params, agentAction),
 			getActionStatus: (actionId) => this.getActionStatus(actionId),
 			waitForAction: (actionId, timeoutMs) => this.waitForAction(actionId, timeoutMs),
 			discoverBackendTools: (params) => this.discoverBackendTools(params),
-			callBackendTool: (name, args, reason, agentAction) => this.callBackendTool(name, args, reason, agentAction),
+			callBackendTool: (name, args, reason, attention, agentAction) => this.callBackendTool(name, args, reason, attention, agentAction),
 			callPageTool: (pageId, toolName, args, reason, agentAction) => this.callPageTool(pageId, toolName, args, reason, agentAction),
 		}, this.pageTools);
 		this.transport = new WorkspaceTransport({
@@ -234,7 +237,6 @@ class AgentWorkspace {
 
 		const actions = document.createElement("div");
 		actions.className = "novamira-visual-workspace-actions";
-		actions.appendChild(this.buildAllToolsStatus());
 		actions.appendChild(this.buildBridgeControls());
 
 		this.configurationBtn = document.createElement("button");
@@ -309,19 +311,6 @@ class AgentWorkspace {
 			this.updateConnectionPanel();
 		});
 		return this.connectionOptionsBtn;
-	}
-
-	private buildAllToolsStatus(): HTMLButtonElement {
-		this.allToolsStatusEl = document.createElement("button");
-		this.allToolsStatusEl.type = "button";
-		this.allToolsStatusEl.className = "novamira-visual-all-tools-status";
-		this.allToolsStatusEl.hidden = true;
-		this.allToolsStatusEl.title = "Allow all is on. Click to turn it off.";
-		this.allToolsStatusEl.setAttribute("aria-label", "Allow all is on. Click to turn it off.");
-		this.allToolsStatusEl.innerHTML =
-			'<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.8 14.2 13H1.8L8 1.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 5.7v3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 11.4h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Allow all</span>';
-		this.allToolsStatusEl.addEventListener("click", () => this.confirmations.disableAllToolsAllowance());
-		return this.allToolsStatusEl;
 	}
 
 	private buildActivityBar(): HTMLElement {
@@ -595,7 +584,7 @@ class AgentWorkspace {
 		const note = document.createElement("p");
 		note.className = "novamira-visual-welcome-note";
 		note.innerHTML =
-			'An experiment for development and staging sites: it may change, or be removed. ' +
+			'An experiment: it may change, or be removed. ' +
 			'Whether it grows depends on the community. ' +
 			'<a href="https://discord.gg/novamira" target="_blank" rel="noopener">Join us on Discord</a> or ' +
 			'<a href="https://facebook.com/groups/novamira" target="_blank" rel="noopener">Facebook</a>.';
@@ -841,105 +830,20 @@ class AgentWorkspace {
 			"Novamira Visual needs AI Abilities on for this site, and they are off right now. They are a site-wide switch, shared with Novamira everywhere on this site, not just here.";
 		section.appendChild(lead);
 
-		const warn = document.createElement("p");
-		warn.className = "novamira-visual-abilities-warn";
-		warn.textContent =
-			"When enabled, AI agents can execute PHP code and perform filesystem operations on this site. For development and staging environments only. Always keep backups.";
-		section.appendChild(warn);
-
-		if (workspaceData.looksProduction) {
-			const production = document.createElement("p");
-			production.className = "novamira-visual-abilities-production";
-			production.textContent =
-				"This looks like a production site. AI Abilities are not meant for live sites: turn them on only on a development or staging copy.";
-			section.appendChild(production);
-		}
-
 		const sitewide = document.createElement("p");
 		sitewide.className = "novamira-visual-abilities-sitewide";
-		sitewide.textContent = "You can turn them off again anytime from Novamira's Configuration page.";
+		sitewide.textContent = "Turn them on from Novamira's Configuration page, then come back here.";
 		section.appendChild(sitewide);
-
-		const proceed = document.createElement("button");
-		proceed.type = "button";
-		proceed.className = "button button-primary novamira-visual-welcome-start";
-		proceed.textContent = "Enable & continue";
-		proceed.disabled = true;
-
-		const confirmRow = document.createElement("label");
-		confirmRow.className = "novamira-visual-abilities-confirm";
-		const checkbox = document.createElement("input");
-		checkbox.type = "checkbox";
-		const confirmText = document.createElement("span");
-		confirmText.textContent = workspaceData.looksProduction
-			? "I understand this may be a live site, and that AI agents will be able to execute PHP code and access the filesystem on it."
-			: "I understand AI agents will be able to execute PHP code and access the filesystem on this site.";
-		confirmRow.append(checkbox, confirmText);
-		checkbox.addEventListener("change", () => {
-			proceed.disabled = !checkbox.checked;
-		});
-		section.appendChild(confirmRow);
-
-		const enableError = document.createElement("p");
-		enableError.className = "novamira-visual-abilities-production";
-		enableError.hidden = true;
-		section.appendChild(enableError);
 
 		const actions = document.createElement("div");
 		actions.className = "novamira-visual-welcome-actions";
-
-		proceed.addEventListener("click", () => {
-			if (!checkbox.checked) return;
-			proceed.disabled = true;
-			enableError.hidden = true;
-			this.setAbilities(true)
-				.then((nowEnabled) => {
-					if (nowEnabled) {
-						this.abilitiesJustEnabled = true;
-						this.updateConnectionPanel();
-						return;
-					}
-					// The endpoint ran but abilities did not turn on. In a live Visual
-					// session this is rare (it means the bundled MCP adapter failed to
-					// load); just let the user retry instead of pretending.
-					proceed.disabled = false;
-					enableError.textContent = "AI Abilities could not be turned on. Please try again.";
-					enableError.hidden = false;
-				})
-				.catch((err) => {
-					proceed.disabled = false;
-					enableError.textContent = "Could not reach the server to turn on AI Abilities. Try again.";
-					enableError.hidden = false;
-					this.logError(err);
-				});
-		});
-		actions.appendChild(proceed);
-
+		const configure = document.createElement("a");
+		configure.className = "button button-primary novamira-visual-welcome-start";
+		configure.href = new URL("admin.php?page=novamira-connect", workspaceData.adminUrl).toString();
+		configure.textContent = "Open Configuration";
+		actions.appendChild(configure);
 		section.appendChild(actions);
 		return section;
-	}
-
-	private async setAbilities(enabled: boolean): Promise<boolean> {
-		const url = new URL("admin-ajax.php", workspaceData.adminUrl);
-		url.searchParams.set("action", "novamira_visual_set_abilities");
-		url.searchParams.set("nonce", workspaceData.nonce);
-		const response = await window.fetch(url, {
-			method: "POST",
-			credentials: "same-origin",
-			headers: { "Content-Type": "application/json", "X-WP-Nonce": workspaceData.nonce },
-			body: JSON.stringify({ enabled }),
-		});
-		const data = (await response.json().catch(() => null)) as { success?: boolean; data?: { enabled?: boolean } } | null;
-		if (!response.ok || data?.success === false) {
-			throw new Error("Failed to update AI Abilities.");
-		}
-
-		// The server reports the actual persisted state, which can differ from the
-		// request (abilities are locked to the site's domain and refuse to enable
-		// when the MCP dependency is missing).
-		const nowEnabled = data?.data?.enabled === true;
-		this.log(nowEnabled ? "AI Abilities enabled for the site." : "AI Abilities are off for the site.");
-		return nowEnabled;
 	}
 
 	private connectFromInput(): void {
@@ -969,11 +873,6 @@ class AgentWorkspace {
 		this.statusText.textContent = text;
 		this.root.classList.toggle("novamira-visual-workspace--connected", connected);
 		this.updateConnectionPanel();
-	}
-
-	private setAllToolsAllowed(allowed: boolean): void {
-		this.allToolsStatusEl.hidden = !allowed;
-		this.root.classList.toggle("novamira-visual-workspace--all-tools-allowed", allowed);
 	}
 
 	private async ensureWorkspaceAuth(): Promise<void> {
@@ -1087,7 +986,7 @@ class AgentWorkspace {
 		setActiveControl(null);
 
 		const firstTime = knownPorts.length === 0;
-		const abilitiesOff = !workspaceData.abilitiesEnabled && !this.abilitiesJustEnabled;
+		const abilitiesOff = !workspaceData.abilitiesEnabled;
 		const showWelcome = !connected && firstTime && !this.welcomeDismissed;
 		const showAbilities = !connected && !showWelcome && abilitiesOff;
 		const showMain = !showWelcome && !showAbilities;
@@ -1430,46 +1329,54 @@ class AgentWorkspace {
 		const pageId = this.pageIdOrActive(params);
 		const page = this.getPage(pageId);
 		if (agentAction) this.markAgentAction(pageId);
-		const action = `page_interaction:${name}` as ConfirmableModelAction;
 		const execute = async () => run(pageId, params);
-		if (this.confirmations.isToolAllowed(action)) return execute();
+		const pageUrl = this.currentPageUrl(page);
+		// Scrolling changes nothing: it never asks, but it does not act on Novamira's pages either.
+		const decision = pageActionDecision(pageUrl, name === "scroll" ? { ...params, attention: 0 } : params);
+		if (!decision.ask) return execute();
 
-		return this.confirmations.enqueueToolConfirmation(action, {
-			title: `Review page action: ${name}`,
-			description: "The agent wants to interact with a page in the browser workspace. This can change the visible page, submit forms, or navigate.",
-			reason: optionalReason(params),
-			details: [
-				{ label: "Page", value: `${page.title} (${page.id})` },
-				{ label: "URL", value: page.url },
-				{ label: "Action", value: name },
-				{ label: "Arguments", value: truncateText(JSON.stringify(params, null, 2), 3000), format: "code" },
-			],
+		// The exact action, without the words and the score the AI added to it.
+		const action = { ...params };
+		delete action.reason;
+		delete action.attention;
+		return this.confirmations.enqueueToolConfirmation(`page_interaction:${name}` as ConfirmableModelAction, {
+			title: `Page action: ${name}`,
+			says: optionalReason(params),
+			why: [],
+			where: `${page.title} · ${pageUrl}`,
+			codeLabel: cardString("showAction"),
+			code: `${name}\n${truncateText(JSON.stringify(action, null, 2), 3000)}`,
 		}, execute);
 	}
 
-	private async evalInPage(pageId: string, code: string, agentAction = false): Promise<unknown> {
+	private async evalInPage(pageId: string, code: string, params: Record<string, unknown>, agentAction = false): Promise<unknown> {
 		if (!WORKSPACE_EVAL_ENABLED) {
 			throw new Error("workspace_eval is disabled.");
 		}
 
 		const page = this.getPage(pageId);
 		if (agentAction) this.markAgentAction(pageId);
-		const request = {
-			title: "Run JavaScript in frame",
-			description:
-				"The agent wants to use the JavaScript escape hatch. Review the target frame and code before allowing it.",
-			details: [
-				{ label: "Page", value: `${page.title} (${page.id})` },
-				{ label: "URL", value: page.url },
-				{ label: "Code", value: code, format: "code" },
-			],
-		} satisfies Pick<PendingConfirmation, "title" | "description" | "details">;
+		const pageUrl = this.currentPageUrl(page);
+		const decision = pageActionDecision(pageUrl, params, code);
+		if (!decision.ask) return this.runEvalInPage(pageId, code);
 
-		if (!this.confirmations.isActionAllowed("workspace_eval")) {
-			return this.confirmations.enqueueConfirmableAction("workspace_eval", request, () => this.runEvalInPage(pageId, code));
+		return this.confirmations.enqueueToolConfirmation("workspace_eval", {
+			title: "Run JavaScript in a page",
+			says: optionalReason(params),
+			why: javascriptFindings(code),
+			where: `${page.title} · ${pageUrl}`,
+			codeLabel: cardString("showCode"),
+			code,
+		}, () => this.runEvalInPage(pageId, code));
+	}
+
+	/** Where the frame is now: the agent may have navigated it since the page was opened. */
+	private currentPageUrl(page: WorkspacePage): string {
+		try {
+			return page.iframe.contentWindow?.location.href ?? page.url;
+		} catch {
+			return page.url;
 		}
-
-		return this.runEvalInPage(pageId, code);
 	}
 
 	private async runEvalInPage(pageId: string, code: string): Promise<unknown> {
@@ -1576,9 +1483,10 @@ class AgentWorkspace {
 		name: string,
 		args: Record<string, unknown>,
 		reason: string,
+		attention: unknown,
 		agentAction = false,
 	): Promise<unknown> {
-		return this.backendTools.callBackendTool(name, args, reason, agentAction);
+		return this.backendTools.callBackendTool(name, args, reason, attention, agentAction);
 	}
 
 	private getPage(pageId: string): WorkspacePage {
@@ -1636,7 +1544,7 @@ class AgentWorkspace {
 			},
 			activePageId: this.activePageId,
 			requestGuide:
-				"Prefer backend tools when available for the job; they are more efficient than driving pages for WordPress data, settings, and files. There is no backend tool for page content: to build or edit a page (Gutenberg blocks or builder content), open it in its editor first (open a new page in the editor when creating one), then use the editor page tools, which only appear once the editor is open. Never write post_content or block markup through execute-php or another backend tool. Use activePageSuggestedNextCall first; it batches initial editor discovery when possible. For builder setup errors before editor tools load, use workspace_discover_backend_tools with search:'check-setup' or the builder name and call a narrow setup tool when available instead of clicking through admin settings. For generic page-only work, call workspace_page_snapshot to get compact @e refs, then read with workspace_page_get_text/get_html/get_attr/get_value or wait with workspace_page_wait. Generic interaction methods workspace_page_click/fill/type/press/select/check/uncheck/scroll require approval in Novamira Visual before running. For builder editors, call workspace_call_page_tool directly with pageId/toolName/args/reason and use page tools, not backend builder tools, for live builder content; editor page tools are curated builder APIs and run without confirmation. Use workspace_discover_backend_tools for backend MCP tools and workspace_call_backend_tool with name/args/reason to run them via WordPress AJAX. For reason, write one short line for the activity log, for example: \"Inspect the active editor structure.\" Avoid custom HTML/CSS/code unless explicitly requested.",
+				"Prefer backend tools when available for the job; they are more efficient than driving pages for WordPress data, settings, and files. There is no backend tool for page content: to build or edit a page (Gutenberg blocks or builder content), open it in its editor first (open a new page in the editor when creating one), then use the editor page tools, which only appear once the editor is open. Never write post_content or block markup through execute-php or another backend tool. Use activePageSuggestedNextCall first; it batches initial editor discovery when possible. For builder setup errors before editor tools load, use workspace_discover_backend_tools with search:'check-setup' or the builder name and call a narrow setup tool when available instead of clicking through admin settings. For generic page-only work, call workspace_page_snapshot to get compact @e refs, then read with workspace_page_get_text/get_html/get_attr/get_value or wait with workspace_page_wait. Send params.attention, an integer from 0 to 10 saying how much a person should look at the action before it runs, with workspace_call_backend_tool, workspace_eval and workspace_page_click/fill/type/press/select/check/uncheck: with approvals on, the person in front of Novamira Visual is asked from the site's cutoff up, and for workspace_eval also when Novamira's check finds requests, cookies, other frames or code built while it runs. An action that waits returns an actionId: tell the user to approve it in Novamira Visual, then call workspace_wait_action. Novamira's own admin pages are never acted on: never approve or deny requests yourself. For builder editors, call workspace_call_page_tool directly with pageId/toolName/args/reason and use page tools, not backend builder tools, for live builder content; editor page tools are curated builder APIs and run without confirmation. Use workspace_discover_backend_tools for backend MCP tools and workspace_call_backend_tool with name/args/reason/attention to run them via WordPress AJAX. For reason, write one short line for the activity log, for example: \"Inspect the active editor structure.\" Avoid custom HTML/CSS/code unless explicitly requested." + approvalGuide(),
 			activePageToolCallGuide: activePage ? this.guidance.getPageToolCallGuide(activePage) : null,
 			activePageSuggestedNextCall: activePage ? this.guidance.getPageSuggestedNextCall(activePage) : null,
 			methods: [

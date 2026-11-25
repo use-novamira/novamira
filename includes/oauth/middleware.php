@@ -156,6 +156,7 @@ function validate_bearer_credential(string $auth, ?ResourceServer $server = null
     if ($user_id <= 0) {
         throw OAuthServerException::accessDenied('Invalid token subject.');
     }
+    request_oauth_token_id((string) $validated->getAttribute('oauth_access_token_id'));
 
     return [
         'user_id' => $user_id,
@@ -506,6 +507,21 @@ function reset_request_context(): void
 {
     $context = &request_context();
     $context = ['identity' => null, 'error' => null];
+    request_oauth_token_id('');
+}
+
+/**
+ * The id of the access token this request signed in with, or nothing. AI approvals look up its client only when they
+ * need it, to keep the calls of one connection together.
+ */
+function request_oauth_token_id(?string $set = null): string
+{
+    /** @var string $token */
+    static $token = '';
+    if ($set !== null) {
+        $token = $set;
+    }
+    return $token;
 }
 
 /** @param list<string> $scopes */

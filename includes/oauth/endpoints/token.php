@@ -31,7 +31,7 @@ function register(): void
 function handle(WP_REST_Request $req): WP_REST_Response
 {
     $client_ip = $_SERVER['REMOTE_ADDR'] ?? '';
-    if ($client_ip !== '' && !ClientValidation\within_endpoint_rate_limit('token', $client_ip)) {
+    if (!ClientValidation\within_endpoint_rate_limit('token', $client_ip === '' ? 'unattributed' : $client_ip)) {
         return new WP_REST_Response(['error' => 'temporarily_unavailable'], 429);
     }
 

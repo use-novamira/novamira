@@ -18,12 +18,12 @@
   <a href="https://www.facebook.com/groups/novamira">Facebook Community</a>
 </p>
 
-Novamira is an open-source WordPress plugin and MCP server that lets AI agents work directly inside WordPress. Agents can run PHP and WP-CLI commands, inspect the database, manage files, understand the active plugins and theme, and build working functionality against the real site.
+Novamira is an open-source WordPress plugin and MCP server that lets AI agents work directly inside WordPress. Agents can run PHP and WP-CLI commands, inspect the database, manage files, understand the active plugins and theme, and build working functionality against the real site. Ready for production since Novamira v2.
 
 The connection is direct between your AI client and your WordPress installation. Novamira is not a hosted proxy and your requests do not pass through Novamira servers.
 
 > [!WARNING]
-> For dev and staging environments. With backups. Always.
+> Approvals rely on your AI's judgement: use a capable AI model, and keep a backup.
 
 ## Videos
 
@@ -41,6 +41,7 @@ See Novamira in real projects, tutorials, and walkthroughs from the WordPress co
 - Compatibility with Claude, Codex, Cursor, Gemini CLI, Antigravity, VS Code with GitHub Copilot, and other MCP clients
 - [Novamira CLI](https://novamira.ai/cli/) for connecting terminal-based coding agents such as Claude Code, Codex CLI, and Gemini CLI
 - Novamira Visual, an experimental browser workspace where you can watch an agent work in WordPress
+- Keys, passwords and common API keys are replaced with `[redacted]` in what the agent receives, to avoid accidental leaks
 
 ## Requirements
 
@@ -62,28 +63,21 @@ See the [quick start guide](https://novamira.ai/quickstart/) for the complete co
 
 Using a terminal-based coding agent? [Novamira CLI](https://novamira.ai/cli/) provides a guided connection for Claude Code, Codex CLI, Gemini CLI, and other agents that can run shell commands.
 
+## AI approvals
+
+Before an action that can change the site, your AI rates how much it deserves a look, following a scale Novamira gives it. Novamira also reads the code and raises the rating of some actions it recognises, such as deleting content, installing plugins, WooCommerce refunds made through WooCommerce's standard functions, or sending data to an address not approved yet. The higher rating counts. At or above the level you choose (**Ask more**, **Balanced** or **Ask less**), the action waits under **Novamira → AI Activity** until a person approves or rejects it, for up to 24 hours.
+
+In the **Abilities Hub** you can set any ability, other plugins' included, to always ask. Under **Novamira → AI Activity → Settings**, in **Also ask before**, you can list in your own words other actions of your site: your AI is told to ask before them, however it does them.
+
+Approvals rely on your AI's judgement and on what Novamira recognises: they do not catch everything, and you can skip them. Approvals are designed to catch the mistakes of an AI working for you. They are not designed to stop an AI, or a person, that is trying to get around them. Use a capable AI model and keep a backup.
+
+### AI change history
+
+While it is on (**Novamira → Features**), Novamira records the database changes your AI makes, with the previous values when it can, for 30 days. To restore something, ask your AI: it reads the history and can make a new change that puts things back. It is not an exact rollback. Files, emails already sent, requests to other services and, if your site sells online, payments are not in the history. With the default settings, emails sent through WordPress while the AI works wait on the page until you send or discard them.
+
 ## Read mode
 
-Read mode lets an agent inspect a site through read abilities, with the abilities that change content, files and settings removed. It is production ready, and it is turned on with [Novamira Pro](https://novamira.ai/pro/). The **Novamira → Read Mode** page shows whether it is on, when it was last changed and by whom, and turns it off without needing Pro or a license; `wp novamira read-mode status` and `wp novamira read-mode disable` do the same from WP-CLI. Read mode stays on if Novamira Pro is deactivated or its license expires. While it is on, the Novamira admin-bar entry reads **Novamira · Read Mode** and links to the Read Mode page, and Novamira's admin pages, Chat included, show a notice. Ghost Mode hides all of these from administrators it hides Novamira from.
-
-Read mode is set per site. The setting is read straight from the site's options table, so option filters and object or query caches cannot make it read as off, and a setting that cannot be read keeps read mode on.
-
-While read mode is on:
-
-- Only an allowlist of read abilities can be used, on every request and through every door (MCP, the Novamira REST runner, WordPress core's `wp-abilities/v1`, Novamira Chat, and Novamira Visual). Novamira ships `agent-context`, `discover-abilities`, `get-ability-info`, `execute-ability`, `read-file`, and `list-directory`; Novamira Pro adds its read abilities for posts, terms, users, comments, options, the database schema, and read-only SQL queries, which stay on. On the Read Mode page, an administrator can also allow the read abilities of the Novamira Pro specializations (on until turned off) and the read abilities other plugins declare (off until turned on). Everything else, including `execute-php`, WP-CLI, file writes, uploads, admin access links, skills, Novamira Design, and the Block Editor Queue abilities (including its block type reads), is unregistered or refused.
-- The abilities read mode allows are the ones Novamira ships, the ones Novamira Pro adds, and the ones an administrator chooses on the Read Mode page. They are decided once, after all plugins have loaded, and an ability is allowed only when it is registered with exactly the implementation that is expected for it.
-- A name alone is not enough: read mode checks that the ability is registered with exactly the callbacks expected for it, as the plain `WP_Ability` class, so an ability another plugin registers under an allowlisted name, re-registers, or changes with a `wp_register_ability_args` filter is refused.
-- The abilities that run PHP or WP-CLI commands, `execute-php` and `run-wp-cli`, also refuse in read mode when they are called directly, without going through the registry. Every other ability relies on the checks all abilities share.
-- An administrator can allow the abilities that other plugins declare `readonly`, a declaration any provider can make. The option is off by default, and Novamira Pro offers it on the Read Mode page. Turned on, every registered ability outside Novamira's own namespaces that is the plain `WP_Ability` class and carries `readonly` set to true is kept, without checking its callbacks. Novamira cannot verify those declarations, so allowing these abilities means trusting the plugin that registered them.
-- The MCP tool list does not change: `discover-abilities`, `get-ability-info`, and `execute-ability` are listed whether read mode is on or off. `discover-abilities` and `get-ability-info` show only the allowed abilities, and `execute-ability` runs only those, refusing anything else with the read-mode message. Any other MCP tool, resource, or prompt on Novamira's MCP servers that is not backed by an allowed ability, including callable tools added through `novamira_mcp_adapter_default_server_config`, is removed before a request is handled.
-- No skills are loaded and no skill prompts are registered: `agent-context` returns no skills.
-- The agent's instructions contain only the read-mode guidance: the abilities it can use right now, built from the guidance line each allowed ability carries, what it cannot do, that an ability discovery does not list is unavailable because of read mode (not licensing) or, when only the abilities Novamira ships remain because Novamira Pro or its license is not active, that read mode cannot be used as intended and that an administrator can turn it off, and that it must not try to make changes by other means. The `novamira_discover_abilities_instructions` filter is not applied, so custom instructions and add-on additions are left out.
-- Novamira Visual does not work: its workspace page is not served and says why, its backend tools refuse every request, every workspace method refuses, and its Gutenberg editor exposes no tool. A workspace that was open before read mode was turned on stops within a few seconds. After read mode is turned off, an editor that already had Novamira Visual open needs to be reloaded.
-- Upload links and admin access links are refused, including links created before read mode was turned on.
-- The Abilities Hub looks as usual but lists only the read abilities read mode allows: the ones it requires are marked and cannot be turned off, and each of the others can be turned off and on by itself, whatever feature owns it. The Features page shows a notice and cannot be changed: many of its features are not available while read mode is on. An MCP session that is already open over STDIO needs a restart to see a change in the Abilities Hub or in the groups chosen on the Read Mode page.
-Read mode allows abilities that do not change a site's content, files or settings. Some of them may still change temporary data while they run, for example by clearing an expired transient, rebuilding a cache or a generated file, or updating a counter, the way WordPress and its plugins do on any request to the site, and other plugins can react to a read through their own hooks, for example by emptying a page cache. In Novamira, readonly means exactly this. The list of abilities allowed in read mode may change over time.
-
-Read mode is not a security feature: it limits what Novamira offers an agent, not what an administrator can do. It does not stop a plugin written to defeat it: any plugin runs with the same privileges as Novamira and can remove its hooks. The agent still signs in as an administrator, and anyone with those credentials can do anything an administrator can, for example through wp-admin or the WordPress REST API. Read mode applies to Novamira: it does not turn off the other tools of the AI client, so a browser or another MCP server can still make changes if they are left enabled. Hooks other plugins attach to an allowed read, such as `wp_before_execute_ability`, still run and can have side effects. Sandbox plugins in `wp-content/novamira-sandbox/` keep running, and WordPress, Novamira, and other plugins still write their own bookkeeping (sessions, cron, transients, last-used timestamps) as usual. On a multisite network, read mode on one site does not stop an agent connected to another site, where read mode is off, from writing to the shared database.
+Read mode, turned on with [Novamira Pro](https://novamira.ai/pro/), lets an agent inspect a site with read abilities only: the abilities that change content, files and settings are removed. The **Novamira → Read Mode** page shows whether it is on and turns it off without needing Pro or a license; `wp novamira read-mode disable` does the same from WP-CLI. Read mode is not a security feature: it limits what Novamira offers an agent, not what an administrator or another plugin can do.
 
 ## Documentation
 

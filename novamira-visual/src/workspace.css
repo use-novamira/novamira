@@ -98,47 +98,10 @@ body.novamira-visual-workspace-document {
   margin-left: auto;
 }
 
-.novamira-visual-all-tools-status {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid rgba(248, 202, 80, 0.42);
-  border-radius: 8px;
-  background: rgba(248, 202, 80, 0.1);
-  color: var(--novamira-visual-yellow);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1;
-  text-transform: uppercase;
-}
 
-.novamira-visual-all-tools-status:hover,
-.novamira-visual-all-tools-status:focus {
-  border-color: rgba(248, 202, 80, 0.72);
-  background: rgba(248, 202, 80, 0.16);
-  color: var(--novamira-visual-yellow-strong);
-  outline: none;
-}
 
-.novamira-visual-all-tools-status:focus-visible {
-  outline: 2px solid var(--novamira-visual-yellow);
-  outline-offset: 1px;
-}
 
-.novamira-visual-all-tools-status[hidden] {
-  display: none;
-}
 
-.novamira-visual-all-tools-status svg {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-}
 
 .novamira-visual-workspace-title {
   display: inline-flex;
@@ -559,8 +522,22 @@ body.novamira-visual-workspace-document {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
 }
 
-.novamira-visual-confirmation-eyebrow {
-  display: none;
+.novamira-visual-confirmation-card .novamira-visual-confirmation-heading {
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--novamira-visual-line);
+  color: var(--novamira-visual-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.novamira-visual-confirmation-card .novamira-visual-confirmation-label {
+  margin: 0 0 4px;
+  color: var(--novamira-visual-dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .novamira-visual-confirmation-card h2 {
@@ -598,24 +575,39 @@ body.novamira-visual-workspace-document {
   color: var(--novamira-visual-text);
 }
 
-.novamira-visual-confirmation-details dt.novamira-visual-confirmation-reason-label {
-  color: var(--novamira-visual-muted);
+.novamira-visual-confirmation-card .novamira-visual-confirmation-where {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 
-.novamira-visual-confirmation-details dd.novamira-visual-confirmation-reason {
-  margin-top: 2px;
-  padding: 11px 13px;
+.novamira-visual-confirmation-found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.novamira-visual-confirmation-chip {
+  padding: 3px 9px;
   border: 1px solid var(--novamira-visual-line);
-  border-radius: 9px;
+  border-radius: 999px;
   background: var(--novamira-visual-bg);
   color: var(--novamira-visual-text);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
+  font-size: 12px;
 }
 
-.novamira-visual-confirmation-details code {
-  display: block;
+.novamira-visual-confirmation-code {
+  margin-top: 4px;
+}
+
+.novamira-visual-confirmation-code summary {
+  cursor: pointer;
+  color: var(--novamira-visual-muted);
+  font-size: 13px;
+}
+
+.novamira-visual-confirmation-code pre {
+  margin: 8px 0 0;
   max-height: 220px;
   overflow: auto;
   padding: 12px;
@@ -630,9 +622,12 @@ body.novamira-visual-workspace-document {
 .novamira-visual-confirmation-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 10px;
   margin-top: 20px;
+}
+
+.novamira-visual-confirmation-card .novamira-visual-confirmation-note {
+  font-size: 12px;
 }
 
 .novamira-visual-workspace .button.novamira-visual-confirmation-button {
@@ -662,58 +657,18 @@ body.novamira-visual-workspace-document {
   color: #ffffff;
 }
 
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-once {
+.novamira-visual-workspace .button.novamira-visual-confirmation-approve {
   border-color: var(--novamira-visual-text);
   background: var(--novamira-visual-text);
   color: #111113;
 }
 
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-once:hover,
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-once:focus {
+.novamira-visual-workspace .button.novamira-visual-confirmation-approve:hover,
+.novamira-visual-workspace .button.novamira-visual-confirmation-approve:focus {
   border-color: #ffffff;
   background: #ffffff;
   color: #111113;
   box-shadow: none;
-}
-
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-session {
-  border-color: var(--novamira-visual-line-strong);
-  background: transparent;
-  color: var(--novamira-visual-text);
-}
-
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-session:hover,
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-session:focus {
-  border-color: var(--novamira-visual-line-strong);
-  background: var(--novamira-visual-panel-soft);
-  color: var(--novamira-visual-text);
-  box-shadow: none;
-}
-
-.novamira-visual-confirmation-advanced-actions {
-  flex: 0 0 100%;
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 2px;
-}
-
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-all {
-  min-height: 28px;
-  padding: 0 10px;
-  border-color: rgba(255, 92, 92, 0.26);
-  border-style: dashed;
-  background: rgba(255, 92, 92, 0.045);
-  color: #d6b0b0;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-all:hover,
-.novamira-visual-workspace .button.novamira-visual-confirmation-allow-all:focus {
-  border-color: rgba(255, 92, 92, 0.5);
-  background: rgba(255, 92, 92, 0.08);
-  color: #ffd0d0;
-  box-shadow: 0 0 0 1px rgba(255, 92, 92, 0.08);
 }
 
 .novamira-visual-frames {
@@ -963,51 +918,11 @@ body.novamira-visual-workspace-document {
   display: none;
 }
 
-.novamira-visual-abilities-warn {
-  margin: 18px 0 0;
-  padding: 14px 16px;
-  border: 1px solid rgba(248, 202, 80, 0.32);
-  border-radius: 10px;
-  background: rgba(248, 202, 80, 0.08);
-  color: var(--novamira-visual-text);
-  font-size: 13.5px;
-  line-height: 1.5;
-}
-
-.novamira-visual-abilities-production {
-  margin: 12px 0 0;
-  padding: 14px 16px;
-  border: 1px solid rgba(255, 107, 107, 0.4);
-  border-radius: 10px;
-  background: rgba(255, 107, 107, 0.1);
-  color: var(--novamira-visual-red);
-  font-size: 13.5px;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
 .novamira-visual-abilities-sitewide {
   margin: 14px 0 0;
   color: var(--novamira-visual-dim);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.novamira-visual-abilities-confirm {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 18px 0 0;
-  color: var(--novamira-visual-text);
-  font-size: 13.5px;
-  line-height: 1.45;
-  cursor: pointer;
-}
-
-.novamira-visual-abilities-confirm input[type="checkbox"] {
-  flex: 0 0 auto;
-  margin: 2px 0 0;
-  cursor: pointer;
 }
 
 .novamira-visual-connection-eyebrow {

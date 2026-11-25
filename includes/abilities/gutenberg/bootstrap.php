@@ -1136,7 +1136,7 @@ function finalization_url(int $batch_id): string
 
 function finalizer_dashboard_url(): string
 {
-    return add_query_arg(['page' => 'novamira-gutenberg-finalize'], admin_url('admin.php'));
+    return add_query_arg(['page' => 'novamira-ai-activity', 'tab' => 'block-editor'], admin_url('admin.php'));
 }
 
 function batch_label(WP_Post $batch): string

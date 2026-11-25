@@ -31,7 +31,7 @@ interface WorkspaceDispatchHost {
 		agentAction: boolean,
 		run: (pageId: string, params: Record<string, unknown>) => unknown | Promise<unknown>,
 	) => unknown;
-	evalInPage: (pageId: string, code: string, agentAction?: boolean) => Promise<unknown>;
+	evalInPage: (pageId: string, code: string, params: Record<string, unknown>, agentAction?: boolean) => Promise<unknown>;
 	getActionStatus: (actionId: string) => unknown;
 	waitForAction: (actionId: string, timeoutMs: number) => Promise<unknown>;
 	discoverBackendTools: (params: Record<string, unknown>) => Promise<unknown>;
@@ -39,6 +39,7 @@ interface WorkspaceDispatchHost {
 		name: string,
 		args: Record<string, unknown>,
 		reason: string,
+		attention: unknown,
 		agentAction?: boolean,
 	) => Promise<unknown>;
 	callPageTool: (
@@ -114,6 +115,7 @@ export class WorkspaceDispatcher {
 				return this.host.evalInPage(
 					requiredString(params, "pageId"),
 					requiredString(params, "code"),
+					objectParams(params),
 					true
 				);
 			case "workspace_get_action_status":
@@ -132,6 +134,7 @@ export class WorkspaceDispatcher {
 						backendToolName(callParams),
 						objectParams(callParams.args ?? {}),
 						optionalReason(callParams),
+						callParams.attention,
 						true,
 					);
 				}

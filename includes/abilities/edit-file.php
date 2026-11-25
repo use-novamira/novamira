@@ -51,6 +51,11 @@ wp_register_ability('novamira/edit-file', [
             'path' => ['type' => 'string', 'description' => 'Absolute path to the edited file.'],
             'replacements' => ['type' => 'integer', 'description' => 'Number of replacements made.'],
             'size' => ['type' => 'integer', 'description' => 'Final file size in bytes.'],
+            'runs_on_every_request' => [
+                'type' => 'boolean',
+                'description' => 'Present when the file is sandbox PHP that is enabled and loads on every request.',
+            ],
+            'note' => ['type' => 'string', 'description' => 'What the edit means for the site, when it matters.'],
         ],
     ],
     'execute_callback' => 'novamira_edit_file',
@@ -164,6 +169,15 @@ function novamira_edit_file($input)
         ? str_replace($old_string, $new_string, $content)
         : novamira_edit_replace_first($content, $old_string, $new_string);
 
+    if (\Novamira\Secrets\introduces_placeholder($content, $new_content)) {
+        return \Novamira\Secrets\placeholder_error();
+    }
+
+    $guard_error = novamira_php_guard_error($resolved, $new_content);
+    if (is_wp_error($guard_error)) {
+        return $guard_error;
+    }
+
     $bytes_written = novamira_replace_file_contents($resolved, $new_content);
     if ($bytes_written === false) {
         return new WP_Error('write_failed', sprintf('Failed to write file: %s', $resolved));
@@ -173,5 +187,6 @@ function novamira_edit_file($input)
         'path' => $resolved,
         'replacements' => $count,
         'size' => $bytes_written,
+        ...novamira_sandbox_write_result($resolved),
     ];
 }

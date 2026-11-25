@@ -123,6 +123,8 @@ add_filter(
 );
 add_filter('rest_request_after_callbacks', callback: 'novamira_leave_mcp_request', priority: PHP_INT_MAX);
 
+add_filter('novamira_mcp_adapter_default_transport_permission_user_capability', callback: static fn(): string => novamira_manage_capability());
+
 /**
  * Create an MCP server that mirrors the canonical Novamira server — same tools, resources, and
  * prompts — under a different id and route. Shared by the legacy alias and the OAuth endpoint so

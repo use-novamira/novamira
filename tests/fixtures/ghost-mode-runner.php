@@ -526,11 +526,6 @@ namespace {
         return null;
     };
 
-    $scenarios['update_notice'] = static function (array $args): mixed {
-        \Novamira\GhostMode\render_pending_update_notice();
-        return null;
-    };
-
     $scenarios['page'] = static function (array $args): mixed {
         if (($args['panel'] ?? false) === true) {
             add_action(\Novamira\GhostMode\PANEL_HOOK, 'pro_panel');

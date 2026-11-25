@@ -32,8 +32,6 @@ add_filter('all_plugins', __NAMESPACE__ . '\\filter_plugin_list', priority: PHP_
 add_filter('site_transient_update_plugins', __NAMESPACE__ . '\\project_update_transient', priority: PHP_INT_MAX);
 add_action('admin_notices', __NAMESPACE__ . '\\render_bypass_notice');
 add_action('network_admin_notices', __NAMESPACE__ . '\\render_bypass_notice');
-add_action('admin_notices', __NAMESPACE__ . '\\render_pending_update_notice');
-add_action('network_admin_notices', __NAMESPACE__ . '\\render_pending_update_notice');
 
 foreach ([
     'load-plugins.php',

@@ -13,7 +13,6 @@ if (!defined('ABSPATH')) {
 
 function boot_gutenberg_finalizer_admin(): void
 {
-    add_action('admin_menu', __NAMESPACE__ . '\\register_gutenberg_finalizer_menu', priority: 60);
     add_action('admin_enqueue_scripts', __NAMESPACE__ . '\\enqueue_gutenberg_finalizer_assets');
     add_filter(
         'wp_client_side_media_processing_enabled',
@@ -40,27 +39,6 @@ function disable_gutenberg_finalizer_editor_client_side_media_processing(mixed $
     }
 
     return $enabled;
-}
-
-function gutenberg_finalizer_page_slug(): string
-{
-    return 'novamira-gutenberg-finalize';
-}
-
-function register_gutenberg_finalizer_menu(): void
-{
-    if (!defined('NOVAMIRA_VERSION')) {
-        return;
-    }
-
-    add_submenu_page(
-        parent_slug: 'novamira-connect',
-        page_title: __('Block Editor Queue', domain: 'novamira'),
-        menu_title: __('Block Editor Queue', domain: 'novamira'),
-        capability: novamira_manage_capability(),
-        menu_slug: gutenberg_finalizer_page_slug(),
-        callback: __NAMESPACE__ . '\\render_gutenberg_finalizer_page',
-    );
 }
 
 function enqueue_gutenberg_finalizer_assets(string $hook_suffix): void
@@ -382,7 +360,7 @@ function enqueue_gutenberg_finalizer_runtime_assets(): void
 
 function is_gutenberg_finalizer_request(): bool
 {
-    return ($_GET['page'] ?? '') === gutenberg_finalizer_page_slug();
+    return novamira_is_ai_activity_tab('block-editor');
 }
 
 function is_gutenberg_finalizer_editor_request(): bool
@@ -390,20 +368,15 @@ function is_gutenberg_finalizer_editor_request(): bool
     return ($_GET['novamira_gb_finalizer'] ?? '') === '1';
 }
 
-function render_gutenberg_finalizer_page(): void
+/** The Block Editor Queue tab of AI Activity: the page the AI's block editor work is finished in. */
+function render_gutenberg_finalizer_tab(): void
 {
     if (!novamira_current_user_can_manage()) {
         return;
     }
 
-    if (function_exists('novamira_render_admin_header')) {
-        novamira_render_admin_header();
-    }
-
     ?>
-    <div class="wrap novamira-gb-finalizer" id="novamira-gb-finalizer">
-        <h1 class="wp-heading-inline"><?php esc_html_e('Block Editor Queue', domain: 'novamira'); ?></h1>
-        <hr class="wp-header-end">
+    <div class="novamira-gb-finalizer" id="novamira-gb-finalizer">
         <?php render_gutenberg_finalizer_styles(); ?>
 
         <?php render_gutenberg_finalizer_page_content(); ?>

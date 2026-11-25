@@ -231,6 +231,38 @@ function novamira_sandbox_file_is_disabled(string $path): bool
 }
 
 /**
+ * Whether the sandbox loader runs this file on every request: a .php file at the top of the sandbox, not disabled.
+ */
+function novamira_sandbox_file_runs(string $path): bool
+{
+    if (!str_ends_with(strtolower($path), '.php') || !defined('NOVAMIRA_SANDBOX_DIR')) {
+        return false;
+    }
+    $sandbox = novamira_get_sandbox_dir();
+    return (
+        rtrim(dirname($path), characters: '/\\') === rtrim($sandbox, characters: '/\\')
+        && is_file($path)
+        && !novamira_sandbox_file_is_disabled($path)
+    );
+}
+
+/**
+ * The fields a write adds when the file runs at once, so the AI does not describe enabling it as a later step.
+ *
+ * @return array<string, bool|string>
+ */
+function novamira_sandbox_write_result(string $path): array
+{
+    if (!novamira_sandbox_file_runs($path)) {
+        return [];
+    }
+    return [
+        'runs_on_every_request' => true,
+        'note' => 'This sandbox PHP file is enabled and loads on every request from now on: novamira/enable-file is not needed.',
+    ];
+}
+
+/**
  * Create a disabled marker without replacing an existing filesystem entry.
  */
 function novamira_create_sandbox_disabled_marker(string $path): bool
@@ -416,6 +448,115 @@ function novamira_check_php_sandbox(string $resolved): bool|WP_Error
     return true;
 }
 
+/** Extensions a web server may be set up to run as PHP, not only .php. */
+const NOVAMIRA_PHP_EXTENSIONS = ['php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phar'];
+
+/**
+ * Why a file a web server may run as PHP cannot be saved: it must stop at once when it is opened directly, outside
+ * WordPress. Null when the path is not such a file or the content starts with that check.
+ */
+function novamira_php_guard_error(string $path, string $content): ?WP_Error
+{
+    if (
+        !in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), NOVAMIRA_PHP_EXTENSIONS, strict: true)
+        || novamira_has_abspath_guard($content)
+    ) {
+        return null;
+    }
+    return new WP_Error(
+        'novamira_php_guard_required',
+        "PHP files must start with if (!defined('ABSPATH')) { exit; }, right after <?php and any declare, namespace or "
+        . 'use line, so they do nothing when opened directly in a browser. Nothing was saved: add it and send the file '
+        . 'again.',
+        ['status' => 400],
+    );
+}
+
+/** Whether PHP code stops at once outside WordPress: its first statement checks ABSPATH or WPINC and exits. */
+function novamira_has_abspath_guard(string $content): bool
+{
+    $tokens = token_get_all(str_starts_with($content, "\xEF\xBB\xBF") ? substr($content, offset: 3) : $content);
+    if (!is_array($tokens[0] ?? null) || $tokens[0][0] !== T_OPEN_TAG) {
+        return false;
+    }
+    $code = novamira_guard_tokens(array_slice($tokens, offset: 1, length: 400));
+    $at = novamira_skip_leading_statements($code);
+    $guard = ($code[$at] ?? '') === 'if'
+        ? ['if', '(', '!', 'defined', '(', 'CONSTANT', ')', ')']
+        : ['defined', '(', 'CONSTANT', ')', 'OR'];
+    foreach ($guard as $expected) {
+        if (($code[$at] ?? '') !== $expected) {
+            return false;
+        }
+        $at++;
+    }
+    if (($code[$at] ?? '') === '{' && $guard[0] === 'if') {
+        $at++;
+    }
+    return ($code[$at] ?? '') === 'EXIT';
+}
+
+/**
+ * The code of a PHP file as words to compare: keywords and punctuation as written, a call to defined() as "defined",
+ * the ABSPATH or WPINC name as "CONSTANT", a real exit or die as "EXIT", || and "or" as "OR". Whitespace and comments
+ * are left out.
+ *
+ * @param array<array-key, string|array{0: int, 1: string, 2: int}> $tokens
+ * @return list<string>
+ */
+function novamira_guard_tokens(array $tokens): array
+{
+    $words = [];
+    foreach ($tokens as $token) {
+        if (is_string($token)) {
+            $words[] = $token;
+            continue;
+        }
+        [$id, $text] = [$token[0], $token[1]];
+        if (in_array($id, [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], strict: true)) {
+            continue;
+        }
+        $words[] = match (true) {
+            $id === T_EXIT => 'EXIT',
+            $id === T_BOOLEAN_OR || $id === T_LOGICAL_OR => 'OR',
+            $id === T_CONSTANT_ENCAPSED_STRING
+                && in_array(substr($text, offset: 1, length: -1), ['ABSPATH', 'WPINC'], strict: true)
+                => 'CONSTANT',
+            in_array(strtolower($text), ['defined', '\\defined'], strict: true) => 'defined',
+            $id === T_IF => 'if',
+            default => $text,
+        };
+    }
+    return $words;
+}
+
+/**
+ * Where the code starts after the statements PHP wants first: declare, namespace and use.
+ *
+ * @param list<string> $code
+ */
+function novamira_skip_leading_statements(array $code): int
+{
+    $at = 0;
+    while (in_array(strtolower($code[$at] ?? ''), ['declare', 'namespace', 'use'], strict: true)) {
+        $declare = strtolower($code[$at]) === 'declare';
+        $ends = match (strtolower($code[$at])) {
+            'declare' => [')'],
+            'namespace' => [';', '{'],
+            default => [';'],
+        };
+        while ($at < count($code) && !in_array($code[$at], $ends, strict: true)) {
+            $at++;
+        }
+        $at++;
+        // A declare that applies to a statement or block of its own is code that runs first, not a directive.
+        if ($declare && ($code[$at++] ?? '') !== ';') {
+            return count($code);
+        }
+    }
+    return $at;
+}
+
 /**
  * Check whether a path can directly affect PHP execution and must stay in the sandbox.
  *
@@ -427,7 +568,7 @@ function novamira_path_requires_php_sandbox(string $resolved): bool
     $filename = strtolower(basename($resolved));
     $extension = strtolower(pathinfo($resolved, PATHINFO_EXTENSION));
 
-    if ($extension === 'php') {
+    if (in_array($extension, NOVAMIRA_PHP_EXTENSIONS, strict: true)) {
         return true;
     }
 
@@ -898,16 +1039,6 @@ function novamira_likely_self_signed_https(): bool
 }
 
 /**
- * Has the current user dismissed the production warning?
- */
-function novamira_production_warning_dismissed(): bool
-{
-    /** @var mixed $value */
-    $value = get_user_meta(get_current_user_id(), key: 'novamira_production_warning_dismissed', single: true);
-    return $value === '1' || $value === 1 || $value === true;
-}
-
-/**
  * Runtime permission check for privileged Novamira administration.
  */
 function novamira_current_user_can_manage(): bool
@@ -1230,27 +1361,6 @@ function novamira_enrich_disabled_ability_error(mixed $result, mixed $args): mix
 }
 
 /**
- * Handle the dismiss-production-warning form submission. Called from admin_init.
- */
-function novamira_handle_dismiss_production_warning(): void
-{
-    if (($_POST['novamira_dismiss_production_warning'] ?? null) === null) {
-        return;
-    }
-
-    if (!novamira_current_user_can_manage()) {
-        return;
-    }
-
-    check_admin_referer('novamira_dismiss_production_warning');
-
-    update_user_meta(get_current_user_id(), meta_key: 'novamira_production_warning_dismissed', meta_value: '1');
-
-    wp_safe_redirect(admin_url('admin.php?page=novamira-connect'));
-    exit();
-}
-
-/**
  * Check whether abilities are nominally enabled but inactive due to a domain mismatch.
  *
  * @return bool
@@ -1441,27 +1551,73 @@ function novamira_build_building_context_lines(): array
  *
  * @return string
  */
-function novamira_build_server_instructions()
+/**
+ * What keeps the AI from cutting its own connection. Approvals do not replace it: removing the connected user or its
+ * credentials is not always one of the calls that wait for a person.
+ *
+ * @return list<string>
+ */
+function novamira_connection_safety_lines(): array
+{
+    $lines = [
+        '',
+        '## Connection safety',
+        '',
+        'IMPORTANT: Never update, replace, modify, deactivate, uninstall, or delete the Novamira plugin itself, because doing so would interrupt the connection you are currently using.',
+    ];
+    $user_id = wp_get_current_user()->ID;
+    if ($user_id > 0) {
+        $lines[] =
+            'You are connected through WordPress user ID '
+            . $user_id
+            . '. Be careful when modifying this user or its authentication credentials: never revoke or delete its Novamira OAuth connections or Novamira WordPress Application Passwords, because doing so may interrupt the connection you are currently using.';
+    }
+    return $lines;
+}
+
+/**
+ * This site's approval rules and their code, from the start of the conversation, when approvals are on and the site
+ * has rules.
+ *
+ * @return list<string>
+ */
+// @mago-expect lint:no-boolean-flag-parameter -- Whether approvals are on, already worked out by the caller.
+function novamira_site_rules_lines(bool $approvals_on): array
+{
+    $rules = $approvals_on ? \Novamira\Confirmations\site_approval_instructions() : '';
+    if ($rules === '') {
+        return [];
+    }
+    return ['', "## This site's approval rules", '', $rules, \Novamira\Confirmations\rules_code_line()];
+}
+
+/** Server instructions for Novamira Chat and Novamira Visual, which ask for approvals their own way, without a rules code. */
+function novamira_without_rules_code(string $instructions): string
+{
+    $line = function_exists('Novamira\\Confirmations\\rules_code_line')
+        ? \Novamira\Confirmations\rules_code_line()
+        : '';
+    return $line === '' ? $instructions : str_replace("\n" . $line, replace: '', subject: $instructions);
+}
+
+function novamira_build_server_instructions(): string
 {
     // In read mode agents get read-mode guidance only, without the environment or building guidance.
     if (novamira_is_read_mode()) {
         return novamira_read_mode_instructions();
     }
 
-    $current_user = wp_get_current_user();
+    $approvals_on = function_exists('Novamira\\Confirmations\\active') && \Novamira\Confirmations\active();
     $lines = [
-        'Novamira gives you unrestricted control over this WordPress installation.',
-        '',
-        '## Connection safety',
-        '',
-        'IMPORTANT: Never update, replace, modify, deactivate, uninstall, or delete the Novamira plugin itself, because doing so would interrupt the connection you are currently using.',
+        'Novamira gives you unrestricted control over this WordPress installation.'
+            . (
+                $approvals_on
+                    ? ' AI approvals are on: a call that changes the site carries your rating and a one-sentence summary, and from the level the administrator chose it waits for a person in Novamira > AI Activity.'
+                    : ''
+            ),
+        ...novamira_connection_safety_lines(),
+        ...novamira_site_rules_lines($approvals_on),
     ];
-    if ($current_user->ID > 0) {
-        $lines[] =
-            'You are connected through WordPress user ID '
-            . $current_user->ID
-            . '. Be careful when modifying this user or its authentication credentials: never revoke or delete its Novamira OAuth connections or Novamira WordPress Application Passwords, because doing so may interrupt the connection you are currently using.';
-    }
 
     $lines = array_merge($lines, [
         '',
@@ -1522,11 +1678,35 @@ function novamira_build_server_instructions()
         '',
         'Use WordPress hooks (actions/filters), template hierarchy, and REST API',
         'conventions. Write code that integrates with WordPress, not code that ignores it.',
+        '',
+        'Create new posts and pages as drafts unless the user asks to publish them, then tell the user where to',
+        'preview them.',
+        '',
+        ...novamira_php_writing_style_lines(),
     ]);
 
     $lines = array_merge($lines, novamira_build_building_context_lines());
 
     return implode("\n", $lines);
+}
+
+/**
+ * Where the AI reads how to write the PHP sent to execute-php: in the ability's own instructions, so the rules sit
+ * with the ability and leave with it when it is turned off.
+ *
+ * @return list<string>
+ */
+function novamira_php_writing_style_lines(): array
+{
+    if (novamira_ability_has_disabled_rule('novamira/execute-php')) {
+        return [];
+    }
+    return [
+        '## Writing PHP for execute-php',
+        '',
+        'Before your first execute-php call, read its ability info: it says how to write code that can be checked before it runs and does not end in a fatal error.',
+        '',
+    ];
 }
 
 /**
@@ -1600,7 +1780,7 @@ function novamira_render_admin_header(
  */
 function novamira_sandbox_safe_mode_prompt(): string
 {
-    return 'Novamira is in safe mode: a sandbox file caused a fatal error. Read the error details in wp-content/novamira-sandbox/.crashed, fix the file, then delete .crashed to exit safe mode and confirm the site works.';
+    return 'Novamira is in safe mode: a sandbox file caused a fatal error. Read the error details with get_site_option(\'novamira_sandbox_crash\'), fix the file that failed, then delete .crashed to exit safe mode and confirm the site works.';
 }
 
 /**
@@ -1626,7 +1806,7 @@ function novamira_sandbox_safe_mode_notice_link_html(): string
 {
     $link = sprintf(
         '<a href="%s">%s</a>',
-        esc_url(admin_url('admin.php?page=novamira-sandbox')),
+        esc_url(novamira_sandbox_url()),
         esc_html__('Sandbox page', domain: 'novamira'),
     );
 
@@ -1635,4 +1815,16 @@ function novamira_sandbox_safe_mode_notice_link_html(): string
         esc_html__('You can also review the files and exit safe mode from the %s.', domain: 'novamira'),
         $link,
     ));
+}
+
+/** The address of the Sandbox tab of AI Activity. */
+function novamira_sandbox_url(): string
+{
+    return admin_url('admin.php?page=novamira-ai-activity&tab=sandbox');
+}
+
+/** Whether this request shows a tab of AI Activity. */
+function novamira_is_ai_activity_tab(string $tab): bool
+{
+    return ($_GET['page'] ?? '') === 'novamira-ai-activity' && ($_GET['tab'] ?? '') === $tab;
 }

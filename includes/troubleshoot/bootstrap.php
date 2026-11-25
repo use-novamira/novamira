@@ -28,7 +28,7 @@ require_once __DIR__ . '/admin.php';
  */
 function record_mcp_request(mixed $result, mixed $server, WP_REST_Request $request): mixed
 {
-    if (!is_user_logged_in()) {
+    if (!novamira_current_user_can_manage()) {
         return $result;
     }
     $method = mcp_route_method($request->get_route());

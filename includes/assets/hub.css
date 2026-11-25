@@ -106,6 +106,12 @@
     color: var(--nm-muted-2);
 }
 
+.novamira-hub-divider-note {
+    margin: calc(-1 * var(--nm-space-2)) 0 var(--nm-space-3);
+    color: var(--nm-text-soft);
+    font-size: 13px;
+}
+
 .novamira-hub-divider::after {
     content: "";
     flex: 1;
@@ -451,7 +457,30 @@
     margin: 0;
 }
 
+.novamira-hub-feedback {
+    display: block;
+    margin: 4px 0 0;
+    color: #00731f;
+    font-size: 12px;
+}
+
+.novamira-hub-feedback:empty {
+    display: none;
+}
+
 .novamira-hub-group-actions {
     flex: none;
     margin-right: var(--nm-space-2);
+}
+
+/* How an ability asks for approval: a short label, then the choice. */
+.novamira-hub-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.novamira-hub-choice-label {
+    color: #50575e;
+    font-size: 12px;
 }

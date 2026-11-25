@@ -33,7 +33,7 @@ GET  <home>/wp-json/wp-abilities/v1/abilities/<complete-name>
 POST <home>/wp-json/novamira/v1/abilities/<complete-name>/run
 ```
 
-The run body is exactly `{ "input": <any JSON value> }`; `{}` means null. Successful values are not wrapped by the plugin. `novamira/agent-context` and `novamira/skill-get` are required components, not optional enhancements. Discovery is incomplete and must fail as `server_unsupported` if list pagination succeeds but context, a required item route, the shim, or required feature data is absent.
+The run body is `{ "input": <any JSON value> }`, plus two optional members for sites with AI approvals on: `review` (`attention`, `summary`, `details`) and `request_id`; `{}` means null. Successful values are not wrapped by the plugin. `novamira/agent-context` and `novamira/skill-get` are required components, not optional enhancements. Discovery is incomplete and must fail as `server_unsupported` if list pagination succeeds but context, a required item route, the shim, or required feature data is absent.
 
 The main Bearer token is never sent to upload, temporary-administrator, chat, browser-runtime, canonical/legacy protocol, or unrelated REST routes. The CLI wire workflow sends no request to `/mcp/*`, initializes no protocol session, and sends no JSON-RPC body.
 

@@ -59,6 +59,7 @@ final class SkillMutationResolverTest extends TestCase
             function novamira_boot_design_feature(): void {}
             function novamira_boot_chat_feature(): void {}
             function novamira_boot_visual_feature(): void {}
+            function novamira_boot_ai_change_history_feature(): void {}
             function novamira_boot_block_editor_queue_feature(): void {}
             function novamira_deactivate_block_editor_queue_feature(): void {}
 

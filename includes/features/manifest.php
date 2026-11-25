@@ -21,6 +21,7 @@ function deferred_text(string $source, \Closure $translate): array
 }
 
 /** @return array<string, array<string, mixed>> */
+// @mago-expect lint:halstead -- A flat list of feature definitions.
 function core_manifest(): array
 {
     return [
@@ -127,6 +128,26 @@ function core_manifest(): array
             'skills' => [],
             'abilities' => [],
             'boot' => 'novamira_boot_visual_feature',
+        ],
+        'novamira/ai-change-history' => [
+            'kind' => 'feature',
+            'provider' => 'Novamira',
+            'label' => deferred_text('AI change history', static fn(): string => __(
+                'AI change history',
+                domain: 'novamira',
+            )),
+            'description' => deferred_text(
+                'Records the database rows each AI execution changes, with their previous values, so you can review them on the AI Activity page and the AI can restore them when you ask. Adds a few database queries to every AI write.',
+                static fn(): string => __(
+                    'Records the database rows each AI execution changes, with their previous values, so you can review them on the AI Activity page and the AI can restore them when you ask. Adds a few database queries to every AI write.',
+                    domain: 'novamira',
+                ),
+            ),
+            'default_active' => true,
+            'depends_on' => [],
+            'skills' => [],
+            'abilities' => [],
+            'boot' => 'novamira_boot_ai_change_history_feature',
         ],
         'novamira/block-editor-queue' => [
             'kind' => 'feature',

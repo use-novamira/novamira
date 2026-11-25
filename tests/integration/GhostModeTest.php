@@ -372,25 +372,6 @@ final class GhostModeTest extends TestCase
         self::assertSame('', $this->runScenario('bypass_notice', ['users' => self::ADMINS, 'user' => 3, 'bypass' => true, 'option' => ['enabled' => true, 'visible_to' => [1]]])['output']);
     }
 
-    public function testPendingUpdateNoticeForOwnersOnTheUpdateScreens(): void
-    {
-        $free = basename(dirname(__DIR__, levels: 2)) . '/novamira.php';
-        $world = [
-            'users' => self::ADMINS,
-            'option' => ['enabled' => true, 'visible_to' => [1]],
-            'updates' => [$free],
-            'screen' => 'plugins',
-        ];
-
-        $output = $this->runScenario('update_notice', $world + ['user' => 1])['output'];
-        self::assertStringContainsString('do not see it in the Updates screen', $output);
-        self::assertStringContainsString('Go to Updates', $output);
-        self::assertSame('', $this->runScenario('update_notice', $world + ['user' => 2])['output']);
-        self::assertSame('', $this->runScenario('update_notice', ['screen' => 'edit-post'] + $world + ['user' => 1])['output']);
-        self::assertSame('', $this->runScenario('update_notice', ['updates' => []] + $world + ['user' => 1])['output']);
-        self::assertSame('', $this->runScenario('update_notice', ['option' => ['enabled' => false, 'visible_to' => [1]]] + $world + ['user' => 1])['output']);
-    }
-
     public function testFreePagePresentsTheFeatureAndInvitesToProWhenOff(): void
     {
         $output = $this->runScenario('page', ['users' => self::ADMINS, 'user' => 1])['output'];

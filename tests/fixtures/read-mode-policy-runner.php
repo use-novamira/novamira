@@ -541,6 +541,7 @@ namespace {
             require $root . '/includes/abilities/discover-abilities.php';
             require $root . '/includes/chat.php';
             require $root . '/novamira-visual/includes/BackendTools.php';
+            require $root . '/novamira-visual/includes/BackendApprovals.php';
             require $root . '/includes/instructions-admin.php';
             require $root . '/includes/skills/parser.php';
             require $root . '/includes/skills/prompts.php';

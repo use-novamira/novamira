@@ -26,6 +26,12 @@ function wp_json_encode(mixed $value): string|false
     return json_encode($value);
 }
 
+/** Options are kept in the sandbox folder, where the test reads them. */
+function update_site_option(string $name, mixed $value): bool
+{
+    return file_put_contents(NOVAMIRA_SANDBOX_DIR . 'option-' . $name . '.json', json_encode($value)) !== false;
+}
+
 function wp_mkdir_p(string $path): bool
 {
     return is_dir($path) || mkdir($path, permissions: 0755, recursive: true);

@@ -1,7 +1,7 @@
 export type PageStatus = "loading" | "ready" | "error";
 export type PageInteractionName = "click" | "fill" | "type" | "press" | "select" | "check" | "uncheck" | "scroll";
 export type ConfirmableModelAction = "workspace_eval" | `backend_tool:${string}` | `page_tool:${string}` | `page_interaction:${PageInteractionName}`;
-export type ConfirmationDecision = "allow_once" | "allow_session" | "allow_all_tools_session" | "deny";
+export type ConfirmationDecision = "approve" | "deny";
 export type WorkspaceActionStatus = "waiting_for_confirmation" | "running" | "succeeded" | "failed" | "denied";
 
 export interface PageElementRef {
@@ -29,19 +29,25 @@ export interface PageSnapshotItem {
 	attributes: Record<string, string | boolean | number>;
 }
 
-export interface ConfirmationDetail {
-	label: string;
-	value: string;
-	format?: "text" | "code";
+/** What the card shows, laid out as the cards of AI Activity: the AI's words first, the exact action closed. */
+export interface ConfirmationRequest {
+	/** What the action is, for the log and the action's status. */
+	title: string;
+	/** The AI's own words for what it will do. */
+	says: string;
+	/** Why it asks: what Novamira's check found. Empty when the AI's attention alone reached the cutoff. */
+	why: string[];
+	/** Where it acts: the page or the backend tool. */
+	where: string;
+	/** The label of the closed panel, and the exact action inside it. */
+	codeLabel: string;
+	code: string;
 }
 
-export interface PendingConfirmation {
+export interface PendingConfirmation extends ConfirmationRequest {
 	id: number;
 	actionId: string;
 	action: ConfirmableModelAction;
-	title: string;
-	description: string;
-	details: ConfirmationDetail[];
 }
 
 export interface WorkspaceAction {
@@ -54,6 +60,10 @@ export interface WorkspaceAction {
 	result?: unknown;
 	error?: string;
 	run: () => Promise<unknown>;
+	/** Tells whoever holds the request that it was denied or dropped. */
+	onDeny?: () => void;
+	/** How many times the AI waited for the person's decision. */
+	waits?: number;
 }
 
 export interface WorkspacePage {
@@ -63,16 +73,6 @@ export interface WorkspacePage {
 	status: PageStatus;
 	openedAt: number;
 	iframe: HTMLIFrameElement;
-}
-
-export interface BackendToolDefinition {
-	name: string;
-	label?: string;
-	description?: string;
-	category?: string;
-	annotations?: Record<string, unknown>;
-	dangerous?: boolean;
-	requiresConfirmation?: boolean;
 }
 
 export interface PageToolDefinition {

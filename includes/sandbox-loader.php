@@ -14,6 +14,11 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
+/** Where the details of the last sandbox crash are kept. */
+const NOVAMIRA_SANDBOX_CRASH_OPTION = 'novamira_sandbox_crash';
+
+const NOVAMIRA_SANDBOX_CRASH_MARKER_TEXT = 'Novamira sandbox safe mode. The error details are in the novamira_sandbox_crash option.';
+
 /**
  * Writes the .crashed marker, which keeps sandbox files in safe mode from the next request onward.
  *
@@ -23,8 +28,25 @@ if (!defined('ABSPATH')) {
  */
 function novamira_sandbox_write_crash_marker(string $crashed_file, string $sandbox_file, array $error): void
 {
+    // The marker first: it is what keeps the site up. Its name is known and web servers that ignore .htaccess and
+    // web.config may serve it, so it says nothing about the error; the details, which name paths on the server, go in
+    // an option, when the database can still be reached. Nothing here runs on a request that does not crash.
+    file_put_contents($crashed_file, NOVAMIRA_SANDBOX_CRASH_MARKER_TEXT, LOCK_EX);
+    if (!function_exists('update_site_option')) {
+        return;
+    }
     $error['sandbox_file'] = $sandbox_file;
-    file_put_contents($crashed_file, (string) wp_json_encode($error), LOCK_EX);
+    // After running out of memory, PHP keeps the same limit for shutdown: raise it, as WordPress does for admin work.
+    if (function_exists('wp_raise_memory_limit')) {
+        wp_raise_memory_limit('admin');
+    }
+    try {
+        // A network option: on a multisite network the sandbox folder, and so its safe mode, is shared by every site.
+        update_site_option(NOVAMIRA_SANDBOX_CRASH_OPTION, $error);
+
+        // @mago-expect lint:no-empty-catch-clause -- The site stays up without the details: the marker is written.
+    } catch (\Throwable) {
+    }
 }
 
 /**

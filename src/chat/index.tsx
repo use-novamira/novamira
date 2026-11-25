@@ -4,7 +4,6 @@ import {
 	Modal,
 	Notice,
 	Spinner,
-	ToggleControl,
 } from '@wordpress/components';
 import './style.css';
 
@@ -34,12 +33,15 @@ type ToolRisk = {
 	readonly: boolean;
 	requires_approval: boolean;
 	reason: string;
+	must_ask?: boolean;
 };
 
 type ToolCall = {
 	id: string;
 	ability: string;
 	arguments: Record<string, unknown>;
+	/** The arguments as the card shows them: PHP sent on one line laid out again. */
+	display_arguments?: Record<string, unknown>;
 	status: string;
 	risk: ToolRisk;
 	reason?: string;
@@ -136,6 +138,7 @@ declare global {
 		novamiraChat?: {
 			root: string;
 			nonce: string;
+			decisionNonce: string;
 			status: ChatStatus;
 			connectorsUrl: string;
 			consented: boolean;
@@ -149,6 +152,7 @@ declare global {
 const config = window.novamiraChat || {
 	root: '',
 	nonce: '',
+	decisionNonce: '',
 	status: {
 		available: false,
 		reason: 'missing_config',
@@ -162,9 +166,6 @@ const config = window.novamiraChat || {
 const MODEL_FAVORITES_STORAGE_KEY = 'novamiraChatModelFavorites';
 const SELECTED_MODEL_STORAGE_KEY = 'novamiraChatSelectedModel';
 
-// In "Allow everything" mode the loop runs without per-step approval; pause after
-// this many model steps so a runaway conversation can't keep spending unattended.
-const AUTO_APPROVE_STEP_LIMIT = 15;
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_ATTACHMENTS_PER_MESSAGE = 4;
 const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -365,9 +366,6 @@ function App() {
 	const [providers, setProviders] = useState<ProviderDefinition[]>([]);
 	const [selectedProvider, setSelectedProvider] = useState('');
 	const [selectedModel, setSelectedModel] = useState('');
-	const [yoloMode, setYoloMode] = useState(false);
-	const [confirmYolo, setConfirmYolo] = useState(false);
-	const confirmYoloActionRef = useRef<(() => void) | null>(null);
 	const [favoriteModelKeys, setFavoriteModelKeys] = useState<string[]>(readModelFavorites);
 	const [modelsLoading, setModelsLoading] = useState(true);
 	const [isBusy, setIsBusy] = useState(false);
@@ -376,10 +374,8 @@ function App() {
 	const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
 	const [pendingMessage, setPendingMessage] = useState<ChatMessage | null>(null);
 	const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-	const [awaitingContinue, setAwaitingContinue] = useState<ChatSession | null>(null);
 	const [isDraggingImage, setIsDraggingImage] = useState(false);
 	const [error, setError] = useState('');
-	const yoloModeRef = useRef(false);
 	const runningRef = useRef(false);
 	const runCounterRef = useRef(0);
 	const activeRunRef = useRef<{ id: number; controller: AbortController } | null>(null);
@@ -392,10 +388,6 @@ function App() {
 		() => sessions.find((session) => session.id === activeId) || null,
 		[sessions, activeId],
 	);
-
-	useEffect(() => {
-		yoloModeRef.current = yoloMode;
-	}, [yoloMode]);
 
 	const configuredProviders = useMemo(
 		() => providers.filter((provider) => provider.configured && provider.models.length > 0),
@@ -667,25 +659,22 @@ function App() {
 	const executeReadyTools = useCallback(
 		async (session: ChatSession, run: ActiveChatRun): Promise<ChatSession> => {
 			let current = session;
-			const useYolo = yoloModeRef.current;
 			const executable = current.tool_calls.filter((call) =>
 				['approved'].includes(call.status) ||
-				(useYolo && call.status === 'pending_approval') ||
 				(!call.risk.requires_approval && ['pending_approval', 'approved'].includes(call.status)),
 			);
 			for (const call of executable) {
 				if (!isActiveRun(run)) {
 					break;
 				}
-				const executeWithYolo = yoloModeRef.current;
-				if (!executeWithYolo && call.status === 'pending_approval' && call.risk.requires_approval) {
+				if (call.status === 'pending_approval' && call.risk.requires_approval) {
 					break;
 				}
 
 				const body = await api<{ session: ChatSession }>('/chat/tools/execute', {
 					method: 'POST',
 					signal: run.signal,
-					body: JSON.stringify({ session_id: current.id, tool_call_id: call.id, yolo: executeWithYolo }),
+					body: JSON.stringify({ session_id: current.id, tool_call_id: call.id }),
 				});
 				if (!isActiveRun(run)) {
 					break;
@@ -704,7 +693,6 @@ function App() {
 				return;
 			}
 			let current = initial;
-			let steps = 0;
 			try {
 				while (true) {
 					if (isTerminalSessionStatus(current.status)) {
@@ -714,26 +702,17 @@ function App() {
 					if (!isActiveRun(run) || isTerminalSessionStatus(current.status)) {
 						break;
 					}
-					const useYolo = yoloModeRef.current;
-					const pending = current.tool_calls.some((call) => call.status === 'pending_approval');
-					if (pending && !useYolo) {
-						break;
-					}
-					// Auto-approve safety valve: after a batch of unattended steps, pause and
-					// ask the user before spending more.
-					if (useYolo && steps >= AUTO_APPROVE_STEP_LIMIT) {
-						setAwaitingContinue(current);
+					if (current.tool_calls.some((call) => call.status === 'pending_approval')) {
 						break;
 					}
 					const body = await api<{ session: ChatSession }>('/chat/model-step', {
 						method: 'POST',
 						signal: run.signal,
-						body: JSON.stringify({ session_id: current.id, yolo: useYolo }),
+						body: JSON.stringify({ session_id: current.id }),
 					});
 					if (!isActiveRun(run)) {
 						break;
 					}
-					steps += 1;
 					current = body.session;
 					replaceSession(current);
 				}
@@ -747,25 +726,6 @@ function App() {
 		},
 		[executeReadyTools, isActiveRun, refresh, replaceSession, status.available],
 	);
-
-	const continueRun = useCallback(() => {
-		const session = awaitingContinue;
-		if (!session) {
-			return;
-		}
-		setAwaitingContinue(null);
-		const run = beginChatRun();
-		if (!run) {
-			return;
-		}
-		void (async () => {
-			try {
-				await runLoop(session, run);
-			} finally {
-				finishChatRun(run);
-			}
-		})();
-	}, [awaitingContinue, beginChatRun, finishChatRun, runLoop]);
 
 	const addImageFiles = useCallback(async (files: FileList | File[]) => {
 		if (!canAttachImages) {
@@ -808,7 +768,6 @@ function App() {
 		if (!run) {
 			return;
 		}
-		setAwaitingContinue(null);
 		// Show the user's message immediately, with the working indicator below it,
 		// instead of waiting for the server round-trip to insert it (which jumps).
 		setPendingMessage({
@@ -952,30 +911,7 @@ function App() {
 		}
 	};
 
-	const requestAllowEverything = (action: () => void) => {
-		confirmYoloActionRef.current = action;
-		setConfirmYolo(true);
-	};
-
-	const closeConfirmYolo = () => {
-		confirmYoloActionRef.current = null;
-		setConfirmYolo(false);
-	};
-
-	const acceptConfirmYolo = () => {
-		const action = confirmYoloActionRef.current;
-		confirmYoloActionRef.current = null;
-		setConfirmYolo(false);
-		action?.();
-	};
-
 	const approve = (call: ToolCall, decision: string) => {
-		if (decision === 'yolo') {
-			requestAllowEverything(() => {
-				void runApproval(call, 'yolo');
-			});
-			return;
-		}
 		void runApproval(call, decision);
 	};
 
@@ -992,6 +928,7 @@ function App() {
 						session_id: activeSession.id,
 						tool_call_id: call.id,
 						decision,
+						decision_nonce: config.decisionNonce,
 					}),
 				});
 				replaceSession(body.session);
@@ -1004,10 +941,6 @@ function App() {
 		if (!run) {
 			return;
 		}
-		if (decision === 'yolo') {
-			yoloModeRef.current = true;
-			setYoloMode(true);
-		}
 		try {
 			const body = await api<{ session: ChatSession }>('/chat/approvals', {
 				method: 'POST',
@@ -1016,6 +949,7 @@ function App() {
 					session_id: activeSession.id,
 					tool_call_id: call.id,
 					decision,
+					decision_nonce: config.decisionNonce,
 				}),
 			});
 			if (!isActiveRun(run)) {
@@ -1033,29 +967,8 @@ function App() {
 		}
 	};
 
-	const setYolo = async (value: boolean) => {
-		yoloModeRef.current = value;
-		setYoloMode(value);
-		if (value && activeSession) {
-			const run = beginChatRun();
-			if (!run) {
-				return;
-			}
-
-			try {
-				await runLoop(activeSession, run);
-			} catch (err) {
-				if (!isAbortError(err) && isActiveRun(run)) {
-					setError(err instanceof Error ? err.message : String(err));
-				}
-			} finally {
-				finishChatRun(run);
-			}
-		}
-	};
-
 	const canStart = status.available && !modelsLoading && selectedProvider !== '' && selectedModel !== '';
-	const canSend = activeSession ? status.available && (!hasPendingApproval || yoloMode) : canStart;
+	const canSend = activeSession ? status.available && !hasPendingApproval : canStart;
 	const canUseVoiceInput = supportsVoiceInput && status.available && !isBusy;
 	const selectedModelLabel = selectedModelOption
 		? `${selectedModelOption.providerName} / ${selectedModelOption.modelName}`
@@ -1189,35 +1102,6 @@ function App() {
 								<strong>Novamira Chat</strong>
 								<span>{currentModelLabel}</span>
 							</div>
-							<ToggleControl
-								label="Allow everything"
-								checked={yoloMode}
-								onChange={(value) => {
-									if (value) {
-										requestAllowEverything(() => {
-											void setYolo(true);
-										});
-									} else {
-										void setYolo(false);
-									}
-								}}
-							/>
-							{confirmYolo && (
-								<Modal
-									title="Allow everything?"
-									onRequestClose={closeConfirmYolo}
-									className="novamira-chat__confirm-modal"
-								>
-									<Notice status="warning" isDismissible={false}>
-										<strong>Security note:</strong> This turns on automatic approval for all of Novamira Chat, not just this conversation. Every tool call then runs automatically, without asking you first, including executing PHP code and changing files on this site. You will not see a confirmation before each action.
-									</Notice>
-									<p>Turn it on only when you trust what Novamira Chat will do without reviewing each step first. You can switch it off anytime to go back to confirming every action.</p>
-									<div className="novamira-chat__confirm-actions">
-										<Button variant="tertiary" onClick={closeConfirmYolo}>Cancel</Button>
-										<Button variant="primary" isDestructive onClick={acceptConfirmYolo}>Allow everything</Button>
-									</div>
-								</Modal>
-							)}
 							{pendingDeleteId && (
 								<Modal
 									title="Delete conversation?"
@@ -1256,15 +1140,6 @@ function App() {
 									<Notice status="info" isDismissible={false}>
 										Each message is billed to your own API key, so it's best for quick changes. For heavier work, <a href={config.backUrl}>connect Novamira over MCP</a>.
 									</Notice>
-								</div>
-							)}
-							{awaitingContinue && !isBusy && (
-								<div className="novamira-chat__continue">
-									<p>Novamira Chat has run {AUTO_APPROVE_STEP_LIMIT} steps automatically with Allow everything on. Continue?</p>
-									<div className="novamira-chat__confirm-actions">
-										<Button variant="tertiary" onClick={() => setAwaitingContinue(null)}>Stop</Button>
-										<Button variant="primary" onClick={continueRun}>Continue</Button>
-									</div>
 								</div>
 							)}
 						</div>
@@ -2219,7 +2094,7 @@ function ToolCallCard({
 	const showDetails = !isComplete || isExpanded;
 	const hasResult = showDetails && (isComplete || call.status === 'failed' || call.error !== '');
 	const statusLabel = call.status.replace(/_/g, ' ');
-	const argumentsJson = formatArguments(call.arguments);
+	const argumentsJson = formatArguments(call.display_arguments ?? call.arguments);
 	const shouldPreviewArguments = call.status === 'pending_approval' && !areArgumentsExpanded;
 	const argumentPreview = firstLines(argumentsJson, 3);
 	const shownArguments = shouldPreviewArguments ? argumentPreview.text : argumentsJson;
@@ -2300,10 +2175,8 @@ function ToolCallCard({
 			)}
 			{call.status === 'pending_approval' && (
 				<div className="novamira-chat__controls">
-					<Button variant="primary" onClick={() => onApprove(call, 'approve')}>Approve Once</Button>
-					<Button variant="secondary" isDestructive onClick={() => onApprove(call, 'deny')}>Deny Once</Button>
-					<Button variant="secondary" onClick={() => onApprove(call, 'allow_session')}>Allow This Tool</Button>
-					<Button variant="secondary" onClick={() => onApprove(call, 'yolo')}>Allow Everything</Button>
+					<Button variant="primary" onClick={() => onApprove(call, 'approve')}>Approve</Button>
+					<Button variant="secondary" isDestructive onClick={() => onApprove(call, 'deny')}>Deny</Button>
 				</div>
 			)}
 		</article>

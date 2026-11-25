@@ -50,3 +50,6 @@ node_modules/
 
 # Python bytecode cache
 __pycache__/
+
+.claude/
+.agents/

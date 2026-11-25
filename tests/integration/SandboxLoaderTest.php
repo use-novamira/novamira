@@ -151,10 +151,7 @@ final class SandboxLoaderTest extends TestCase
         self::assertSame(0, $firstExitCode);
         self::assertSame('Method not allowed', $firstOutput);
         self::assertFileExists($this->sandboxDirectory . '/.crashed');
-        self::assertStringContainsString(
-            'Sandbox file terminated PHP during loading.',
-            (string) file_get_contents($this->sandboxDirectory . '/.crashed'),
-        );
+        self::assertStringContainsString('Sandbox file terminated PHP during loading.', $this->crashDetails());
 
         [$secondOutput, $secondExitCode] = $this->runLoader('request');
 
@@ -234,7 +231,15 @@ final class SandboxLoaderTest extends TestCase
         self::assertSame('runner-complete', $output);
         self::assertFileExists($this->sandboxDirectory . '/b-loaded');
         self::assertFileExists($this->sandboxDirectory . '/.crashed');
-        self::assertStringContainsString('boom', (string) file_get_contents($this->sandboxDirectory . '/.crashed'));
+        self::assertStringContainsString('boom', $this->crashDetails());
+        self::assertStringNotContainsString('boom', (string) file_get_contents($this->sandboxDirectory . '/.crashed'));
+    }
+
+    /** The details of the last crash, kept in an option. */
+    private function crashDetails(): string
+    {
+        $file = $this->sandboxDirectory . '/option-novamira_sandbox_crash.json';
+        return is_file($file) ? (string) file_get_contents($file) : '';
     }
 
     /** @return array{string, int} */

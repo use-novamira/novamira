@@ -169,7 +169,7 @@ function novamira_rest_run_input(WP_REST_Request $request): mixed
         );
     }
 
-    $unexpected = array_values(array_diff(array_keys($body), ['input']));
+    $unexpected = array_values(array_diff(array_keys($body), ['input', 'review', 'request_id']));
     if ($unexpected !== []) {
         return new WP_Error(
             'novamira_unexpected_run_field',

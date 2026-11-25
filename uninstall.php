@@ -70,12 +70,41 @@ function novamira_uninstall_current_site(array $plan): void
     }
 
     delete_option('novamira_feature_preferences');
+    delete_site_option('novamira_sandbox_crash');
+    delete_option('novamira_confirmation_settings');
+    delete_option('novamira_confirmation_destinations');
+    delete_transient('novamira_confirmation_heartbeat');
+    $confirmation_query = $wpdb->prepare(
+        'SELECT option_name FROM %i WHERE option_name LIKE %s',
+        $wpdb->options,
+        // Requests and the keys that deduplicate identical calls.
+        $wpdb->esc_like('novamira_confirmation_') . '%',
+    );
+    if (is_string($confirmation_query)) {
+        foreach ($wpdb->get_col($confirmation_query) as $option_name) {
+            delete_option((string) $option_name);
+        }
+    }
+    // The change journal and the table copies it made before TRUNCATE, DROP TABLE and ALTER TABLE.
+    $journal_tables = [$wpdb->prefix . 'novamira_journal'];
+    $backup_query = $wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($wpdb->prefix . 'novamira_bak_') . '%');
+    if (is_string($backup_query)) {
+        foreach ($wpdb->get_col($backup_query) as $backup) {
+            $journal_tables[] = (string) $backup;
+        }
+    }
+    foreach ($journal_tables as $journal_table) {
+        novamira_uninstall_drop_table($journal_table);
+    }
+    delete_option('novamira_journal_schema');
+    delete_option('novamira_journal_cron_marks');
     delete_option('novamira_gb_finalizer_poll_token');
     // Cache of the specializations Pro publishes: never user data, always removed.
     delete_option('novamira_specializations');
 
     wp_clear_scheduled_hook('novamira_oauth_gc');
     wp_clear_scheduled_hook('novamira_gutenberg_cleanup');
+    wp_clear_scheduled_hook('novamira_confirmation_cleanup');
     wp_clear_scheduled_hook('novamira_specializations_refresh');
 }
 

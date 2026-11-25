@@ -335,7 +335,7 @@ final class FeatureRegistryTest extends TestCase
         self::assertStringContainsString('agent-context', $result['mixed_html']);
         self::assertStringContainsString('Required by Novamira', $result['mixed_html']);
         self::assertStringNotContainsString('type="checkbox"', $result['mixed_html']);
-        self::assertStringContainsString('Enable configurable abilities', $result['category_action_html']);
+        self::assertStringContainsString('Enable all', $result['category_action_html']);
         self::assertStringContainsString('Disable 1 ability in Admin Access?', $result['disable_category_action_html']);
         self::assertStringNotContainsString('configurable ability in', $result['disable_category_action_html']);
         self::assertStringContainsString('name="ability_names[]"', $result['category_action_html']);
@@ -349,7 +349,7 @@ final class FeatureRegistryTest extends TestCase
         self::assertStringContainsString('Managed by Novamira Pro', $result['memory_owner_html']);
         self::assertStringContainsString('managed by Novamira Pro and', $result['memory_owner_html']);
         self::assertSame(
-            ['Disable category', 'Enable configurable abilities', 'Disable all abilities'],
+            ['Disable category', 'Enable all', 'Disable all abilities'],
             $result['group_action_labels'],
         );
     }
@@ -603,6 +603,7 @@ final class FeatureRegistryTest extends TestCase
             function novamira_boot_design_feature(): void {}
             function novamira_boot_chat_feature(): void {}
             function novamira_boot_visual_feature(): void {}
+            function novamira_boot_ai_change_history_feature(): void {}
             function novamira_boot_block_editor_queue_feature(): void {}
             function novamira_deactivate_block_editor_queue_feature(): void {}
             function get_option(string $name, mixed $default_value = false): mixed {

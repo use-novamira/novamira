@@ -121,7 +121,6 @@ function novamira_render_enable_toggle(): void
         : null;
     $toggle_disabled = $dependency_error !== null && !$enabled;
     $submit_attributes = $toggle_disabled ? ['disabled' => 'disabled'] : [];
-    $looks_production = novamira_looks_like_production();
     ?>
     <h2 class="novamira-step-heading">
         <span class="novamira-step-badge">1</span>
@@ -137,18 +136,13 @@ function novamira_render_enable_toggle(): void
             ); ?> <?php disabled($toggle_disabled); ?> />
             <span><?php esc_html_e('Turn on AI Abilities for this site', domain: 'novamira'); ?></span>
         </label>
-        <p class="description" style="margin:0 0 8px;">
+        <p class="description" style="margin:0 0 14px; line-height:1.6;">
             <strong style="color:#d63638;"><?php esc_html_e('Security note:', domain: 'novamira'); ?></strong>
             <?php esc_html_e(
-                'When enabled, AI agents can execute PHP code and perform filesystem operations on this site. For development and staging environments only. Always keep backups.',
+                'When enabled, AI agents can execute PHP code and perform filesystem operations on this site. Approvals rely on the AI\'s judgement, so use a capable AI model and keep a backup.',
                 domain: 'novamira',
             ); ?>
-        </p>
-        <p class="description" style="margin:0 0 14px;">
-            <?php esc_html_e(
-                'Use Novamira with a capable AI model and set your AI tool to ask for confirmation before every action. Read what the agent is about to do before approving.',
-                domain: 'novamira',
-            ); ?>
+            <?php esc_html_e('Read what the AI is about to do before approving.', domain: 'novamira'); ?>
         </p>
         <?php submit_button(
             text: __('Save Settings', domain: 'novamira'),
@@ -159,65 +153,17 @@ function novamira_render_enable_toggle(): void
         ); ?>
     </form>
     <script>
+    // Turning on waits for the dialog that says what approvals do not cover, and for "I understand".
     document.getElementById('novamira-settings-form').addEventListener('submit', function (e) {
+        var form = e.target;
         var cb = document.getElementById('novamira-enable-checkbox');
-        if (cb.checked && !cb.defaultChecked) {
-            var msg = <?php echo
-                wp_json_encode(
-                    $looks_production
-                        ? __(
-                            'This looks like a production site. The plugin can stay installed here, but AI Abilities are not meant for live sites: enable them only on a staging or development copy. Continue anyway?',
-                            domain: 'novamira',
-                        )
-                        : __(
-                            'AI agents will be able to execute PHP code and access the filesystem. For development and staging environments only. Continue?',
-                            domain: 'novamira',
-                        ),
-                )
-            ; ?>;
-            if (!confirm(msg)) {
-                e.preventDefault();
-            }
+        if (!cb.checked || cb.defaultChecked || typeof window.novamiraConfirmActivation !== 'function') {
+            return;
         }
+        e.preventDefault();
+        window.novamiraConfirmActivation(function () { form.submit(); });
     });
     </script>
-    <?php
-}
-
-/**
- * Render the production-site warning banner above the enable toggle.
- *
- * Shown only when: AI Abilities are currently enabled AND the site looks like production
- * AND the current user has not dismissed the warning.
- */
-function novamira_render_production_warning(): void
-{
-    if (!novamira_is_enabled()) {
-        return;
-    }
-    if (!novamira_looks_like_production()) {
-        return;
-    }
-    if (novamira_production_warning_dismissed()) {
-        return;
-    }
-    ?>
-    <div class="novamira-production-warning" role="alert">
-        <p>
-            <strong><?php esc_html_e('⚠️ This looks like a production site.', domain: 'novamira'); ?></strong>
-            <?php esc_html_e(
-                'Keeping the plugin installed here is fine, but AI Abilities should only be active on a staging or development copy. Make your changes there, then deploy the result the regular way. On production, keep AI Abilities off.',
-                domain: 'novamira',
-            ); ?>
-        </p>
-        <form method="post" style="margin:0;">
-            <?php wp_nonce_field('novamira_dismiss_production_warning'); ?>
-            <input type="hidden" name="novamira_dismiss_production_warning" value="1" />
-            <button type="submit" name="novamira_dismiss_production_warning" class="button button-small">
-                <?php esc_html_e('Dismiss', domain: 'novamira'); ?>
-            </button>
-        </form>
-    </div>
     <?php
 }
 
@@ -2185,7 +2131,7 @@ function novamira_build_mcpb_manifest(
         'display_name' => $display_name,
         'version' => NOVAMIRA_VERSION,
         'description' => __(
-            'Full WordPress control for your AI agent. Runs real PHP, queries the database, edits files — on your dev or staging site.',
+            'Full WordPress control for your AI agent: real PHP, database queries and file edits, with approvals and a change history.',
             domain: 'novamira',
         ),
         'author' => ['name' => 'Novamira'],
@@ -3485,23 +3431,6 @@ function novamira_render_connect_page(): void
             font-size: 14px;
             margin: 0;
         }
-        .novamira-production-warning {
-            background: #fff8e1;
-            border-left: 4px solid #f0c040;
-            padding: 12px 16px;
-            margin: 12px 0 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-        .novamira-production-warning p {
-            margin: 0;
-            font-size: 14px;
-            line-height: 1.5;
-            flex: 1 1 auto;
-        }
         .novamira-paste-block {
             margin: 12px 0;
             border: 1px solid #c3c4c7;
@@ -3585,7 +3514,6 @@ function novamira_render_connect_page(): void
             ?></p></div>
         <?php endif; ?>
 
-        <?php novamira_render_production_warning(); ?>
 
         <div class="novamira-connect-section" id="novamira-step1">
             <?php novamira_render_enable_toggle(); ?>

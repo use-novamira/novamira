@@ -6,13 +6,15 @@
  */
 import { beforeEach, describe, expect, test } from "bun:test";
 
-const data: Record<string, unknown> = {
+const page = globalThis as unknown as Record<string, unknown>;
+// The test files share one global: the page data object is set once and filled by each file.
+page.novamiraVisualWorkspaceData ??= {};
+const data = page.novamiraVisualWorkspaceData as Record<string, unknown>;
+Object.assign(data, {
 	readMode: "1",
 	readModeMessage: "Read mode is active on this site, so {subject} is unavailable. Do NOT try to make the change by other means.",
 	authCheckUrl: "https://example.test/wp-admin/admin-ajax.php?action=novamira_visual_auth_check",
-};
-const page = globalThis as unknown as Record<string, unknown>;
-page.novamiraVisualWorkspaceData = data;
+});
 page.window = globalThis;
 
 let sessionCheck: unknown = { success: true, data: { authenticated: true, readMode: false, readModeMessage: "" } };

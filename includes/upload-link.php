@@ -84,6 +84,7 @@ function novamira_verify_upload_token(string $token): array|WP_Error
         'max_bytes' => $decoded['max_bytes'] ?? null,
         'overwrite' => $decoded['overwrite'] ?? null,
         'create_directories' => $decoded['create_directories'] ?? null,
+        'nonce' => $decoded['nonce'] ?? null,
     ];
 
     $expires_at = (int) $payload['expires_at'];
@@ -92,6 +93,42 @@ function novamira_verify_upload_token(string $token): array|WP_Error
     }
 
     return $payload;
+}
+
+/** Prefix of the options that mark an upload link as used, until it would have expired. */
+const NOVAMIRA_UPLOAD_SPENT_PREFIX = 'novamira_upload_spent_';
+
+/**
+ * An upload link works once: its nonce is claimed with add_option(), which only one request can win.
+ *
+ * @param array<string, mixed> $payload
+ */
+function novamira_spend_upload_token(array $payload): ?WP_Error
+{
+    $nonce = is_string($payload['nonce'] ?? null) ? $payload['nonce'] : '';
+    if (preg_match('/^[0-9a-f]{32}$/', $nonce) !== 1) {
+        return new WP_Error('invalid_upload_token', 'Invalid upload token: create a new upload link.', [
+            'status' => 401,
+        ]);
+    }
+    // @mago-expect lint:no-global -- $wpdb is WordPress' database handle.
+    global $wpdb;
+    /** @var \wpdb $wpdb */
+    $expired = $wpdb->prepare(
+        'DELETE FROM %i WHERE option_name LIKE %s AND CAST(option_value AS UNSIGNED) < %d',
+        $wpdb->options,
+        $wpdb->esc_like(NOVAMIRA_UPLOAD_SPENT_PREFIX) . '%',
+        time(),
+    );
+    if (is_string($expired)) {
+        $wpdb->query($expired);
+    }
+    if (!add_option(NOVAMIRA_UPLOAD_SPENT_PREFIX . $nonce, (string) (int) $payload['expires_at'], autoload: false)) {
+        return new WP_Error('upload_token_used', 'This upload link was already used: create a new one.', [
+            'status' => 409,
+        ]);
+    }
+    return null;
 }
 
 /**
@@ -120,6 +157,10 @@ function novamira_handle_signed_upload(WP_REST_Request $request)
     if (is_wp_error($payload)) {
         return $payload;
     }
+    $spent = novamira_spend_upload_token($payload);
+    if (is_wp_error($spent)) {
+        return $spent;
+    }
 
     $destination = novamira_prepare_upload_destination($payload);
     if (is_wp_error($destination)) {
@@ -129,6 +170,13 @@ function novamira_handle_signed_upload(WP_REST_Request $request)
     $source = novamira_open_upload_source($request);
     if (is_wp_error($source)) {
         return $source;
+    }
+
+    $was_disabled = novamira_sandbox_file_is_disabled($destination['path']);
+    $disabled = novamira_upload_disable_sandbox_php($destination['path']);
+    if (is_wp_error($disabled)) {
+        fclose($source['stream']);
+        return $disabled;
     }
 
     $stream = $source['stream'];
@@ -146,6 +194,10 @@ function novamira_handle_signed_upload(WP_REST_Request $request)
     fclose($stream);
 
     if (is_wp_error($result)) {
+        // A failed upload leaves the previous file as it was, enabled or not.
+        if ($disabled === true && !$was_disabled) {
+            novamira_remove_sandbox_disabled_marker($destination['path']);
+        }
         return $result;
     }
 
@@ -159,7 +211,35 @@ function novamira_handle_signed_upload(WP_REST_Request $request)
         'size' => filesize($destination['path']),
         'source' => $source['source'],
         'filename' => $source['filename'],
+        'disabled' => $disabled,
     ];
+}
+
+/**
+ * While approvals are on, a PHP file uploaded into the sandbox is saved disabled, before its content
+ * is written, so it never runs on the next request. It starts only through enable-file, which reads it with
+ * Novamira's code check and always asks a person.
+ */
+function novamira_upload_disable_sandbox_php(string $path): bool|WP_Error
+{
+    if (
+        !function_exists('Novamira\\Confirmations\\active')
+        || !\Novamira\Confirmations\active()
+        || strtolower(pathinfo($path, PATHINFO_EXTENSION)) !== 'php'
+        || !novamira_path_is_within_directory($path, novamira_get_sandbox_dir())
+    ) {
+        return false;
+    }
+    if (!novamira_create_sandbox_disabled_marker($path)) {
+        return new WP_Error(
+            'upload_disable_failed',
+            'Could not save the uploaded PHP file disabled. Nothing was uploaded.',
+            [
+                'status' => 500,
+            ],
+        );
+    }
+    return true;
 }
 
 /**
@@ -311,6 +391,7 @@ function novamira_open_multipart_upload_source(array $file): array|WP_Error
  */
 function novamira_create_upload_stream($source, string $resolved, int $max_bytes): array|WP_Error
 {
+    // The empty file only claims the name: the upload is written and checked aside, then moved over it.
     $target = fopen($resolved, mode: 'xb');
     if ($target === false) {
         if (file_exists($resolved)) {
@@ -318,19 +399,16 @@ function novamira_create_upload_stream($source, string $resolved, int $max_bytes
         }
         return new WP_Error('upload_write_failed', sprintf('Could not open destination for writing: %s', $resolved));
     }
-
-    $bytes_written = novamira_copy_limited_stream(source: $source, target: $target, max_bytes: $max_bytes);
     fclose($target);
 
-    if (is_wp_error($bytes_written)) {
+    $result = novamira_overwrite_upload_stream(source: $source, resolved: $resolved, max_bytes: $max_bytes);
+    if (is_wp_error($result)) {
         unlink($resolved);
-        return $bytes_written;
+        return $result;
     }
 
-    chmod(filename: $resolved, permissions: 0644);
-
     return [
-        'bytes_written' => $bytes_written,
+        'bytes_written' => $result['bytes_written'],
         'created' => true,
     ];
 }
@@ -365,6 +443,11 @@ function novamira_overwrite_upload_stream($source, string $resolved, int $max_by
         unlink($temporary_path);
         return $bytes_written;
     }
+    $guard_error = novamira_uploaded_php_guard_error($resolved, $temporary_path);
+    if ($guard_error !== null) {
+        unlink($temporary_path);
+        return $guard_error;
+    }
 
     if (!rename($temporary_path, $resolved)) {
         unlink($temporary_path);
@@ -377,6 +460,16 @@ function novamira_overwrite_upload_stream($source, string $resolved, int $max_by
         'bytes_written' => $bytes_written,
         'created' => $created,
     ];
+}
+
+/** The PHP guard check for an uploaded file, read from where it was written before it takes its place. */
+function novamira_uploaded_php_guard_error(string $destination, string $written): ?WP_Error
+{
+    if (!in_array(strtolower(pathinfo($destination, PATHINFO_EXTENSION)), NOVAMIRA_PHP_EXTENSIONS, strict: true)) {
+        return null;
+    }
+    $content = file_get_contents($written);
+    return novamira_php_guard_error($destination, is_string($content) ? $content : '');
 }
 
 /**

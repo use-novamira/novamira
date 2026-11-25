@@ -1,110 +1,82 @@
-import { workspaceData } from "./workspace-config";
-import type { BackendToolDefinition, ConfirmableModelAction, PendingConfirmation } from "./workspace-types";
+import { cardString, workspaceData } from "./workspace-config";
+import type { ConfirmableModelAction, ConfirmationRequest } from "./workspace-types";
 import { cloneSerializable } from "./workspace-utils";
 
 interface WorkspaceBackendToolHost {
 	log: (message: string) => void;
 	confirmToolAction: (
 		action: ConfirmableModelAction,
-		request: Pick<PendingConfirmation, "title" | "description" | "details"> & { reason: string },
+		request: ConfirmationRequest,
 		run: () => Promise<unknown>,
+		onDeny: () => void,
 	) => unknown;
-	isToolAllowed: (action: ConfirmableModelAction) => boolean;
 }
 
-export class WorkspaceBackendTools {
-	private backendToolCache: Map<string, BackendToolDefinition> | null = null;
+interface PendingApproval {
+	id: string;
+	why: string;
+	/** The PHP of an execute-php call as the card shows it: laid out again when it was sent on one line. */
+	code: string;
+}
 
+/**
+ * Backend tools run on the site, which applies the approvals: a call that needs a person comes back waiting, and only
+ * the person's decision, sent from the card, runs it.
+ */
+export class WorkspaceBackendTools {
 	constructor(private host: WorkspaceBackendToolHost) {}
 
 	async discoverBackendTools(params: Record<string, unknown>): Promise<unknown> {
-		const result = await this.backendAjax("novamira_visual_safe_backend_tools_discover", params);
-		const tools = this.backendToolsFromResult(result);
-		if (tools && this.isFullBackendToolDiscovery(params)) {
-			this.backendToolCache = new Map(tools.map((tool) => [tool.name, tool]));
-		}
-
-		return cloneSerializable(result);
+		return cloneSerializable(await this.backendAjax("novamira_visual_safe_backend_tools_discover", params));
 	}
 
 	async callBackendTool(
 		name: string,
 		args: Record<string, unknown>,
 		reason: string,
+		attention: unknown,
 		agentAction = false,
 	): Promise<unknown> {
 		if (agentAction) this.host.log(`Calling backend tool ${name}.`);
-		const tool = await this.getBackendToolDefinition(name);
-		const action = `backend_tool:${name}` as ConfirmableModelAction;
-		const run = () => this.runBackendTool(name, args);
-		if (tool.requiresConfirmation === true && !this.host.isToolAllowed(action)) {
-			return this.host.confirmToolAction(action, {
-				title: `Review backend tool: ${name}`,
-				description: "The agent wants to run a WordPress backend MCP tool that can change site data. Review the tool and arguments before allowing it.",
-				reason,
-				details: [
-					{ label: "Tool", value: tool.label ? `${tool.label} (${name})` : name },
-					{ label: "Arguments", value: JSON.stringify(args, null, 2), format: "code" },
-				],
-			}, run);
-		}
+		const result = await this.backendAjax("novamira_visual_safe_backend_tools_call", { name, args, attention, reason });
+		const pending = this.pendingApproval(result);
+		if (!pending) return cloneSerializable(result);
 
-		return run();
+		return this.host.confirmToolAction(`backend_tool:${name}` as ConfirmableModelAction, {
+			title: `Backend tool: ${name}`,
+			says: reason,
+			why: pending.why.trim() === "" ? [] : [pending.why],
+			where: name,
+			codeLabel: cardString("showCode"),
+			code: this.cardCode(args, pending.code),
+		}, () => this.decide(pending.id, "approve"), () => {
+			this.decide(pending.id, "deny").catch(() => undefined);
+		});
 	}
 
-	private async runBackendTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-		const result = await this.backendAjax("novamira_visual_safe_backend_tools_call", { name, args });
+	private async decide(approvalId: string, decision: "approve" | "deny"): Promise<unknown> {
+		const result = await this.backendAjax("novamira_visual_safe_backend_tools_decide", {
+			approval_id: approvalId,
+			decision,
+			decision_nonce: workspaceData.decisionNonce ?? "",
+		});
 		return cloneSerializable(result);
 	}
 
-	private async getBackendToolDefinition(name: string): Promise<BackendToolDefinition> {
-		if (!this.backendToolCache) {
-			const result = await this.backendAjax("novamira_visual_safe_backend_tools_discover", { include_schemas: false });
-			const tools = this.backendToolsFromResult(result) ?? [];
-			this.backendToolCache = new Map(tools.map((tool) => [tool.name, tool]));
-		}
-
-		const tool = this.backendToolCache.get(name);
-		if (!tool) {
-			const result = await this.backendAjax("novamira_visual_safe_backend_tools_discover", { include_schemas: false });
-			const tools = this.backendToolsFromResult(result) ?? [];
-			this.backendToolCache = new Map(tools.map((item) => [item.name, item]));
-			const refreshedTool = this.backendToolCache.get(name);
-			if (refreshedTool) return refreshedTool;
-		}
-
-		const refreshedTool = this.backendToolCache.get(name);
-		if (!refreshedTool) {
-			throw new Error(`Backend tool is not available through the Visual-safe backend tools contract: ${name}`);
-		}
-
-		return refreshedTool;
+	private pendingApproval(result: unknown): PendingApproval | null {
+		if (!result || typeof result !== "object") return null;
+		const { status, approval_id: id, why, code } = result as { status?: unknown; approval_id?: unknown; why?: unknown; code?: unknown };
+		if (status !== "pending_approval" || typeof id !== "string" || id === "") return null;
+		return { id, why: typeof why === "string" ? why : "", code: typeof code === "string" ? code : "" };
 	}
 
-	private isFullBackendToolDiscovery(params: Record<string, unknown>): boolean {
-		return !params.search && !params.category && params.include_dangerous !== false;
-	}
-
-	private backendToolsFromResult(result: unknown): BackendToolDefinition[] | null {
-		const tools = result && typeof result === "object" && Array.isArray((result as { tools?: unknown }).tools)
-			? (result as { tools: unknown[] }).tools
-			: null;
-		if (!tools) return null;
-
-		return tools
-			.filter((tool): tool is Record<string, unknown> => Boolean(tool && typeof tool === "object" && !Array.isArray(tool)))
-			.map((tool) => ({
-				name: typeof tool.name === "string" ? tool.name : "",
-				label: typeof tool.label === "string" ? tool.label : undefined,
-				description: typeof tool.description === "string" ? tool.description : undefined,
-				category: typeof tool.category === "string" ? tool.category : undefined,
-				annotations: tool.annotations && typeof tool.annotations === "object" && !Array.isArray(tool.annotations)
-					? tool.annotations as Record<string, unknown>
-					: undefined,
-				dangerous: tool.dangerous === true,
-				requiresConfirmation: tool.requires_confirmation === true,
-			}))
-			.filter((tool) => tool.name !== "");
+	/** The code on its own lines, then the other arguments as JSON. */
+	private cardCode(args: Record<string, unknown>, code: string): string {
+		const rest = { ...args };
+		if (code !== "") delete rest.code;
+		const parts = code !== "" ? [code] : [];
+		if (Object.keys(rest).length > 0) parts.push(JSON.stringify(rest, null, 2));
+		return parts.join("\n\n");
 	}
 
 	private async backendAjax(action: string, body: Record<string, unknown>): Promise<unknown> {

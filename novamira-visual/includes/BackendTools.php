@@ -64,11 +64,11 @@ function check_permission(): bool
     // Visual always loads inside the core plugin, so this helper is always
     // defined. Fail closed if it ever is not, rather than fall back to a check
     // that is weaker than super admin on multisite.
-    if (!function_exists('novamira_current_user_can_manage')) {
+    if (!function_exists('novamira_current_user_can_manage') || !function_exists('novamira_is_enabled')) {
         return false;
     }
 
-    return (bool) \novamira_current_user_can_manage();
+    return \novamira_is_enabled() && \novamira_current_user_can_manage();
 }
 
 function rest_discover(\WP_REST_Request $request): \WP_REST_Response|\WP_Error
@@ -159,8 +159,20 @@ function excluded_backend_abilities(): array
 {
     /** @var mixed $excluded */
     $excluded = \apply_filters('novamira_visual_excluded_backend_abilities', []);
+    if (!is_array($excluded)) {
+        return [];
+    }
 
-    return is_array($excluded) ? $excluded : [];
+    $names = [];
+    foreach (array_keys($excluded) as $name) {
+        if (!is_string($name) || $excluded[$name] !== true) {
+            continue;
+        }
+
+        $names[$name] = true;
+    }
+
+    return $names;
 }
 
 function discovery_instructions(): string
@@ -183,8 +195,11 @@ function discovery_instructions(): string
 
     /** @var mixed $instructions */
     $instructions = \apply_filters('novamira_visual_backend_discovery_instructions', $base);
+    if (!is_string($instructions)) {
+        return '';
+    }
 
-    return is_string($instructions) ? $instructions : '';
+    return function_exists('novamira_without_rules_code') ? \novamira_without_rules_code($instructions) : $instructions;
 }
 
 /**
@@ -255,16 +270,14 @@ function call_data(array $params): array|\WP_Error
         return $ability;
     }
 
-    /** @var array<array-key, mixed>|string|int|float|bool|null|\WP_Error $result */
-    $result = $ability->execute($args);
-    if (is_wp_error($result)) {
-        return $result;
+    // The AI's one line about the call, kept as what it said it would do in the AI change history.
+    $says = is_string($params['reason'] ?? null) ? mb_substr(trim($params['reason']), start: 0, length: 240) : '';
+    $gate = approval_gate($name, $args, attention_param($params), $says);
+    if ($gate !== null) {
+        return $gate;
     }
 
-    return [
-        'name' => $name,
-        'result' => $result,
-    ];
+    return run_backend_tool($ability, $name, $args, $says);
 }
 
 function ajax_check_permission(): void
@@ -450,7 +463,6 @@ function serialize_from_annotations(\WP_Ability $ability, array $annotations): a
         'category_label' => category_label($category),
         'annotations' => $annotations,
         'dangerous' => ($annotations['destructive'] ?? false) === true,
-        'requires_confirmation' => ($annotations['readonly'] ?? false) !== true,
     ];
 }
 

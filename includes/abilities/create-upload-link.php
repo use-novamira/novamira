@@ -89,7 +89,8 @@ wp_register_ability('novamira/create-upload-link', [
                 'Use this instead of novamira/write-file for ZIPs, plugins, themes, media, binary files, base64-encoded payloads, or any large upload.',
                 'Recommended curl form: curl -X PUT -H "$token_header: $upload_token" --data-binary @/path/to/local-file "$upload_url"',
                 'Multipart form is also accepted: curl -H "$token_header: $upload_token" -F file=@/path/to/local-file "$upload_url"',
-                'PHP files (*.php) and PHP execution control files can ONLY be uploaded to wp-content/novamira-sandbox/.',
+                'PHP files (*.php, and *.phtml, *.phar and the like) and PHP execution control files can ONLY be uploaded to wp-content/novamira-sandbox/.',
+                "A PHP file must start with if (!defined('ABSPATH')) { exit; }, right after <?php and any declare, namespace or use line, or the upload is refused.",
                 'Other non-PHP uploads outside the sandbox are intentional; the sandbox is not security isolation for all filesystem writes.',
             ]),
             'readonly' => false,
@@ -129,6 +130,7 @@ function novamira_create_upload_link($input)
         'max_bytes' => $max_bytes,
         'overwrite' => $overwrite,
         'create_directories' => $create_directories,
+        'nonce' => bin2hex(random_bytes(16)),
     ];
     $token = novamira_sign_upload_payload($payload);
     if (is_wp_error($token)) {

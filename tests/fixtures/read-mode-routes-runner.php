@@ -178,11 +178,13 @@ $result = match ($scenario) {
     })(),
     'visual-on', 'visual-off' => (static function () use ($root): array {
         require $root . '/novamira-visual/includes/BackendTools.php';
+        require $root . '/novamira-visual/includes/BackendApprovals.php';
         return ['blocked' => test_export(\Novamira\Visual\BackendTools\get_backend_tool('novamira/execute-php'))];
     })(),
     'late-ability-on', 'late-ability-off' => (static function () use ($root): array {
         require $root . '/includes/chat.php';
         require $root . '/novamira-visual/includes/BackendTools.php';
+        require $root . '/novamira-visual/includes/BackendApprovals.php';
         // Admin-page helpers Chat's tool discovery uses.
         function novamira_ability_is_exposed(array $meta): bool
         {
@@ -328,6 +330,7 @@ $result = match ($scenario) {
     })(),
     'visual-backend-on' => (static function () use ($root): array {
         require $root . '/novamira-visual/includes/BackendTools.php';
+        require $root . '/novamira-visual/includes/BackendApprovals.php';
         test_read_mode(true);
         return [
             'discover' => test_export(\Novamira\Visual\BackendTools\discover_data([])),
@@ -365,6 +368,7 @@ $result = match ($scenario) {
             }
         }
         require $root . '/novamira-visual/includes/Workspace.php';
+        require $root . '/novamira-visual/includes/BackendApprovals.php';
         test_read_mode($scenario !== 'visual-session-off');
 
         $workspace = (new ReflectionClass(\NovamiraVisual\Workspace::class))->newInstanceWithoutConstructor();

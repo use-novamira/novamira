@@ -1,71 +1,53 @@
+import { cardString } from "./workspace-config";
 import type {
 	ConfirmableModelAction,
 	ConfirmationDecision,
+	ConfirmationRequest,
 	PendingConfirmation,
 	WorkspaceAction,
 	WorkspaceActionStatus,
 } from "./workspace-types";
 import { cloneSerializable, decodeJsonEscaped } from "./workspace-utils";
 
+/** How long one wait for the person's decision lasts, and how many waits the AI makes before it ends its turn. */
+const WAIT_MS = 60000;
+const WAIT_LIMIT = 10;
+
 interface WorkspaceConfirmationHost {
 	log: (message: string) => void;
-	setAllToolsAllowed: (allowed: boolean) => void;
 }
 
+/**
+ * The actions waiting for the person in front of Visual. Each card is one decision, Approve or Deny: whether an
+ * action waits at all is decided by the approvals, as for MCP and Novamira Chat, never by an earlier answer.
+ */
 export class WorkspaceConfirmations {
 	private nextActionId = 1;
 	private nextConfirmationId = 1;
 	private actions = new Map<string, WorkspaceAction>();
 	private actionWaiters = new Map<string, Set<() => void>>();
 	private pendingConfirmations = new Map<number, PendingConfirmation>();
-	private sessionAllowedActions = new Set<ConfirmableModelAction>();
-	private sessionAllowedAllTools = false;
 
 	constructor(
 		private confirmationsEl: HTMLDivElement,
 		private host: WorkspaceConfirmationHost,
 	) {}
 
-	isActionAllowed(action: ConfirmableModelAction): boolean {
-		return this.sessionAllowedActions.has(action) || this.isAllToolsAllowed(action);
-	}
-
-	isToolAllowed(action: ConfirmableModelAction): boolean {
-		return this.isActionAllowed(action);
-	}
-
-	disableAllToolsAllowance(): void {
-		if (!this.sessionAllowedAllTools) return;
-		this.sessionAllowedAllTools = false;
-		this.host.setAllToolsAllowed(false);
-		this.host.log("Disabled allow-all mode for this workspace.");
-	}
-
 	enqueueToolConfirmation(
 		action: ConfirmableModelAction,
-		request: Pick<PendingConfirmation, "title" | "description" | "details"> & { reason: string },
-		run: () => Promise<unknown>
+		request: ConfirmationRequest,
+		run: () => Promise<unknown>,
+		onDeny?: () => void,
 	): unknown {
-		if (this.isToolAllowed(action)) return run();
-
-		const details = [...request.details];
-		const insertAt = details.length > 0 ? 1 : 0;
-		details.splice(insertAt, 0, { label: "Reason", value: decodeJsonEscaped(request.reason) });
-
-		return this.enqueueConfirmableAction(action, {
-			title: request.title,
-			description: request.description,
-			details,
-		}, run);
+		return this.enqueueConfirmableAction(action, { ...request, says: decodeJsonEscaped(request.says) }, run, onDeny);
 	}
 
 	enqueueConfirmableAction(
 		action: ConfirmableModelAction,
-		request: Pick<PendingConfirmation, "title" | "description" | "details">,
-		run: () => Promise<unknown>
+		request: ConfirmationRequest,
+		run: () => Promise<unknown>,
+		onDeny?: () => void,
 	): unknown {
-		if (this.isActionAllowed(action)) return run();
-
 		const actionId = `action-${this.nextActionId++}`;
 		const now = Date.now();
 		const workspaceAction: WorkspaceAction = {
@@ -76,6 +58,7 @@ export class WorkspaceConfirmations {
 			createdAt: now,
 			updatedAt: now,
 			run,
+			onDeny,
 		};
 		this.actions.set(actionId, workspaceAction);
 
@@ -107,6 +90,7 @@ export class WorkspaceConfirmations {
 
 	async waitForAction(actionId: string, timeoutMs: number): Promise<unknown> {
 		const action = this.getAction(actionId);
+		if (action.status === "waiting_for_confirmation") action.waits = (action.waits ?? 0) + 1;
 		if (this.isTerminalActionStatus(action.status) || timeoutMs === 0) {
 			return this.serializeAction(action);
 		}
@@ -148,144 +132,84 @@ export class WorkspaceConfirmations {
 		this.confirmationsEl.hidden = confirmations.length === 0;
 
 		for (const confirmation of confirmations) {
-			const card = document.createElement("section");
-			card.className = "novamira-visual-confirmation-card";
-			card.setAttribute("aria-label", confirmation.title);
-
-			const eyebrow = document.createElement("div");
-			eyebrow.className = "novamira-visual-confirmation-eyebrow";
-			eyebrow.textContent = "Confirmation required";
-			card.appendChild(eyebrow);
-
-			const title = document.createElement("h2");
-			title.textContent = confirmation.title;
-			card.appendChild(title);
-
-			const description = document.createElement("p");
-			description.textContent = confirmation.description;
-			card.appendChild(description);
-
-			const details = document.createElement("dl");
-			details.className = "novamira-visual-confirmation-details";
-			for (const detail of confirmation.details) {
-				const term = document.createElement("dt");
-				if (detail.label === "Reason") term.className = "novamira-visual-confirmation-reason-label";
-				term.textContent = detail.label;
-				details.appendChild(term);
-
-				const value = document.createElement("dd");
-				if (detail.label === "Reason") value.className = "novamira-visual-confirmation-reason";
-				if (detail.format === "code") {
-					const code = document.createElement("code");
-					code.textContent = detail.value;
-					value.appendChild(code);
-				} else {
-					value.textContent = detail.value;
-				}
-				details.appendChild(value);
-			}
-			card.appendChild(details);
-
-			const actions = document.createElement("div");
-			actions.className = "novamira-visual-confirmation-actions";
-
-			const denyBtn = document.createElement("button");
-			denyBtn.type = "button";
-			denyBtn.className = "button novamira-visual-confirmation-button novamira-visual-confirmation-deny";
-			denyBtn.textContent = "Deny";
-			denyBtn.addEventListener("click", () => this.decideConfirmation(confirmation.id, "deny"));
-			actions.appendChild(denyBtn);
-
-			const allowOnceBtn = document.createElement("button");
-			allowOnceBtn.type = "button";
-			allowOnceBtn.className = "button button-primary novamira-visual-confirmation-button novamira-visual-confirmation-allow-once";
-			allowOnceBtn.textContent = "Allow once";
-			allowOnceBtn.addEventListener("click", () => this.decideConfirmation(confirmation.id, "allow_once"));
-			actions.appendChild(allowOnceBtn);
-
-			const allowSessionBtn = document.createElement("button");
-			allowSessionBtn.type = "button";
-			allowSessionBtn.className = "button novamira-visual-confirmation-button novamira-visual-confirmation-allow-session";
-			allowSessionBtn.textContent = "Allow for this session";
-			allowSessionBtn.addEventListener("click", () => this.decideConfirmation(confirmation.id, "allow_session"));
-			actions.appendChild(allowSessionBtn);
-
-			if (this.isToolAction(confirmation.action)) {
-				this.appendAdvancedConfirmationAction(
-					actions,
-					confirmation.id,
-					"Allow all",
-					"Allow all tools until this workspace closes",
-					"allow_all_tools_session",
-				);
-			}
-
-			card.appendChild(actions);
-			this.confirmationsEl.appendChild(card);
+			this.confirmationsEl.appendChild(this.drawCard(confirmation));
 		}
 	}
 
-	private appendAdvancedConfirmationAction(
-		actions: HTMLDivElement,
-		confirmationId: number,
-		label: string,
-		title: string,
-		decision: ConfirmationDecision,
-	): void {
-		const advancedActions = document.createElement("div");
-		advancedActions.className = "novamira-visual-confirmation-advanced-actions";
+	/** One card, as AI Activity draws it: what the AI says it will do, why it asks, and the exact action closed. */
+	private drawCard(confirmation: PendingConfirmation): HTMLElement {
+		const card = document.createElement("section");
+		card.className = "novamira-visual-confirmation-card";
+		card.setAttribute("aria-label", confirmation.says || confirmation.title);
 
-		const button = document.createElement("button");
-		button.type = "button";
-		button.className = "button button-small novamira-visual-confirmation-button novamira-visual-confirmation-allow-all";
-		button.textContent = label;
-		button.title = title;
-		button.setAttribute("aria-label", title);
-		button.addEventListener("click", () => this.decideConfirmation(confirmationId, decision));
-		advancedActions.appendChild(button);
-		actions.appendChild(advancedActions);
+		card.appendChild(this.element("p", cardString("heading"), "novamira-visual-confirmation-heading"));
+		card.appendChild(this.element("p", cardString("says"), "novamira-visual-confirmation-label"));
+		card.appendChild(this.element("h2", confirmation.says || confirmation.title));
+		if (confirmation.where !== "") {
+			card.appendChild(this.element("p", confirmation.where, "novamira-visual-confirmation-where"));
+		}
+
+		// Why it asks, only when Novamira found something: otherwise the AI's rating decided, as the line above shows.
+		if (confirmation.why.length > 0) {
+			const facts = document.createElement("dl");
+			facts.className = "novamira-visual-confirmation-details";
+			facts.appendChild(this.element("dt", cardString("whyAsks")));
+			const reasons = this.element("dd", "", "novamira-visual-confirmation-found");
+			for (const reason of confirmation.why) {
+				reasons.appendChild(this.element("span", reason, "novamira-visual-confirmation-chip"));
+			}
+			facts.appendChild(reasons);
+			card.appendChild(facts);
+		}
+
+		if (confirmation.code !== "") {
+			const panel = document.createElement("details");
+			panel.className = "novamira-visual-confirmation-code";
+			panel.appendChild(this.element("summary", confirmation.codeLabel));
+			panel.appendChild(this.element("pre", confirmation.code));
+			card.appendChild(panel);
+		}
+
+		const actions = document.createElement("div");
+		actions.className = "novamira-visual-confirmation-actions";
+
+		const approveBtn = document.createElement("button");
+		approveBtn.type = "button";
+		approveBtn.className = "button button-primary novamira-visual-confirmation-button novamira-visual-confirmation-approve";
+		approveBtn.textContent = cardString("approveRun");
+		approveBtn.addEventListener("click", () => this.decideConfirmation(confirmation.id, "approve"));
+		actions.appendChild(approveBtn);
+
+		const denyBtn = document.createElement("button");
+		denyBtn.type = "button";
+		denyBtn.className = "button novamira-visual-confirmation-button novamira-visual-confirmation-deny";
+		denyBtn.textContent = cardString("reject");
+		denyBtn.addEventListener("click", () => this.decideConfirmation(confirmation.id, "deny"));
+		actions.appendChild(denyBtn);
+
+		card.appendChild(actions);
+		card.appendChild(this.element("p", cardString("rejectNote"), "novamira-visual-confirmation-note"));
+		return card;
+	}
+
+	private element<K extends keyof HTMLElementTagNameMap>(tag: K, text: string, className = ""): HTMLElementTagNameMap[K] {
+		const node = document.createElement(tag);
+		if (className !== "") node.className = className;
+		if (text !== "") node.textContent = text;
+		return node;
 	}
 
 	private decideConfirmation(id: number, decision: ConfirmationDecision): void {
 		const confirmation = this.pendingConfirmations.get(id);
 		if (!confirmation) return;
 
-		if (decision === "allow_session") {
-			this.sessionAllowedActions.add(confirmation.action);
-			for (const item of Array.from(this.pendingConfirmations.values())) {
-				if (item.action !== confirmation.action) continue;
-				this.pendingConfirmations.delete(item.id);
-				this.startConfirmedAction(item.actionId);
-			}
-			this.host.log(`Allowed ${this.confirmableActionLabel(confirmation.action)} for this session.`);
-			this.renderConfirmations();
-			return;
-		}
-
-		if (decision === "allow_all_tools_session") {
-			this.sessionAllowedAllTools = true;
-			this.host.setAllToolsAllowed(true);
-			for (const item of Array.from(this.pendingConfirmations.values())) {
-				if (!this.isToolAction(item.action)) continue;
-				this.pendingConfirmations.delete(item.id);
-				this.startConfirmedAction(item.actionId);
-			}
-			this.host.log("Enabled allow-all mode for this workspace.");
-			this.renderConfirmations();
-			return;
-		}
-
 		this.pendingConfirmations.delete(id);
-		if (decision === "allow_once") {
+		if (decision === "approve") {
 			this.startConfirmedAction(confirmation.actionId);
 		} else {
 			this.setActionError(confirmation.actionId, "denied", `User denied action: ${confirmation.title}`);
 		}
-		this.host.log(
-			decision === "allow_once"
-				? `Allowed once: ${confirmation.title}.`
-				: `Denied: ${confirmation.title}.`
-		);
+		this.host.log(decision === "approve" ? `Approved: ${confirmation.title}.` : `Denied: ${confirmation.title}.`);
 		this.renderConfirmations();
 	}
 
@@ -317,6 +241,7 @@ export class WorkspaceConfirmations {
 	private setActionError(actionId: string, status: "failed" | "denied", error: string): void {
 		const action = this.actions.get(actionId);
 		if (!action) return;
+		if (action.status === "waiting_for_confirmation") action.onDeny?.();
 		action.status = status;
 		action.error = error;
 		action.updatedAt = Date.now();
@@ -343,6 +268,8 @@ export class WorkspaceConfirmations {
 		const terminal = this.isTerminalActionStatus(action.status);
 		const awaitingApproval = action.status === "waiting_for_confirmation";
 		const running = action.status === "running";
+		// While the person decides, the AI waits for the answer rather than ending its turn, up to a limit.
+		const keepWaiting = running || (awaitingApproval && (action.waits ?? 0) < WAIT_LIMIT);
 		return {
 			actionId: action.id,
 			action: action.action,
@@ -352,19 +279,21 @@ export class WorkspaceConfirmations {
 			requiresUserConfirmation: awaitingApproval,
 			message:
 				awaitingApproval
-					? "Approval is required in Novamira Visual before this action can run. Tell the user to approve it in the browser workspace."
+					? "Nothing has run: this action waits for the user's approval in Novamira Visual."
 					: running
 						? "The approved action is running."
 					: null,
 			agentInstruction: awaitingApproval
-				? "Tell the user to approve in Novamira Visual before waiting for this action. The user does not need to reply in chat after approving."
+				? keepWaiting
+					? `Tell the user in one line that it waits for their approval in Novamira Visual, then call workspace_request with method 'workspace_wait_action' and params containing this actionId and timeoutMs ${WAIT_MS}: it returns as soon as they decide. If it still waits, call it again, at most ${WAIT_LIMIT} times in all.`
+					: "The user has not decided yet. Tell them what waits for their approval in Novamira Visual and end your turn. When they write again, check it with workspace_get_action_status."
 				: running
-				? "Call workspace_request with method 'workspace_wait_action' and params containing this actionId and timeoutMs 60000. If it is still not terminal, call it again."
+				? `Call workspace_request with method 'workspace_wait_action' and params containing this actionId and timeoutMs ${WAIT_MS}. If it is still not terminal, call it again.`
 				: null,
-			nextTool: running
+			nextTool: keepWaiting
 				? {
 						name: "workspace_request",
-						args: { method: "workspace_wait_action", params: { actionId: action.id, timeoutMs: 60000 } },
+						args: { method: "workspace_wait_action", params: { actionId: action.id, timeoutMs: WAIT_MS } },
 					}
 				: null,
 			createdAt: action.createdAt,
@@ -376,21 +305,5 @@ export class WorkspaceConfirmations {
 
 	private isTerminalActionStatus(status: WorkspaceActionStatus): boolean {
 		return status === "succeeded" || status === "failed" || status === "denied";
-	}
-
-	private confirmableActionLabel(action: ConfirmableModelAction): string {
-		if (action === "workspace_eval") return "JavaScript escape hatch";
-		if (action.startsWith("backend_tool:")) return `backend tool ${action.slice("backend_tool:".length)}`;
-		if (action.startsWith("page_tool:")) return `page tool ${action.slice("page_tool:".length)}`;
-		if (action.startsWith("page_interaction:")) return `page action ${action.slice("page_interaction:".length)}`;
-		return action;
-	}
-
-	private isToolAction(action: ConfirmableModelAction): boolean {
-		return action === "workspace_eval" || action.startsWith("backend_tool:") || action.startsWith("page_tool:") || action.startsWith("page_interaction:");
-	}
-
-	private isAllToolsAllowed(action: ConfirmableModelAction): boolean {
-		return this.sessionAllowedAllTools && this.isToolAction(action);
 	}
 }

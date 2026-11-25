@@ -53,7 +53,6 @@ class Workspace
         \add_action('admin_post_nopriv_novamira-visual', [$this, 'redirect_to_login']);
         \add_action('wp_ajax_novamira_visual_auth_check', [$this, 'ajax_auth_check']);
         \add_action('wp_ajax_nopriv_novamira_visual_auth_check', [$this, 'ajax_auth_check']);
-        \add_action('wp_ajax_novamira_visual_set_abilities', [$this, 'ajax_set_abilities']);
         \add_action('admin_post_novamira_visual_download_mcpb', [$this, 'handle_download_mcpb']);
     }
 
@@ -72,29 +71,10 @@ class Workspace
             // A workspace that was open before read mode was turned on learns it here and stops.
             'readMode' => $read_mode,
             'readModeMessage' => $read_mode ? \novamira_read_mode_blocked_message('Novamira Visual') : '',
+            // Approvals turned on or skipped while the workspace is open apply to its page actions from here. Only
+            // for someone who can manage Novamira: the check also answers visitors who are not signed in.
+            'approvals' => $can_manage ? \Novamira\Visual\BackendTools\workspace_approvals() : null,
         ]);
-    }
-
-    public function ajax_set_abilities(): void
-    {
-        \check_ajax_referer(action: 'wp_rest', query_arg: 'nonce');
-        if (!\novamira_current_user_can_manage()) {
-            \wp_send_json_error([
-                'message' => \__('You do not have permission to change AI Abilities.', domain: 'novamira'),
-            ], status_code: 403);
-        }
-
-        $raw = file_get_contents('php://input');
-        /** @var mixed $params */
-        $params = is_string($raw) && $raw !== '' ? json_decode($raw, associative: true) : [];
-        $enable = is_array($params) && ($params['enabled'] ?? false) === true;
-
-        $toggle = $enable ? 'novamira_enable_ai_abilities' : 'novamira_disable_ai_abilities';
-        if (function_exists($toggle)) {
-            \call_user_func($toggle);
-        }
-
-        \wp_send_json_success(['enabled' => function_exists('novamira_is_enabled') && \novamira_is_enabled()]);
     }
 
     public function add_menu(): void
@@ -214,16 +194,19 @@ class Workspace
             <?php \wp_print_styles(); ?>
         </head>
         <body class="novamira-visual-workspace-document" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:15vh auto;padding:0 24px;">
-            <h1 style="font-size:20px;font-weight:600;"><?php echo \esc_html__('Novamira Visual is unavailable', domain: 'novamira'); ?></h1>
-            <p><?php echo \esc_html__(
-                'Read Mode is on, so Novamira Visual does not work. Turn off Read Mode to use it again.',
-                domain: 'novamira',
-            ); ?></p>
-            <?php if ($read_mode_url !== ''): ?>
-                <p><a href="<?php echo \esc_url($read_mode_url); ?>" class="button button-primary"><?php echo \esc_html__(
-                    'Go to Read Mode',
+            <h1 style="font-size:20px;font-weight:600;"><?php echo
+                \esc_html__('Novamira Visual is unavailable', domain: 'novamira')
+            ; ?></h1>
+            <p><?php echo
+                \esc_html__(
+                    'Read Mode is on, so Novamira Visual does not work. Turn off Read Mode to use it again.',
                     domain: 'novamira',
-                ); ?></a></p>
+                )
+            ; ?></p>
+            <?php if ($read_mode_url !== ''): ?>
+                <p><a href="<?php echo \esc_url($read_mode_url); ?>" class="button button-primary"><?php echo
+                    \esc_html__('Go to Read Mode', domain: 'novamira')
+                ; ?></a></p>
             <?php endif; ?>
         </body>
         </html>
@@ -254,7 +237,6 @@ class Workspace
         );
 
         $abilities_enabled = function_exists('novamira_is_enabled') && \novamira_is_enabled();
-        $looks_production = function_exists('novamira_looks_like_production') && \novamira_looks_like_production();
         $read_mode =
             function_exists('novamira_is_read_mode')
             && function_exists('novamira_read_mode_blocked_message')
@@ -263,22 +245,24 @@ class Workspace
         \wp_localize_script('novamira-visual-workspace', object_name: 'novamiraVisualWorkspaceData', l10n: [
             'adminUrl' => \esc_url_raw(\admin_url()),
             'siteUrl' => \esc_url_raw(\home_url('/')),
-            'siteName' => (string) \get_bloginfo('name'),
+            'siteName' => \get_bloginfo('name'),
             'serverName' => $this->server_name(),
             'restUrl' => \esc_url_raw(\rest_url('novamira-visual/v1/')),
             'workspaceUrl' => \esc_url_raw($this->get_workspace_url()),
             'mcpbUrl' => \esc_url_raw(\wp_nonce_url(
                 \admin_url('admin-post.php?action=novamira_visual_download_mcpb'),
-                'novamira_visual_download_mcpb',
+                action: 'novamira_visual_download_mcpb',
             )),
             'authCheckUrl' => \esc_url_raw(\admin_url('admin-ajax.php?action=novamira_visual_auth_check')),
             'loginUrl' => \esc_url_raw(\wp_login_url($this->get_workspace_url())),
             'visualVersion' => (string) NOVAMIRA_VISUAL_VERSION,
             'abilitiesEnabled' => $abilities_enabled,
-            'looksProduction' => $looks_production,
             // Read mode state at page load; the workspace refuses page actions and editor tools that write.
             'readMode' => $read_mode,
             'readModeMessage' => $read_mode ? \novamira_read_mode_blocked_message('{subject}') : '',
+            'approvals' => \Novamira\Visual\BackendTools\workspace_approvals(),
+            'cardStrings' => \Novamira\Visual\BackendTools\card_strings(),
+            'decisionNonce' => \wp_create_nonce(\Novamira\Visual\BackendTools\DECISION_NONCE_ACTION),
             'nonce' => \wp_create_nonce('wp_rest'),
         ]);
     }
@@ -346,7 +330,7 @@ class Workspace
      */
     private function build_mcpb_manifest(string $workspace_url, string $server_name): array
     {
-        $site_name = \novamira_unbranded_site_name((string) \get_bloginfo('name'));
+        $site_name = \novamira_unbranded_site_name(\get_bloginfo('name'));
         $display_name = $site_name !== '' ? 'Novamira Visual: ' . $site_name : 'Novamira Visual';
 
         return [

@@ -6,9 +6,11 @@
 	"require": {
 		"php": ">=8.0",
 		"automattic/jetpack-autoloader": "^5.0",
-		"wordpress/mcp-adapter": "0.6.1",
 		"league/oauth2-server": "^8.5",
-		"nyholm/psr7": "^1.8"
+		"nikic/php-parser": "^5.8",
+		"nyholm/psr7": "^1.8",
+		"phpmyadmin/sql-parser": "^5.11",
+		"wordpress/mcp-adapter": "0.6.1"
 	},
 	"_comment": "conflict pins these transitive deps to their PHP 8.0-compatible lines: lcobucci/jwt 5.x needs PHP 8.2, lcobucci/clock 3.x needs 8.3, and league/uri 6.8+ needs 8.1. league/oauth2-server 8.5 also supports jwt 4.x / clock 2.x / uri 6.7.x, so excluding the newer lines keeps the plugin installable on PHP 8.0.",
 	"conflict": {

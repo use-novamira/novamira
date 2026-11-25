@@ -13,10 +13,11 @@ if (!defined('ABSPATH')) {
 
 define(constant_name: 'NOVAMIRA_VISUAL_VERSION', value: NOVAMIRA_VERSION);
 define(constant_name: 'NOVAMIRA_VISUAL_PLUGIN_DIR', value: __DIR__ . '/');
-define(constant_name: 'NOVAMIRA_VISUAL_PLUGIN_URL', value: NOVAMIRA_PLUGIN_URL . 'novamira-visual/');
+define(constant_name: 'NOVAMIRA_VISUAL_PLUGIN_URL', value: (string) NOVAMIRA_PLUGIN_URL . 'novamira-visual/');
 
 require_once __DIR__ . '/includes/Workspace.php';
 require_once __DIR__ . '/includes/BackendTools.php';
+require_once __DIR__ . '/includes/BackendApprovals.php';
 
 new \NovamiraVisual\Workspace();
 

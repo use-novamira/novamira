@@ -70,6 +70,48 @@
             });
     });
 
+    // How an ability asks for approval: saved as soon as it is chosen, and the row says what it now does.
+    hub.addEventListener('change', function (event) {
+        var select = event.target;
+        if (!(select instanceof HTMLSelectElement) || !select.closest('.novamira-hub-choice')) {
+            return;
+        }
+        var form = select.closest('form');
+        var row = form.closest('.novamira-hub-row');
+        var nonce = form.querySelector('input[name="_wpnonce"]');
+        var abilityName = form.querySelector('input[name="ability_name"]');
+        if (!row || !nonce || !abilityName) {
+            return;
+        }
+        var body = new URLSearchParams();
+        body.set('action', 'novamira_set_ability_choice');
+        body.set('_wpnonce', nonce.value);
+        body.set('ability_name', abilityName.value);
+        body.set('choice', select.value);
+        select.disabled = true;
+        fetch(window.ajaxurl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString(),
+        })
+            .then(function (response) {
+                return response.json().catch(function () {
+                    return null;
+                });
+            })
+            .then(function (payload) {
+                if (!payload || payload.success !== true || !payload.data) {
+                    throw new Error('request refused');
+                }
+                applyChoice(row, form, payload.data);
+                select.disabled = false;
+            })
+            .catch(function () {
+                window.location.reload();
+            });
+    });
+
     // The management link lives inside a <summary>; following it must not also
     // expand or collapse that section.
     hub.addEventListener('click', function (event) {
@@ -86,7 +128,7 @@
         row.classList.toggle('is-off', disabled);
         row.classList.toggle('is-on', !disabled);
 
-        var state = row.querySelector('.novamira-list-inline-state');
+        var state = row.querySelector('.novamira-list-inline-state:not(.novamira-hub-asks-state)');
         if (disabled && typeof data.status === 'string') {
             if (!state) {
                 var slug = row.querySelector('.novamira-hub-main .slug');
@@ -115,6 +157,38 @@
         if (section) {
             refreshSectionMeta(section);
         }
+    }
+
+    // The row's "Always asks for approval" or "Never asks for approval", and a short line saying what changed.
+    function applyChoice(row, form, data) {
+        var state = row.querySelector('.novamira-hub-asks-state');
+        if (!state && typeof data.state === 'string' && data.state !== '') {
+            var slug = row.querySelector('.novamira-hub-main .slug');
+            if (slug) {
+                state = document.createElement('span');
+                state.className = 'novamira-list-inline-state novamira-hub-asks-state';
+                slug.insertAdjacentElement('afterend', state);
+            }
+        }
+        if (state) {
+            state.textContent = typeof data.state === 'string' && data.state !== '' ? '— ' + data.state : '';
+        }
+
+        // Next to the name, not with the buttons: those hide when the pointer leaves the row.
+        // Inside the summary when the row has one, so it shows while the description is closed.
+        var main = row.querySelector('.novamira-hub-summary') || row.querySelector('.novamira-hub-main') || form.parentElement;
+        var feedback = main.querySelector('.novamira-hub-feedback');
+        if (!feedback) {
+            feedback = document.createElement('span');
+            feedback.className = 'novamira-hub-feedback';
+            feedback.setAttribute('role', 'status');
+            main.appendChild(feedback);
+        }
+        feedback.textContent = typeof data.message === 'string' ? data.message : '';
+        window.clearTimeout(feedback.hideTimer);
+        feedback.hideTimer = window.setTimeout(function () {
+            feedback.textContent = '';
+        }, 5000);
     }
 
     // Recompute a section header's `enabled / total` count and toggle its

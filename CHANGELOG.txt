@@ -1,7 +1,16 @@
 Unreleased
+* New: Novamira is ready for production. Your AI asks you before the actions it rates as important, at the level you choose in Novamira > AI Activity (Ask more, Balanced or Ask less), and Novamira raises the rating of some actions it recognises in your AI's code.
+* New: AI change history. Novamira records the database changes your AI makes, with their previous values when it can, for 30 days, so you can ask your AI to put things back.
+* New: Emails sent through WordPress while your AI works wait in AI Activity until you send or discard them.
+* New: You choose more of what waits for your approval: in the Abilities Hub any ability, other plugins' included, can always ask for it, and under AI Activity > Settings you can list other actions of your site your AI should ask before.
+* Tweak: Novamira has a new AI Activity page, with approvals, the AI change history and their settings, and the Sandbox and the Block Editor Queue, which are now its tabs instead of separate menu items.
+* Tweak: Novamira tells your AI to create new posts and pages as drafts unless you ask it to publish them, and to tell you where to preview them.
+* Tweak: Novamira ON in the admin bar is no longer red while AI Abilities are on. It turns blue, with a count, only when approvals or held emails are waiting for you.
+* Tweak: With Ghost Mode on, Novamira no longer shows a notice when an update is available, so the dashboard stays quiet.
 * Fix: Other plugins that bundle the WordPress MCP Adapter no longer log "WordPress ability 'mcp-adapter/...' does not exist" errors while Novamira is active.
 * Fix: MCP servers of other plugins that bundle a current version of the WordPress MCP Adapter no longer list, describe or run Novamira's abilities and skill prompts. Novamira's abilities stay available through Novamira's own MCP server.
 * Fix: With Read Mode on, other plugins that bundle the WordPress MCP Adapter no longer log "WordPress ability 'mcp-adapter/...' does not exist" errors. Their MCP Adapter tools stay blocked while Read Mode is on.
+* Minor Fixes
 
 v1.12.16 - 2026/11/17
 * Fix: After a site address change, turning AI Abilities back on from the Configuration page now shows them as on right away, where the page kept showing the "site domain changed" warning after saving and made it look like the change had not been saved.

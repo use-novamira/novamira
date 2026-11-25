@@ -387,6 +387,16 @@ function novamira_handle_ability_hub_actions(): void
         exit();
     }
 
+    // How an ability asks is a choice of its own, so it works on abilities a feature manages too.
+    if ($action === 'set_choice') {
+        $choice = is_string($_POST['choice'] ?? null) ? sanitize_key(wp_unslash($_POST['choice'])) : '';
+        $saved = \Novamira\Confirmations\set_ability_choice($ability_name, $choice);
+        wp_safe_redirect(admin_url(
+            'admin.php?page=novamira-abilities&novamira_result=' . ($saved ? 'choice_' . $choice : 'managed'),
+        ));
+        exit();
+    }
+
     if (!novamira_ability_can_be_managed_individually($ability_name)) {
         wp_safe_redirect(admin_url('admin.php?page=novamira-abilities&novamira_result=managed'));
         exit();
@@ -498,6 +508,47 @@ function novamira_handle_ability_toggle_ajax(): void
 }
 
 /**
+ * Choose how an ability asks, over AJAX: the row says what changed and the open sections stay open.
+ */
+function novamira_handle_ability_choice_ajax(): void
+{
+    if (!novamira_current_user_can_manage()) {
+        wp_send_json_error(['message' => __('Permission denied.', domain: 'novamira')], status_code: 403);
+    }
+    if (!check_ajax_referer('novamira_ability_hub_action', query_arg: false, stop: false)) {
+        wp_send_json_error(['message' => __(
+            'Your session expired. Reload the page.',
+            domain: 'novamira',
+        )], status_code: 403);
+    }
+    $ability_name = is_string($_POST['ability_name'] ?? null)
+        ? novamira_sanitize_requested_ability_name($_POST['ability_name'])
+        : '';
+    $choice = is_string($_POST['choice'] ?? null) ? sanitize_key(wp_unslash($_POST['choice'])) : '';
+    if (
+        !novamira_is_valid_ability_name($ability_name)
+        || !novamira_confirmations_are_on()
+        || !\Novamira\Confirmations\set_ability_choice($ability_name, $choice)
+    ) {
+        wp_send_json_error(['message' => __('This choice is not available.', domain: 'novamira')], status_code: 400);
+    }
+    wp_send_json_success([
+        'state' => novamira_ability_approval_label($ability_name) ?? '',
+        'message' => novamira_ability_choice_feedback($choice),
+    ]);
+}
+
+/** What a choice in the Abilities Hub now does. */
+function novamira_ability_choice_feedback(string $choice): string
+{
+    return match ($choice) {
+        'yes' => __('Now asks you every time it runs, at every approval level.', domain: 'novamira'),
+        'no' => __('Now runs without asking, at every approval level.', domain: 'novamira'),
+        default => __('Now asks when needed, as set in AI Activity.', domain: 'novamira'),
+    };
+}
+
+/**
  * @param array<string, array{disabled: bool}> $rules
  * @return array<string, array{disabled: bool}>
  */
@@ -541,13 +592,20 @@ function novamira_delete_sandbox_file(string $path): bool
 /**
  * @return array<array-key, mixed>|WP_Error|bool
  */
+/** Leave safe mode: the marker goes, and the details of the crash with it. */
+function novamira_exit_sandbox_safe_mode(string $marker): bool
+{
+    delete_site_option(NOVAMIRA_SANDBOX_CRASH_OPTION);
+    return unlink($marker);
+}
+
 function novamira_run_sandbox_action(string $action, string $file, string $path): array|WP_Error|bool
 {
     return match ($action) {
         'delete' => novamira_delete_sandbox_file($path),
         'disable' => str_ends_with($file, '.php') ? novamira_create_sandbox_disabled_marker($path) : false,
         'enable' => str_ends_with($file, '.php') ? novamira_remove_sandbox_disabled_marker($path) : false,
-        'exit_safe_mode' => $file === '.crashed' && unlink($path),
+        'exit_safe_mode' => $file === '.crashed' && novamira_exit_sandbox_safe_mode($path),
         default => false,
     };
 }
@@ -579,12 +637,13 @@ function novamira_handle_sandbox_actions()
 
     $succeeded = $result === true || is_array($result) && ($result['disabled'] ?? $result['enabled'] ?? false) === true;
     if ($succeeded) {
-        wp_safe_redirect(admin_url('admin.php?page=novamira-sandbox&novamira_result=' . $action));
+        wp_safe_redirect(novamira_sandbox_url() . '&novamira_result=' . $action);
         exit();
     }
 }
 
-function novamira_render_sandbox_page(): void
+/** The Sandbox tab of AI Activity: the files the AI wrote, and safe mode. */
+function novamira_render_sandbox_tab(): void
 {
     if (!novamira_current_user_can_manage()) {
         return;
@@ -603,11 +662,17 @@ function novamira_render_sandbox_page(): void
     $sandbox_dir = novamira_get_sandbox_dir(true);
     $is_crashed = file_exists($sandbox_dir . '.crashed');
 
-    novamira_render_admin_header();
     ?>
-    <div class="wrap novamira-list-layout">
-        <h1 class="wp-heading-inline"><?php esc_html_e('Sandbox files', domain: 'novamira'); ?></h1>
-        <hr class="wp-header-end" />
+    <div class="novamira-list-layout">
+
+        <p class="description novamira-sandbox-intro"><?php esc_html_e(
+            'The sandbox holds the PHP files your AI writes to add something to this site, such as a small feature or a fix. Enabled files run on every request; you can disable or delete each one here.',
+            domain: 'novamira',
+        ); ?></p>
+        <p class="description novamira-sandbox-intro"><?php esc_html_e(
+            'Unlike a plugin file, a sandbox file that causes a fatal error while loading does not leave the site down: Novamira notes which file failed and why, and from the next request loads the site without the sandbox (safe mode), so you or your AI can fix the file without FTP access.',
+            domain: 'novamira',
+        ); ?></p>
 
         <?php if ($result_message !== null): ?>
             <div class="notice notice-success is-dismissible"><p><?php echo esc_html($result_message); ?></p></div>
@@ -621,7 +686,7 @@ function novamira_render_sandbox_page(): void
                     <?php
 
                     $exit_url = wp_nonce_url(
-                        admin_url('admin.php?page=novamira-sandbox&action=exit_safe_mode&file=.crashed'),
+                        novamira_sandbox_url() . '&action=exit_safe_mode&file=.crashed',
                         action: 'novamira_manage_file_.crashed',
                     );
                     ?>
@@ -687,7 +752,7 @@ function novamira_get_sandbox_files(string $sandbox_dir): array
  */
 function novamira_render_sandbox_rows(string $sandbox_dir, array $files, string $sandbox_status): void
 {
-    $base_url = admin_url('admin.php?page=novamira-sandbox');
+    $base_url = novamira_sandbox_url();
     ?>
     <div class="novamira-sandbox-rows">
         <?php foreach ($files as $file): ?>
@@ -853,6 +918,9 @@ function novamira_render_ability_hub_result_notice(?string $result): void
 {
     $notice = match ($result) {
         'updated' => ['success', __('Ability rule updated.', domain: 'novamira')],
+        'choice_level' => ['success', novamira_ability_choice_feedback('level')],
+        'choice_yes' => ['success', novamira_ability_choice_feedback('yes')],
+        'choice_no' => ['success', novamira_ability_choice_feedback('no')],
         'group_updated' => ['success', __('Ability rules updated.', domain: 'novamira')],
         'invalid' => ['error', __('Invalid ability name.', domain: 'novamira')],
         'managed' => [
@@ -880,9 +948,16 @@ function novamira_render_ability_hub_result_notice(?string $result): void
  * other plugins, so a provider like "jet-engine" reads clearly as the plugin's.
  */
 function novamira_render_ability_other_plugins_divider(): void
-{ ?>
+{
+    ?>
     <h2 class="novamira-hub-divider"><?php esc_html_e('Registered by other plugins', domain: 'novamira'); ?></h2>
+    <?php if (novamira_confirmations_are_on()) { ?>
+        <p class="novamira-hub-divider-note"><?php esc_html_e(
+            'Abilities of other plugins follow your approval level too: your AI rates them from their description, since Novamira does not check their code.',
+            domain: 'novamira',
+        ); ?></p>
     <?php }
+}
 
 /**
  * @param array<int, array{name: string, label: string, description: string, category: string, mcp: string, mcp_type: string, status: string, disabled: bool, individually_manageable: bool, managed_by_feature: bool, infrastructure: bool, manager_kind: string, manager_provider: string, manager_label: string, manage_url: string}> $abilities
@@ -1150,6 +1225,22 @@ function novamira_render_ability_group_action(string $label, array $rows, string
         count($configurable),
         $label,
     );
+    $left = count($rows) - count($configurable);
+    if ($left > 0) {
+        $confirmation = implode(' ', [
+            $confirmation,
+            sprintf(
+                /* translators: %d: number of abilities that cannot be turned off from the Abilities Hub */
+                _n(
+                    single: '%d cannot be turned off here and stays as it is.',
+                    plural: '%d cannot be turned off here and stay as they are.',
+                    number: $left,
+                    domain: 'novamira',
+                ),
+                $left,
+            ),
+        ]);
+    }
     ?>
     <div class="novamira-hub-group-actions novamira-list-actions novamira-list-progressive-actions">
         <form
@@ -1180,14 +1271,14 @@ function novamira_ability_group_action_label(string $action, string $scope): str
         return match ($scope) {
             'category' => __('Enable category', domain: 'novamira'),
             'provider' => __('Enable all abilities', domain: 'novamira'),
-            default => __('Enable configurable abilities', domain: 'novamira'),
+            default => __('Enable all', domain: 'novamira'),
         };
     }
 
     return match ($scope) {
         'category' => __('Disable category', domain: 'novamira'),
         'provider' => __('Disable all abilities', domain: 'novamira'),
-        default => __('Disable configurable abilities', domain: 'novamira'),
+        default => __('Disable all', domain: 'novamira'),
     };
 }
 
@@ -1201,6 +1292,42 @@ function novamira_render_ability_rows(array $abilities): void
         $management_label = $management_explained_by_header ? null : novamira_ability_row_management_label($ability);
         novamira_render_ability_hub_row($ability, $management_label);
     }
+}
+
+/**
+ * The choices the row offers for how the ability asks: only while approvals are on, only for an ability that can run.
+ * Abilities that run code or touch files cannot be set to never ask, and some always ask.
+ *
+ * @param array{name: string, disabled: bool, infrastructure: bool, ...} $ability
+ * @return list<'level'|'yes'|'no'>
+ */
+function novamira_ability_choice_options(array $ability): array
+{
+    if ($ability['disabled'] || $ability['infrastructure'] || !novamira_confirmations_are_on()) {
+        return [];
+    }
+    return \Novamira\Confirmations\allowed_choices($ability['name']);
+}
+
+function novamira_confirmations_are_on(): bool
+{
+    return function_exists('Novamira\\Confirmations\\active') && \Novamira\Confirmations\active();
+}
+
+/**
+ * How the ability asks for approval, in words for its row: only what differs from the approval level. Null while
+ * approvals are off, and for an ability that follows the level.
+ */
+function novamira_ability_approval_label(string $ability_name): ?string
+{
+    if (!novamira_confirmations_are_on()) {
+        return null;
+    }
+    return match (\Novamira\Confirmations\ability_choice($ability_name)) {
+        'yes' => __('Always asks for approval', domain: 'novamira'),
+        'no' => __('Never asks for approval', domain: 'novamira'),
+        default => null,
+    };
 }
 
 /**
@@ -1292,6 +1419,10 @@ function novamira_render_ability_inline_state(array $ability, ?string $managemen
     if ($managementLabel !== null) { ?>
         <span class="novamira-list-inline-state">— <?php echo esc_html($managementLabel); ?></span>
         <?php }
+    $approval = $ability['disabled'] ? null : novamira_ability_approval_label($ability['name']);
+    if ($approval !== null) { ?>
+        <span class="novamira-list-inline-state novamira-hub-asks-state">— <?php echo esc_html($approval); ?></span>
+        <?php }
     if (!$ability['disabled'] || $ability['status'] === __('Unavailable', domain: 'novamira')) {
         return;
     }
@@ -1305,23 +1436,77 @@ function novamira_render_ability_inline_state(array $ability, ?string $managemen
  */
 function novamira_render_ability_toggle_action(array $ability): void
 {
-    if (!$ability['individually_manageable']) {
+    $choices = novamira_ability_choice_options($ability);
+    if (!$ability['individually_manageable'] && $choices === []) {
         return;
     }
     ?>
     <div class="novamira-hub-actions novamira-list-actions novamira-list-progressive-actions">
-        <form method="post">
-            <?php wp_nonce_field('novamira_ability_hub_action'); ?>
-            <input type="hidden" name="novamira_ability_hub_action" value="toggle_disabled" />
-            <input type="hidden" name="ability_name" value="<?php echo esc_attr($ability['name']); ?>" />
-            <button type="submit" class="action-btn">
-                <?php echo
-                    esc_html(
-                        $ability['disabled'] ? __('Enable', domain: 'novamira') : __('Disable', domain: 'novamira'),
-                    )
-                ; ?>
-            </button>
-        </form>
+        <?php
+
+        if ($choices !== []) {
+            novamira_render_ability_choice_action($ability['name'], $choices);
+        }
+        if ($ability['individually_manageable']) {
+            novamira_render_ability_disable_action($ability);
+        }
+        ?>
     </div>
     <?php
 }
+
+/**
+ * How the ability asks: follows the approval level, always asks, or never asks. The page's script saves on change.
+ *
+ * @param list<'level'|'yes'|'no'> $choices
+ */
+function novamira_render_ability_choice_action(string $ability_name, array $choices): void
+{
+    $labels = [
+        'level' => __('Ask when needed', domain: 'novamira'),
+        'yes' => __('Always ask', domain: 'novamira'),
+        'no' => __('Never ask', domain: 'novamira'),
+    ];
+    $current = \Novamira\Confirmations\ability_choice($ability_name);
+    ?>
+    <form method="post" class="novamira-hub-choice">
+        <?php wp_nonce_field('novamira_ability_hub_action'); ?>
+        <input type="hidden" name="novamira_ability_hub_action" value="set_choice" />
+        <input type="hidden" name="ability_name" value="<?php echo esc_attr($ability_name); ?>" />
+        <label class="novamira-hub-choice-label" for="<?php echo
+            esc_attr('novamira-choice-' . $ability_name)
+        ; ?>"><?php esc_html_e('Approval:', domain: 'novamira'); ?></label>
+        <select name="choice" id="<?php echo esc_attr('novamira-choice-' . $ability_name); ?>" title="<?php esc_attr_e(
+            'Ask when needed: your AI rates each action, and the ones that need a look wait for you, as set in AI Activity.',
+            domain: 'novamira',
+        ); ?>">
+            <?php foreach ($choices as $choice) { ?>
+                <option value="<?php echo esc_attr($choice); ?>" <?php selected($current, $choice); ?>><?php echo
+                    esc_html($labels[$choice])
+                ; ?></option>
+            <?php } ?>
+        </select>
+        <noscript><button type="submit" class="action-btn"><?php esc_html_e(
+            'Save',
+            domain: 'novamira',
+        ); ?></button></noscript>
+    </form>
+    <?php
+}
+
+/**
+ * @param array{name: string, disabled: bool, ...} $ability
+ */
+function novamira_render_ability_disable_action(array $ability): void
+{ ?>
+    <form method="post">
+        <?php wp_nonce_field('novamira_ability_hub_action'); ?>
+        <input type="hidden" name="novamira_ability_hub_action" value="toggle_disabled" />
+        <input type="hidden" name="ability_name" value="<?php echo esc_attr($ability['name']); ?>" />
+        <button type="submit" class="action-btn">
+            <?php echo
+                esc_html($ability['disabled'] ? __('Enable', domain: 'novamira') : __('Disable', domain: 'novamira'))
+            ; ?>
+        </button>
+    </form>
+    <?php }

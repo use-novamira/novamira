@@ -32,6 +32,16 @@ final class FileAbilityHttpStatusesTest extends TestCase
         self::$results = null;
     }
 
+    public function testWritingTheSecretPlaceholderBackIsRefused(): void
+    {
+        $results = self::results();
+        self::assertSame(['code' => 'redacted_placeholder', 'status' => 400], $results['write_placeholder']);
+        self::assertSame(['code' => 'redacted_placeholder', 'status' => 400], $results['edit_placeholder']);
+        self::assertTrue($results['placeholder_file_untouched']);
+        self::assertFalse($results['placeholder_as_text']);
+        self::assertFalse($results['placeholder_appended']);
+    }
+
     public function testEditNoChangeIsBadRequest(): void
     {
         self::assertSame(
@@ -114,6 +124,11 @@ final class FileAbilityHttpStatusesTest extends TestCase
         foreach ($expected as $case => $result) {
             self::assertSame($result, self::results()[$case], $case);
         }
+    }
+
+    public function testPhpLikeExtensionsStayInTheSandbox(): void
+    {
+        self::assertSame([true, true, true, true, true, false, false, false], self::results()['php_like_extensions']);
     }
 
     public function testEnvironmentFailuresRemainStatusless(): void
@@ -231,6 +246,7 @@ final class FileAbilityHttpStatusesTest extends TestCase
             function wp_register_ability(string $name, array $args): void {}
 
             require $argv[1] . '/includes/helpers.php';
+            require $argv[1] . '/includes/secrets/redact.php';
             require $argv[1] . '/includes/abilities/edit-file.php';
             require $argv[1] . '/includes/abilities/write-file.php';
             require $argv[1] . '/includes/abilities/read-file.php';
@@ -301,6 +317,10 @@ final class FileAbilityHttpStatusesTest extends TestCase
             $results['path_outside_base'] = error_result(novamira_resolve_path(dirname($fixture) . '/outside.txt'));
             $results['outside_sandbox'] = error_result(novamira_validate_sandbox_path($text_file));
             $results['php_sandbox_required'] = error_result(novamira_check_php_sandbox($fixture . '/outside.php'));
+            $results['php_like_extensions'] = array_map(
+                static fn(string $name): bool => novamira_path_requires_php_sandbox($fixture . '/' . $name),
+                ['a.php', 'a.PHTML', 'a.phar', 'a.php7', 'a.pht', 'a.zip', 'a.html', 'a.phps'],
+            );
             $canonical_sandbox = realpath($sandbox);
             if ($canonical_sandbox === false) {
                 throw new RuntimeException('Could not resolve the test sandbox.');
@@ -334,6 +354,28 @@ final class FileAbilityHttpStatusesTest extends TestCase
                 'new_string' => 'replacement',
             ]));
             $results['protected_path'] = error_result(novamira_delete_file(['path' => $fixture]));
+
+            $config = $fixture . '/settings.env';
+            file_put_contents($config, "<?php\ndefine('DB_PASSWORD', 'real-password');\n");
+            $results['write_placeholder'] = error_result(novamira_write_file([
+                'path' => $config,
+                'content' => "<?php\ndefine('DB_PASSWORD', '[redacted]');\ndefine('WP_DEBUG', true);\n",
+            ]));
+            $results['edit_placeholder'] = error_result(novamira_edit_file([
+                'path' => $config,
+                'old_string' => "'real-password'",
+                'new_string' => "'[redacted]'",
+            ]));
+            $results['placeholder_file_untouched'] = file_get_contents($config) === "<?php\ndefine('DB_PASSWORD', 'real-password');\n";
+            $results['placeholder_as_text'] = is_wp_error(novamira_write_file([
+                'path' => $fixture . '/secrets-doc.md',
+                'content' => "Secrets are shown as [redacted].\n",
+            ]));
+            $results['placeholder_appended'] = is_wp_error(novamira_write_file([
+                'path' => $config,
+                'content' => "// Shown as [redacted]\n",
+                'mode' => 'append',
+            ]));
 
             set_error_handler(static fn(): bool => true);
             try {
@@ -437,6 +479,7 @@ final class FileAbilityHttpStatusesTest extends TestCase
             function is_wp_error(mixed $value): bool { return $value instanceof WP_Error; }
 
             require $argv[1] . '/includes/helpers.php';
+            require $argv[1] . '/includes/secrets/redact.php';
 
             $resolved = novamira_resolve_path('wp-content/novamira-sandbox/my-feature.php');
             if ($resolved instanceof WP_Error) {

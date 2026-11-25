@@ -20,6 +20,8 @@ final class UninstallDataTest extends TestCase
             $result['queries'],
         );
         self::assertSame([], $result['deleted_posts']);
+        self::assertContains('novamira_confirmation_settings', $result['deleted_options']);
+        self::assertContains('novamira_confirmation_request_test', $result['deleted_options']);
     }
 
     public function testExplicitPreservationKeepsChatSkillsMemoriesAndOauth(): void
@@ -32,9 +34,11 @@ final class UninstallDataTest extends TestCase
             'delete_chat_sessions' => false,
         ]);
 
-        self::assertSame([], $result['queries']);
+        // The change journal holds no user content and always goes, like the confirmation queue.
+        self::assertSame(['DROP TABLE IF EXISTS `wp_novamira_journal`'], $result['queries']);
         self::assertSame([], $result['deleted_posts']);
         self::assertNotContains('novamira_chat_schema_version', $result['deleted_options']);
+        self::assertContains('novamira_journal_schema', $result['deleted_options']);
     }
 
     public function testSelectedContentIsPermanentlyDeleted(): void
@@ -77,6 +81,9 @@ final class UninstallDataTest extends TestCase
                 public string $prefix = 'wp_';
                 public string $posts = 'wp_posts';
                 public string $usermeta = 'wp_usermeta';
+                public string $options = 'wp_options';
+
+                public function esc_like(string $value): string { return addcslashes($value, '_%\\'); }
 
                 public function prepare(string $query, mixed ...$args): string
                 {
@@ -90,7 +97,7 @@ final class UninstallDataTest extends TestCase
                     return $query;
                 }
 
-                /** @return list<int> */
+                /** @return list<int|string> */
                 public function get_col(string $query): array
                 {
                     if (str_contains($query, "'novamira_skill'")) {
@@ -98,6 +105,9 @@ final class UninstallDataTest extends TestCase
                     }
                     if (str_contains($query, "'novamira_memory'")) {
                         return [202];
+                    }
+                    if (str_contains($query, 'option_name')) {
+                        return ['novamira_confirmation_request_test'];
                     }
                     return [];
                 }
@@ -124,6 +134,11 @@ final class UninstallDataTest extends TestCase
             function delete_option(string $name): void
             {
                 $GLOBALS['events']['deleted_options'][] = $name;
+            }
+
+            function delete_transient(string $name): void
+            {
+                $GLOBALS['events']['deleted_options'][] = '_transient_' . $name;
             }
 
             function wp_clear_scheduled_hook(string $hook): void

@@ -52,7 +52,7 @@ function novamira_register_run_wp_cli_ability(): void
     wp_register_ability('novamira/run-wp-cli', [
         'label' => __('Run WP-CLI Command', domain: 'novamira'),
         'description' => __(
-            'Runs a WP-CLI command on the server. Can be run synchronously (default) or asynchronously in the background.',
+            'Runs a WP-CLI command on the server. Can be run synchronously (default) or asynchronously in the background. Commands that run PHP (eval, eval-file, shell, --exec, --require) are refused: use novamira/execute-php. Also refused: package, db drop, db reset, db clean, search-replace with --all-tables, --all-tables-with-prefix or a wildcard in its tables, and SQL or tables naming the AI change history.',
             domain: 'novamira',
         ),
         'category' => 'code-execution',
@@ -215,14 +215,9 @@ function novamira_run_wp_cli(array $input)
         return $read_mode_refusal;
     }
 
-    $raw_args = is_array($input['args'] ?? null) ? $input['args'] : [];
-    $args = [];
-    /** @var mixed $arg */
-    foreach ($raw_args as $arg) {
-        if (!is_string($arg)) {
-            return new WP_Error('invalid_wp_cli_arg', __('WP-CLI arguments must be strings.', domain: 'novamira'));
-        }
-        $args[] = $arg;
+    $args = novamira_wp_cli_run_args($input);
+    if ($args instanceof WP_Error) {
+        return $args;
     }
 
     $async = ($input['async'] ?? null) === true;
@@ -254,6 +249,30 @@ function novamira_run_wp_cli(array $input)
     }
 
     return novamira_run_wp_cli_sync($wp_command, $args);
+}
+
+/**
+ * The command's arguments, all strings, or why the command is refused before it starts.
+ *
+ * @param array $input Input parameters.
+ * @return list<string>|WP_Error
+ */
+function novamira_wp_cli_run_args(array $input)
+{
+    $raw_args = is_array($input['args'] ?? null) ? $input['args'] : [];
+    $args = [];
+    /** @var mixed $arg */
+    foreach ($raw_args as $arg) {
+        if (!is_string($arg)) {
+            return new WP_Error('invalid_wp_cli_arg', __('WP-CLI arguments must be strings.', domain: 'novamira'));
+        }
+        $args[] = $arg;
+    }
+
+    $forbidden = function_exists('Novamira\\Confirmations\\wp_cli_forbidden')
+        ? \Novamira\Confirmations\wp_cli_forbidden($args)
+        : '';
+    return $forbidden !== '' ? new WP_Error('wp_cli_command_forbidden', $forbidden) : $args;
 }
 
 /**

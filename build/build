@@ -66,6 +66,8 @@ rm -rf "$BUILD_DIR/vendor/php-stubs"
 # Every bin directory, not just vendor/bin: packages ship their own CLI scripts
 # (defuse/php-encryption/bin, ...) and none of them are used at runtime.
 find "$BUILD_DIR/vendor" -type d -name bin -prune -exec rm -rf {} +
+# Package test suites (phpmyadmin/sql-parser ships about a thousand files of them) are not used at runtime.
+find "$BUILD_DIR/vendor" -mindepth 3 -maxdepth 3 -type d \( -name tests -o -name test -o -name Tests \) -prune -exec rm -rf {} +
 
 # Remove empty directories
 find "$BUILD_DIR" -type d -empty -delete

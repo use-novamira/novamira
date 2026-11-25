@@ -46,6 +46,7 @@ function __(string $text, string $domain = 'default'): string
 
 require_once __DIR__ . '/../../includes/connect-page.php';
 require_once __DIR__ . '/../../novamira-visual/includes/Workspace.php';
+require_once __DIR__ . '/../../novamira-visual/includes/BackendApprovals.php';
 
 $workspace = (new ReflectionClass(\NovamiraVisual\Workspace::class))->newInstanceWithoutConstructor();
 $server_name = (new ReflectionMethod($workspace, 'server_name'))->invoke($workspace);

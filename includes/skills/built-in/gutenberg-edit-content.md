@@ -9,7 +9,7 @@ Use this playbook for native WordPress block editor work. Gutenberg static
 blocks need the browser JavaScript serializer before queued content becomes
 live, so a Novamira browser finalizer runtime must be online. In Dashboard
 Agent that runtime is embedded in the Novamira Chat page; external MCP
-clients use the standalone Block Editor Queue admin page.
+clients use the Block Editor Queue tab of AI Activity.
 
 ## Start Here
 

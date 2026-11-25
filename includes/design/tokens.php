@@ -847,7 +847,12 @@ function unquote(string $value): string
  */
 function css_value(string $value): string
 {
-    return trim(str_replace(search: [';', '{', '}', '<', '>'], replace: '', subject: $value));
+    $value = str_replace(search: [';', '{', '}', '<', '>'], replace: '', subject: $value);
+    return trim((string) preg_replace(
+        '/\b(?:url|image-set|image|cross-fade|element|src)\s*\(/i',
+        replacement: '(',
+        subject: $value,
+    ));
 }
 
 /**
