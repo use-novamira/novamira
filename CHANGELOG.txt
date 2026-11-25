@@ -1,4 +1,4 @@
-Unreleased
+v2.0.0 - 2026/11/25
 * New: Novamira is ready for production. Your AI asks you before the actions it rates as important, at the level you choose in Novamira > AI Activity (Ask more, Balanced or Ask less), and Novamira raises the rating of some actions it recognises in your AI's code.
 * New: AI change history. Novamira records the database changes your AI makes, with their previous values when it can, for 30 days, so you can ask your AI to put things back.
 * New: Emails sent through WordPress while your AI works wait in AI Activity until you send or discard them.
