@@ -708,15 +708,22 @@ function invalid_input_text(string $ability_name, mixed $input): string
     ) {
         return '';
     }
-    /** @var mixed $normalized */
-    $normalized = $ability->normalize_input($input);
-    if (is_wp_error($normalized)) {
-        return '';
-    }
-    $valid = $ability->validate_input($normalized);
+    // WordPress 7.2+ prepares input in one step that also sanitizes it, and refuses input that fails there.
+    /** @var mixed $valid */
+    $valid = method_exists($ability, 'prepare_input')
+        ? $ability->prepare_input($input)
+        : validated_input($ability, $input);
     return is_wp_error($valid)
         ? $valid->get_error_message() . ' Nothing has executed: fix the input and send the call again.'
         : '';
+}
+
+/** Input checked as WordPress before 7.2 checks it: normalized, then validated. Null when it cannot be normalized. */
+function validated_input(\WP_Ability $ability, mixed $input): mixed
+{
+    /** @var mixed $normalized */
+    $normalized = $ability->normalize_input($input);
+    return is_wp_error($normalized) ? null : $ability->validate_input($normalized);
 }
 
 /**
