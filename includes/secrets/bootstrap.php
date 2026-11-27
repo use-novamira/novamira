@@ -13,6 +13,7 @@ declare(strict_types=1);
  * OAuth keys, password hashes and common API key shapes become "[redacted]"; passwords set in clear while it ran become
  * "[redacted] (a password set in this call)". Values in .env files read with
  * read-file are redacted whole. This guards against good-faith leaks, not code that sets out to get around it.
+ * The administrator can turn it off under AI Activity > Settings (setting.php): results then reach the agent unchanged.
  */
 
 namespace Novamira\Secrets;
@@ -24,7 +25,7 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
-require_once __DIR__ . '/redact.php';
+require_once __DIR__ . '/setting.php';
 
 add_filter('novamira_mcp_adapter_tool_call_result', __NAMESPACE__ . '\\redact_tool_result', PHP_INT_MAX);
 add_filter('rest_post_dispatch', __NAMESPACE__ . '\\redact_ability_run_response', PHP_INT_MAX, accepted_args: 3);
@@ -58,6 +59,9 @@ function remember_updated_user_password(mixed $user_id, mixed $old_user_data = n
 /** MCP tool results, including results of abilities run through mcp-adapter-execute-ability. */
 function redact_tool_result(mixed $result): mixed
 {
+    if (!enabled()) {
+        return $result;
+    }
     if (is_wp_error($result)) {
         // Error messages can quote what failed, a secret included.
         $redacted = new \WP_Error();
@@ -86,7 +90,7 @@ function redact_tool_result(mixed $result): mixed
  */
 function redact_ability_run_response($response, $server, $request)
 {
-    if (!$response instanceof WP_REST_Response || !$request instanceof WP_REST_Request) {
+    if (!$response instanceof WP_REST_Response || !$request instanceof WP_REST_Request || !enabled()) {
         return $response;
     }
     // WordPress matches routes ignoring case, so this does too.

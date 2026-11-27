@@ -721,6 +721,7 @@ final class ConfirmationsTest extends TestCase
         self::assertArrayNotHasKey('enabled', $r['default']);
         self::assertSame(8, $r['default']['cutoff']);
         self::assertTrue($r['default']['hold_emails']);
+        self::assertSame(['off' => false, 'untouched' => false, 'on' => true], $r['secrets_setting']);
         self::assertSame([
             'saved' => false,
             'ai_email_asks' => true,

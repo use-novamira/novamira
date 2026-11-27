@@ -260,7 +260,7 @@ function stored_call_fields(array $call): array
 
 function hide_secrets(string $text): string
 {
-    return function_exists('Novamira\\Secrets\\redact_string') ? \Novamira\Secrets\redact_string($text) : $text;
+    return function_exists('Novamira\\Secrets\\hide_string') ? \Novamira\Secrets\hide_string($text) : $text;
 }
 
 /**

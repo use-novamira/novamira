@@ -107,6 +107,21 @@ function secret_patterns(): array
         '/\$argon2(?:i|d|id)\$[^\s"\'<>]+/',
         // PEM private keys.
         '/-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/s',
+        // Truncated PEM output: full base64 lines followed by at most one shorter final line.
+        // Escaped newlines and slashes also occur in JSON-encoded inspection results. A fragment before
+        // horizontal whitespace needs 32 body characters, to avoid consuming a following ordinary word.
+        <<<'REGEX'
+            ~-----BEGIN[ ][A-Z ]*PRIVATE[ ]KEY-----(?:\r?\n|\\r\\n|\\n)
+            (?:[A-Za-z0-9+/=]|\\/){64,}+
+            (?:(?:\r?\n|\\r\\n|\\n)(?:[A-Za-z0-9+/=]|\\/){64,}+)*+
+            (?:
+                (?:\r?\n|\\r\\n|\\n)
+                (?:
+                    (?:[A-Za-z0-9+/=]|\\/){32,63}+(?=[ \t])
+                    |(?:[A-Za-z0-9+/=]|\\/){1,63}+(?=\r?\n|\\r\\n|\\n|$|["'])
+                )
+            )?~x
+            REGEX,
         // Common API keys: Stripe, AWS, GitHub, Slack, OpenAI and Anthropic.
         '/\b[rs]k_(?:live|test)_[0-9A-Za-z]{16,}/',
         '/\bAKIA[0-9A-Z]{16}\b/',
@@ -119,12 +134,18 @@ function secret_patterns(): array
 /**
  * Replace secrets in stored data. Used on requests once they can no longer execute, so the log keeps what
  * happened without keeping keys, salts or password hashes for 15 days. It catches the site's own secrets
- * exactly and common secret shapes by pattern.
+ * exactly and common secret shapes by pattern, traversing arrays and plain database row objects.
+ *
+ * @param array<int, true> $seen Object identities on the current traversal path.
  */
-function redact(mixed $value): mixed
+function redact(mixed $value, array $seen = []): mixed
 {
     if (is_string($value)) {
         return redact_string($value);
+    }
+    // Plain database rows are data; leave objects with application behavior alone.
+    if (is_object($value) && $value::class === \stdClass::class) {
+        return redact_row($value, $seen);
     }
     if (!is_array($value)) {
         return $value;
@@ -132,7 +153,28 @@ function redact(mixed $value): mixed
     $result = [];
     // @mago-expect analysis:mixed-assignment -- Stored arguments and results are arbitrary JSON-like data.
     foreach ($value as $key => $item) {
-        $result[$key] = redact($item);
+        $result[$key] = redact($item, $seen);
+    }
+    return $result;
+}
+
+/**
+ * Clone a plain database row before redacting its property values. A cycle keeps its original reference.
+ *
+ * @param array<int, true> $seen
+ */
+function redact_row(\stdClass $value, array $seen): \stdClass
+{
+    $id = spl_object_id($value);
+    if ($seen[$id] ?? false) {
+        return $value;
+    }
+    $seen[$id] = true;
+    $result = clone $value;
+    // @mago-expect analysis:mixed-assignment -- Row properties are arbitrary JSON-like data.
+    foreach (get_object_vars($value) as $key => $item) {
+        // @mago-expect analysis:string-member-selector -- Only existing public stdClass properties are copied.
+        $result->{(string) $key} = redact($item, $seen);
     }
     return $result;
 }

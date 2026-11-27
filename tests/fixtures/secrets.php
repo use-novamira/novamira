@@ -111,4 +111,89 @@ $out['set_passwords'] = S\redact_tool_result([
     ],
 ]);
 
+// Synthetic PEM data includes slashes and a short final line, as LEFT(option_value, 1500) can return.
+$body = str_repeat(str_repeat('Ab9/', 16) . "\n", 25) . 'Tail9/';
+$pem = "-----BEGIN RSA PRIVATE KEY-----\n" . $body . "\n-----END RSA PRIVATE KEY-----";
+$GLOBALS['options']['novamira_oauth_private_key'] = $pem;
+$GLOBALS['options']['novamira_oauth_encryption_key'] = str_repeat('e', 44);
+$prefix = substr($pem, 0, 1500);
+$unknown = str_replace('RSA PRIVATE', 'EC PRIVATE', $prefix);
+$short_lines = "\nactive\nyes\n42\nDone\nnext line here";
+$three_lines = "-----BEGIN RSA PRIVATE KEY-----\n" . str_repeat(str_repeat('Ab9/', 16) . "\n", 3) . 'Tail';
+$forms = [
+    'raw' => [$prefix, '[redacted]'],
+    'json' => [json_encode($prefix), json_encode('[redacted]')],
+    'short_final_line' => [substr($pem, 0, strpos($pem, "\n-----END")), '[redacted]'],
+    'mixed_json' => [
+        json_encode(['key' => $prefix, 'encryption' => str_repeat('e', 44)]),
+        json_encode(['key' => '[redacted]', 'encryption' => '[redacted]']),
+    ],
+    'json_unescaped_slashes' => [json_encode($prefix, JSON_UNESCAPED_SLASHES), json_encode('[redacted]')],
+    'print_r' => [
+        print_r(['key' => $prefix, 'note' => 'ordinary text'], true),
+        print_r(['key' => '[redacted]', 'note' => 'ordinary text'], true),
+    ],
+    'var_export' => [
+        var_export(['key' => $prefix, 'note' => 'ordinary text'], true),
+        var_export(['key' => '[redacted]', 'note' => 'ordinary text'], true),
+    ],
+    'adjacent_text' => ["before: " . $prefix . "\nordinary text after", "before: [redacted]\nordinary text after"],
+    'short_words_raw' => [$three_lines . $short_lines, '[redacted]' . $short_lines],
+    'short_words_json' => [json_encode($three_lines . $short_lines), json_encode('[redacted]' . $short_lines)],
+    'same_line_text' => [$prefix . ' ordinary text after', '[redacted] ordinary text after'],
+    'unknown_key' => [$unknown, '[redacted]'],
+    'crlf' => [str_replace("\n", "\r\n", $unknown), '[redacted]'],
+    'json_crlf' => [json_encode(str_replace("\n", "\r\n", $unknown)), json_encode('[redacted]')],
+    // The known key hits exact-value matching; the unknown key exercises the complete-PEM regex.
+    'complete_known' => [$pem, '[redacted]'],
+    'complete_unknown' => [str_replace('RSA PRIVATE', 'EC PRIVATE', $pem), '[redacted]'],
+    'complete_json' => [json_encode($pem), json_encode('[redacted]')],
+    'short_body' => ["-----BEGIN PRIVATE KEY-----\nAb9/", "-----BEGIN PRIVATE KEY-----\nAb9/"],
+    'public_key' => [str_replace('RSA PRIVATE', 'PUBLIC', $prefix), str_replace('RSA PRIVATE', 'PUBLIC', $prefix)],
+    'already_redacted' => ['[redacted]', '[redacted]'],
+];
+foreach ($forms as $name => [$input, $expected]) {
+    $actual = S\redact($input);
+    $out['pem_forms'][$name] = [$actual, $expected, S\redact($actual)];
+}
+$row = (object) [
+    'option_name' => 'novamira_oauth_private_key',
+    'option_value' => $prefix,
+    'nested' => ['row' => (object) ['secret' => str_repeat('e', 44), 'note' => 'ordinary text']],
+];
+$response = S\redact_ability_run_response(
+    new WP_REST_Response(['return_value' => [$row]]),
+    null,
+    new WP_REST_Request('/wp-abilities/v1/abilities/novamira/execute-php/run'),
+)->get_data();
+$redacted_row = $response['return_value'][0];
+$out['object_rows'] = $response;
+$out['object_clones'] = [
+    $redacted_row instanceof stdClass,
+    $redacted_row !== $row,
+    $redacted_row->nested['row'] !== $row->nested['row'],
+    $row->option_value === $prefix,
+    $row->nested['row']->secret === str_repeat('e', 44),
+];
+$custom = new ArrayObject(['secret' => $prefix]);
+$subclass = new class extends stdClass {};
+$subclass->secret = $prefix;
+$out['other_objects_unchanged'] = [S\redact($custom) === $custom, S\redact($subclass) === $subclass];
+
+$cyclic = (object) ['secret' => $prefix];
+$cyclic->self = $cyclic;
+$cyclic->nested = ['parent' => $cyclic];
+$redacted_cycle = S\redact($cyclic);
+$out['object_cycle'] = [
+    $redacted_cycle !== $cyclic,
+    $redacted_cycle->secret === '[redacted]',
+    $redacted_cycle->self === $cyclic,
+    $redacted_cycle->nested['parent'] === $cyclic,
+    $cyclic->secret === $prefix,
+    S\redact($cyclic)->secret === '[redacted]',
+];
+// A shared row is visited separately along each branch, rather than mistaken for a cycle.
+$shared = S\redact([$row, $row]);
+$out['shared_rows'] = [$shared[0]->option_value, $shared[1]->option_value];
+
 echo json_encode($out);

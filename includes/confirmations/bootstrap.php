@@ -15,7 +15,7 @@ use Novamira\Vendor\WP\McpSchema\Server\Tools\DTO\CallToolResult;
 use Novamira\Vendor\WP\McpSchema\Server\Tools\DTO\Tool;
 use WP_Error;
 
-use function Novamira\Secrets\redact;
+use function Novamira\Secrets\hide;
 
 if (!defined('ABSPATH')) {
     exit();
@@ -1613,7 +1613,7 @@ function transition(array $old, array $new): bool
             if (!array_key_exists($field, $new)) {
                 continue;
             }
-            $new[$field] = redact($new[$field]);
+            $new[$field] = hide($new[$field]);
         }
     }
     $wpdb = database();

@@ -244,6 +244,7 @@ final class FileAbilityHttpStatusesTest extends TestCase
             function apply_filters(string $hook, mixed $value, mixed ...$args): mixed { return $value; }
             function is_wp_error(mixed $value): bool { return $value instanceof WP_Error; }
             function wp_register_ability(string $name, array $args): void {}
+            function get_option(string $name, mixed $default_value = false): mixed { return $default_value; }
 
             require $argv[1] . '/includes/helpers.php';
             require $argv[1] . '/includes/secrets/redact.php';

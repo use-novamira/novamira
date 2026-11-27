@@ -70,6 +70,7 @@ function novamira_uninstall_current_site(array $plan): void
     }
 
     delete_option('novamira_feature_preferences');
+    delete_option('novamira_secret_redaction');
     delete_site_option('novamira_sandbox_crash');
     delete_option('novamira_confirmation_settings');
     delete_option('novamira_confirmation_destinations');

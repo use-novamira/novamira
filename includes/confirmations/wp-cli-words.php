@@ -47,7 +47,7 @@ function wp_cli_meaning(array $args): string
     [$positional, $flags] = wp_cli_split($words);
     $meaning = wp_cli_sentence($positional, $flags);
     $meaning = $meaning !== '' ? $meaning : 'A command with no plain description here: rely on the AI\'s words.';
-    return function_exists('Novamira\\Secrets\\redact_string') ? \Novamira\Secrets\redact_string($meaning) : $meaning;
+    return function_exists('Novamira\\Secrets\\hide_string') ? \Novamira\Secrets\hide_string($meaning) : $meaning;
 }
 
 /**

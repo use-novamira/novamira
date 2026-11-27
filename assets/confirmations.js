@@ -49,6 +49,7 @@
             event.preventDefault();
             const saved = await saveSettings(form, {
                 hold_emails: form.elements.hold_emails.checked,
+                hide_secrets: form.elements.hide_secrets.checked,
                 instructions: form.elements.instructions.value,
                 // Unticked addresses are no longer approved; one approved since the page loaded stays.
                 forget_destinations: Array.from(

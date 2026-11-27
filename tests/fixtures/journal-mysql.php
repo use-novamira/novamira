@@ -242,6 +242,7 @@ PHP);
 eval(<<<'PHP'
 namespace Novamira\Secrets;
 function redact_string(string $value): string { return str_replace('SECRET-KEY', '[redacted]', $value); }
+function hide_string(string $value): string { return redact_string($value); }
 PHP);
 
 $mysqli = new mysqli($host, $user, $password, $database, (int) $port);

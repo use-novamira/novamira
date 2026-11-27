@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
     exit();
 }
 
-require_once dirname(__DIR__) . '/secrets/redact.php';
+require_once dirname(__DIR__) . '/secrets/setting.php';
 
 wp_register_ability('novamira/read-file', [
     'label' => __('Read File', domain: 'novamira'),
@@ -127,7 +127,7 @@ function novamira_read_file($input)
     $is_text = novamira_is_text_mime_type($mime_type) && mb_check_encoding(value: $content, encoding: 'UTF-8');
 
     // Secrets are hidden before the encoding is chosen: base64 would hide them from the later redaction.
-    $content = \Novamira\Secrets\redact_file_text($resolved, \Novamira\Secrets\redact_text($content));
+    $content = \Novamira\Secrets\hide_file_text($resolved, $content);
     $content = $is_text ? $content : base64_encode($content);
 
     return [

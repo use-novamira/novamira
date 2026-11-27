@@ -21,6 +21,7 @@ final class UninstallDataTest extends TestCase
         );
         self::assertSame([], $result['deleted_posts']);
         self::assertContains('novamira_confirmation_settings', $result['deleted_options']);
+        self::assertContains('novamira_secret_redaction', $result['deleted_options']);
         self::assertContains('novamira_confirmation_request_test', $result['deleted_options']);
     }
 

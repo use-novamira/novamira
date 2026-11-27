@@ -1477,13 +1477,13 @@ function novamira_chat_rest_execute_tool(WP_REST_Request $request): array|WP_Err
         return novamira_chat_record_tool_error(
             $session,
             $call_index,
-            \Novamira\Secrets\redact_string($result->get_error_message()),
+            \Novamira\Secrets\hide_string($result->get_error_message()),
         );
     }
     return novamira_chat_record_tool_result(
         $session,
         $call_index,
-        novamira_chat_prepare_tool_result($prepared['ability_name'], \Novamira\Secrets\redact($result)),
+        novamira_chat_prepare_tool_result($prepared['ability_name'], \Novamira\Secrets\hide($result)),
     );
 }
 

@@ -577,6 +577,11 @@ function save_settings(WP_REST_Request $request): WP_REST_Response|WP_Error
     }
     // Choosing a level is the first-time choice too: the Approvals tab stops asking for it.
     $level_chosen = $current['level_chosen'] || $request->get_param('level') !== null;
+    /** @var mixed $hide_secrets */
+    $hide_secrets = $request->get_param('hide_secrets');
+    if (is_bool($hide_secrets)) {
+        update_option(\Novamira\Secrets\SETTING_OPTION, $hide_secrets ? '1' : '0');
+    }
     /** @var mixed $hold_emails */
     $hold_emails = $request->get_param('hold_emails');
     $hold_emails = is_bool($hold_emails) ? $hold_emails : $current['hold_emails'];
@@ -965,6 +970,16 @@ function render_settings_tab(): void
                 ); ?></p>
             </div>
             <?php render_destinations_card(); ?>
+            <h2 class="nm-settings-title"><?php esc_html_e('Secrets', domain: 'novamira'); ?></h2>
+            <div class="nm-card">
+                <label><input type="checkbox" name="hide_secrets" <?php checked(
+                    \Novamira\Secrets\enabled(),
+                ); ?>> <?php esc_html_e('Hide secrets in what your AI reads', domain: 'novamira'); ?></label>
+                <p class="description"><?php esc_html_e(
+                    'Novamira replaces the keys, passwords and API keys it recognizes with [redacted] before results reach your AI. It lowers the chance of sharing one by accident, but it is not a security boundary.',
+                    domain: 'novamira',
+                ); ?></p>
+            </div>
             <p><button class="button button-primary" type="submit"><?php esc_html_e(
                 'Save settings',
                 domain: 'novamira',

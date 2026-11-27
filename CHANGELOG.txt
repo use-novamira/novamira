@@ -1,5 +1,7 @@
 Unreleased
 * Tweak: Other plugins' abilities that declare themselves read-only in the MCP format now run right away like other read-only abilities, without your AI rating them.
+* Tweak: You can turn off hiding secrets from your AI in Novamira > AI Activity > Settings. It is on by default and replaces the keys, passwords and API keys Novamira recognizes in what your AI reads with [redacted]; it lowers the chance of exposing them by accident and is not a security boundary.
+* Fix: Secret redaction now also covers truncated PEM private keys and database rows your AI reads with PHP.
 * Fix: The Block Editor Queue page now stops contacting the site when your WordPress session expires or access is denied, and asks you to log in again, where it kept sending requests every few seconds.
 * Fix: On WordPress 7.2, a call whose input WordPress would refuse is sent back to your AI before it waits for your approval.
 

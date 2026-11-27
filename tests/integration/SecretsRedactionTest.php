@@ -14,7 +14,7 @@ final class SecretsRedactionTest extends TestCase
         $root = dirname(__DIR__, 2);
         $command =
             escapeshellarg(PHP_BINARY)
-            . ' '
+            . ' -d memory_limit=64M '
             . escapeshellarg($root . '/tests/fixtures/secrets.php')
             . ' '
             . escapeshellarg($root);
@@ -55,5 +55,18 @@ final class SecretsRedactionTest extends TestCase
             "# comment\nAPP_KEY=[redacted]\nexport STRIPE_SECRET = [redacted]\nEMPTY=\n",
             $r['env'],
         );
+        foreach ($r['pem_forms'] as $name => [$actual, $expected, $repeated]) {
+            self::assertSame($expected, $actual, $name);
+            self::assertSame($actual, $repeated, $name . ' is idempotent');
+        }
+        self::assertSame(['return_value' => [[
+            'option_name' => 'novamira_oauth_private_key',
+            'option_value' => '[redacted]',
+            'nested' => ['row' => ['secret' => '[redacted]', 'note' => 'ordinary text']],
+        ]]], $r['object_rows']);
+        self::assertSame([true, true, true, true, true], $r['object_clones']);
+        self::assertSame([true, true], $r['other_objects_unchanged']);
+        self::assertSame([true, true, true, true, true, true], $r['object_cycle']);
+        self::assertSame(['[redacted]', '[redacted]'], $r['shared_rows']);
     }
 }

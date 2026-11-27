@@ -943,6 +943,14 @@ $out['email_setting']['same_generation'] = $out['email_setting']['generation_kep
 $out['email_setting']['held_again'] = C\holds_emails();
 $out['email_setting']['direct_mail_asks'] = C\chat_call_check('novamira/execute-php', ['code' => 'mail("a@example.test", "s", "m");'], 0)['must_ask'];
 $out['email_setting']['ai_email_waits_later'] = C\chat_call_check('novamira/execute-php', ['code' => 'wp_mail("a@example.test", "s", "m");'], 0)['must_ask'];
+// Hiding secrets is saved with the other settings, and a save that does not send it leaves it as it was.
+require_once $argv[1] . '/includes/secrets/setting.php';
+C\save_settings(new WP_REST_Request(['cutoff' => 8, 'hide_secrets' => false]));
+$out['secrets_setting'] = ['off' => \Novamira\Secrets\enabled()];
+C\save_settings(new WP_REST_Request(['cutoff' => 8]));
+$out['secrets_setting']['untouched'] = \Novamira\Secrets\enabled();
+C\save_settings(new WP_REST_Request(['cutoff' => 8, 'hide_secrets' => true]));
+$out['secrets_setting']['on'] = \Novamira\Secrets\enabled();
 unset($out['email_setting']['generation_kept']);
 $out['refund_check'] = [
     'ai_request_asks' => C\chat_call_check('novamira/execute-php', ['code' => 'wp_remote_post("https://example.test/");'], 0)['must_ask'],
