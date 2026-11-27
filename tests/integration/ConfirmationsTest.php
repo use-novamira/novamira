@@ -342,6 +342,10 @@ final class ConfirmationsTest extends TestCase
             ['read' => 'never', 'write' => 'above', 'php_listed' => 'above', 'read_always' => 'always'],
             $r['readonly'],
         );
+        self::assertSame(
+            ['read' => 'never', 'write' => 'above', 'hint_wins' => 'above', 'read_always' => 'always'],
+            $r['read_only_hint'],
+        );
         self::assertTrue($r['unforced_runs_again']);
         self::assertSame([], $r['forced_list_empty']);
         self::assertTrue($r['policy_delete_plugin_asks']);

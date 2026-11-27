@@ -1317,6 +1317,21 @@ C\set_ability_choice('acme/list-tickets', 'yes');
 $out['readonly']['read_always'] = C\ability_policy('acme/list-tickets')['confirm'];
 C\set_ability_choice('acme/list-tickets', 'level');
 unset($GLOBALS['abilities']['acme/list-tickets'], $GLOBALS['abilities']['acme/close-ticket']);
+// MCP's readOnlyHint counts too, and wins over readonly when both are there, as in the MCP Adapter.
+$GLOBALS['abilities']['acme/list-forms'] = new WP_Ability('acme/list-forms', meta: ['annotations' => ['readOnlyHint' => true]]);
+$GLOBALS['abilities']['acme/edit-form'] = new WP_Ability('acme/edit-form', meta: ['annotations' => ['readOnlyHint' => false]]);
+$GLOBALS['abilities']['acme/mixed-form'] = new WP_Ability('acme/mixed-form', meta: [
+    'annotations' => ['readonly' => true, 'readOnlyHint' => false],
+]);
+$out['read_only_hint'] = [
+    'read' => C\ability_policy('acme/list-forms')['confirm'],
+    'write' => C\ability_policy('acme/edit-form')['confirm'],
+    'hint_wins' => C\ability_policy('acme/mixed-form')['confirm'],
+];
+C\set_ability_choice('acme/list-forms', 'yes');
+$out['read_only_hint']['read_always'] = C\ability_policy('acme/list-forms')['confirm'];
+C\set_ability_choice('acme/list-forms', 'level');
+unset($GLOBALS['abilities']['acme/list-forms'], $GLOBALS['abilities']['acme/edit-form'], $GLOBALS['abilities']['acme/mixed-form']);
 C\set_ability_choice('novamira/read-file', 'level');
 C\set_ability_choice('novamira/execute-php', 'level');
 // Never ask removes the questions, not the history: recording reads the policy without the administrator's choice.

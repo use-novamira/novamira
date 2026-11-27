@@ -231,7 +231,10 @@ function listed_ability_policy(string $ability): array
     );
 }
 
-/** Whether an ability is registered with the Abilities API's readonly annotation. */
+/**
+ * Whether an ability is registered as read-only: the Abilities API's readonly annotation, or MCP's readOnlyHint, which
+ * some plugins use instead and which wins when both are there, as in the MCP Adapter.
+ */
 function ability_is_readonly(string $ability): bool
 {
     if (!function_exists('wp_get_ability')) {
@@ -243,7 +246,10 @@ function ability_is_readonly(string $ability): bool
     }
     /** @var mixed $annotations */
     $annotations = $registered->get_meta()['annotations'] ?? null;
-    return is_array($annotations) && ($annotations['readonly'] ?? null) === true;
+    if (!is_array($annotations)) {
+        return false;
+    }
+    return ($annotations['readOnlyHint'] ?? $annotations['readonly'] ?? null) === true;
 }
 
 /** @return list<string> Abilities that need an attention level: listed for the AI in the tool description. */
