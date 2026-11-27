@@ -495,8 +495,74 @@ function gutenberg_finalizer_script(): string
                 return;
             }
 
-            const apiFetch = wp.apiFetch;
-            apiFetch.use( apiFetch.createNonceMiddleware( config.nonce ) );
+            const nonceMiddleware = wp.apiFetch.createNonceMiddleware( config.nonce );
+            wp.apiFetch.use( nonceMiddleware );
+            let authFailure = null;
+            let nonceRefreshPromise = null;
+            // Raw responses preserve host HTTP errors; normalize rejected responses as well.
+            const queueRequest = async ( options ) => {
+                let response;
+                try {
+                    response = await wp.apiFetch( { ...options, parse: false } );
+                } catch ( error ) {
+                    if ( ! error || typeof error.text !== 'function' ) {
+                        throw error;
+                    }
+                    response = error;
+                }
+                if ( response.status === 204 ) {
+                    return null;
+                }
+                let data;
+                try {
+                    const text = await response.text();
+                    data = text === '' && response.ok ? null : JSON.parse( text );
+                } catch ( error ) {
+                    throw {
+                        status: response.status,
+                        code: 'invalid_json',
+                        message: 'The site returned an invalid JSON response.',
+                    };
+                }
+                if ( ! response.ok ) {
+                    throw { ...data, status: response.status };
+                }
+                return data;
+            };
+
+            const apiFetch = async ( options, retryNonce = true ) => {
+                if ( authFailure ) {
+                    throw authFailure;
+                }
+                try {
+                    return await queueRequest( options );
+                } catch ( error ) {
+                    if ( ! retryNonce || ! error || error.code !== 'rest_cookie_invalid_nonce' || ! wp.apiFetch.nonceEndpoint ) {
+                        throw error;
+                    }
+                    // parse:false bypasses core's code-based refresh. Refresh once before stopping.
+                    if ( ! nonceRefreshPromise ) {
+                        nonceRefreshPromise = window.fetch( wp.apiFetch.nonceEndpoint ).then( async ( response ) => {
+                            if ( ! response.ok ) {
+                                throw error;
+                            }
+                            const nonce = await response.text();
+                            nonceMiddleware.nonce = nonce;
+                            if ( wp.apiFetch.nonceMiddleware ) {
+                                wp.apiFetch.nonceMiddleware.nonce = nonce;
+                            }
+                        } ).finally( () => {
+                            nonceRefreshPromise = null;
+                        } );
+                    }
+                    try {
+                        await nonceRefreshPromise;
+                    } catch ( refreshError ) {
+                        throw error;
+                    }
+                    return apiFetch( options, false );
+                }
+            };
 
             const progress = document.getElementById( 'novamira-gb-progress' );
             const notice = document.getElementById( 'novamira-gb-notice' );
@@ -507,6 +573,13 @@ function gutenberg_finalizer_script(): string
             let isRunning = false;
             let batchStopped = false;
             let dashboardPollRunning = false;
+            let heartbeatPromise = null;
+            let heartbeatTimer = null;
+            let dashboardTimer = null;
+            let retryAt = 0;
+            let retryDelay = 5000;
+            let heartbeatRetryAt = 0;
+            let heartbeatRetryDelay = 5000;
             let editorFrameUrl = '';
             let editorFrameLoadPromise = Promise.resolve();
             let frameAccessError = null;
@@ -1238,12 +1311,77 @@ function gutenberg_finalizer_script(): string
                     serialization_runtime: serializationRuntime,
                     serialization_runtime_reason: serializationRuntimeReason,
                 },
+            } ).catch( ( error ) => {
+                if ( isAuthFailure( error ) ) {
+                    pollingFailure( error );
+                }
+                throw error;
             } );
 
-            const heartbeat = async () => apiFetch( {
-                path: path( '/gutenberg/finalizer-runtime/heartbeat' ),
-                method: 'POST',
-            } );
+            const isAuthFailure = ( error ) => !! error && (
+                [ 401, 403 ].includes( Number( error.status ) )
+                || [ 401, 403 ].includes( Number( error.data && error.data.status ) )
+                || [ 'rest_forbidden', 'rest_cookie_invalid_nonce', 'rest_not_logged_in',
+                    'incorrect_password', 'invalid_username' ].includes( error.code )
+            );
+
+            const showAuthFailure = () => {
+                const message = 'Your WordPress session expired or access was denied. Log in again, then reload this page.';
+                setNotice( 'error', message );
+                setProgress( message );
+            };
+
+            const pollingFailure = ( error, fromHeartbeat = false ) => {
+                if ( isAuthFailure( error ) ) {
+                    authFailure = error;
+                    window.clearTimeout( heartbeatTimer );
+                    window.clearTimeout( dashboardTimer );
+                    showAuthFailure();
+                    return;
+                }
+                if ( authFailure ) {
+                    return;
+                }
+                if ( fromHeartbeat ) {
+                    heartbeatRetryAt = Date.now() + heartbeatRetryDelay;
+                    // Stay comfortably below the server's 150-second runtime expiry.
+                    heartbeatRetryDelay = Math.min( heartbeatRetryDelay * 2, 60000 );
+                } else {
+                    retryAt = Date.now() + retryDelay;
+                    retryDelay = Math.min( retryDelay * 2, 300000 );
+                }
+                if ( ! isRunning ) {
+                    setNotice( 'error', 'Queue disconnected. Reload this page.' );
+                }
+                setProgress( 'Queue disconnected. Reload this page.' );
+            };
+
+            const pollingSuccess = () => {
+                retryAt = 0;
+                retryDelay = 5000;
+            };
+
+            const heartbeat = () => {
+                if ( ! heartbeatPromise ) {
+                    heartbeatPromise = apiFetch( {
+                        path: path( '/gutenberg/finalizer-runtime/heartbeat' ),
+                        method: 'POST',
+                    } ).then( ( result ) => {
+                        if ( heartbeatRetryAt && isRunning ) {
+                            setProgress( 'Working on queued Gutenberg changes...' );
+                        }
+                        heartbeatRetryAt = 0;
+                        heartbeatRetryDelay = 5000;
+                        return result;
+                    } ).catch( ( error ) => {
+                        pollingFailure( error, true );
+                        throw error;
+                    } ).finally( () => {
+                        heartbeatPromise = null;
+                    } );
+                }
+                return heartbeatPromise;
+            };
 
             const batchErrorMessage = ( batch, fallback ) => {
                 const lastError = batch && typeof batch.last_error === 'string' ? batch.last_error.trim() : '';
@@ -1354,6 +1492,10 @@ function gutenberg_finalizer_script(): string
                                 break;
                             }
                         } catch ( error ) {
+                            if ( isAuthFailure( error ) ) {
+                                pollingFailure( error );
+                                throw error;
+                            }
                             const isFrameInaccessible = error && error.code === 'editor_frame_inaccessible';
                             const isMissingRegistration = error && error.code === 'missing_block_registration';
                             let errorItems;
@@ -1400,37 +1542,49 @@ function gutenberg_finalizer_script(): string
                     }
                 } catch ( error ) {
                     batchStopped = true;
-                    if ( currentItemId ) {
+                    if ( currentItemId && ! authFailure ) {
                         try {
                             const message = error && error.message ? error.message : String( error );
-                            await failCurrentItem( currentItemId, [ { message } ], message );
+                            await failCurrentItem( currentItemId, [ { message, code: error && error.code ? error.code : 'js_exception' } ], message );
                         } catch ( reportError ) {
                             // Keep the original failure visible even if the server cannot be reached.
+                            if ( isAuthFailure( reportError ) ) {
+                                pollingFailure( reportError );
+                            }
                         }
                     }
                     setNotice( 'error', 'The queue stopped. Return to the agent.' );
                     setProgress( 'Something needs attention. Return to the agent.' );
                     logError( 'The queue stopped.', error );
+                    if ( isAuthFailure( error ) ) {
+                        pollingFailure( error );
+                    }
                     return false;
                 } finally {
                     isRunning = false;
+                    if ( authFailure ) {
+                        showAuthFailure();
+                    }
                 }
 
                 return true;
             };
 
             const processDashboardQueue = async () => {
-                if ( dashboardPollRunning || isRunning ) {
+                if ( authFailure || Date.now() < Math.max( retryAt, heartbeatRetryAt ) || dashboardPollRunning || isRunning ) {
                     return;
                 }
 
                 dashboardPollRunning = true;
+                let heartbeatSucceeded = false;
                 try {
                     await heartbeat();
+                    heartbeatSucceeded = true;
                     const next = await apiFetch( {
                         path: path( '/gutenberg/batches/claim-next' ),
                         method: 'POST',
                     } );
+                    pollingSuccess();
                     if ( next.done || ! next.claim || ! next.claim.batch ) {
                         if ( batchStopped ) {
                             return;
@@ -1444,22 +1598,39 @@ function gutenberg_finalizer_script(): string
                     setProgress( 'Working on queued Gutenberg changes...' );
                     await processBatch( next.claim.batch.batch_id, next.claim );
                 } catch ( error ) {
-                    setNotice( 'error', 'Queue disconnected. Reload this page.' );
-                    setProgress( 'Queue disconnected. Reload this page.' );
+                    if ( heartbeatSucceeded ) {
+                        pollingFailure( error );
+                    }
                 } finally {
                     dashboardPollRunning = false;
                 }
             };
 
-            heartbeat().catch( () => {} );
-            window.setInterval( () => {
-                heartbeat().catch( () => {
-                    setProgress( 'Queue disconnected. Reload this page.' );
-                } );
-            }, 15000 );
+            const pollHeartbeat = async () => {
+                if ( authFailure ) {
+                    return;
+                }
+                if ( Date.now() >= heartbeatRetryAt ) {
+                    try {
+                        await heartbeat();
+                    } catch ( error ) {
+                        // heartbeat handles the failure once, including shared requests.
+                    }
+                }
+                if ( ! authFailure ) {
+                    heartbeatTimer = window.setTimeout( pollHeartbeat, Math.max( 15000, heartbeatRetryAt - Date.now() ) );
+                }
+            };
 
-            window.setTimeout( processDashboardQueue, 250 );
-            window.setInterval( processDashboardQueue, 5000 );
+            const pollDashboard = async () => {
+                await processDashboardQueue();
+                if ( ! authFailure ) {
+                    dashboardTimer = window.setTimeout( pollDashboard, Math.max( 5000, retryAt - Date.now(), heartbeatRetryAt - Date.now() ) );
+                }
+            };
+
+            pollHeartbeat();
+            dashboardTimer = window.setTimeout( pollDashboard, 250 );
         }() );
         JS;
 }

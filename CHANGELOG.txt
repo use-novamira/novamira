@@ -1,5 +1,6 @@
 Unreleased
 * Tweak: Other plugins' abilities that declare themselves read-only in the MCP format now run right away like other read-only abilities, without your AI rating them.
+* Fix: The Block Editor Queue page now stops contacting the site when your WordPress session expires or access is denied, and asks you to log in again, where it kept sending requests every few seconds.
 * Fix: On WordPress 7.2, a call whose input WordPress would refuse is sent back to your AI before it waits for your approval.
 
 v2.0.0 - 2026/11/25
